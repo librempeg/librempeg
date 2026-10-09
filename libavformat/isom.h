@@ -33,6 +33,7 @@
 #include "libavutil/spherical.h"
 #include "libavutil/stereo3d.h"
 
+#include "libavcodec/exif.h"
 #include "avio.h"
 #include "internal.h"
 #include "dv.h"
@@ -313,6 +314,7 @@ typedef struct HEIFItem {
     int vflip;
     int type;
     int is_idat_relative;
+    AVExifMetadata ifd;
     uint8_t *icc_profile;
     size_t icc_profile_size;
 } HEIFItem;

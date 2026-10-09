@@ -10835,6 +10835,7 @@ static int mov_read_close(AVFormatContext *s)
         av_freep(&mov->heif_item[i]->name);
         av_freep(&mov->heif_item[i]->iref_list);
         av_freep(&mov->heif_item[i]->icc_profile);
+        av_exif_free(&mov->heif_item[i]->ifd);
         av_freep(&mov->heif_item[i]);
     }
     av_freep(&mov->heif_item);
@@ -10983,6 +10984,38 @@ fail:
         ret = seek_ret;
     }
     return ret;
+}
+
+static int set_exif_from_item(AVFormatContext *s,
+                              AVPacketSideData **coded_side_data, int *nb_coded_side_data,
+                              const HEIFItem *item)
+{
+    AVPacketSideData *sd;
+    const AVExifMetadata *ifd = &item->ifd;
+    AVBufferRef *buf = NULL;
+    int64_t offset;
+    int err;
+
+    err = av_exif_write(s, ifd, &buf, AV_EXIF_T_OFF);
+    if (err < 0)
+        return err;
+
+    offset = AV_RB32(buf->data) + 4;
+    if (offset >= buf->size) {
+        av_buffer_unref(&buf);
+        return AVERROR_INVALIDDATA;
+    }
+    sd = av_packet_side_data_new(coded_side_data, nb_coded_side_data,
+                                 AV_PKT_DATA_EXIF, buf->size - offset, 0);
+    if (!sd) {
+        av_buffer_unref(&buf);
+        return AVERROR(ENOMEM);
+    }
+    memcpy(sd->data, buf->data + offset, buf->size - offset);
+
+    av_buffer_unref(&buf);
+
+    return 0;
 }
 
 static int set_icc_profile_from_item(AVPacketSideData **coded_side_data, int *nb_coded_side_data,
@@ -11184,14 +11217,11 @@ fail:
     return ret;
 }
 
-static int mov_parse_exif_item(AVFormatContext *s,
-                               AVPacketSideData **coded_side_data, int *nb_coded_side_data,
-                               const HEIFItem *ref)
+static int mov_parse_exif_item(AVFormatContext *s, HEIFItem *item, const HEIFItem *ref)
 {
     MOVContext *c = s->priv_data;
-    AVPacketSideData *sd;
-    AVExifMetadata ifd = { 0 };
-    AVBufferRef *buf;
+    AVExifMetadata *ifd = &item->ifd;
+    uint8_t *buf;
     int64_t offset = 0, pos = avio_tell(s->pb);
     unsigned orientation_id = av_exif_get_tag_id("Orientation");
     int err;
@@ -11208,7 +11238,7 @@ static int mov_parse_exif_item(AVFormatContext *s,
         offset = c->idat_offset;
     }
 
-    buf = av_buffer_alloc(ref->extent_length);
+    buf = av_malloc(ref->extent_length);
     if (!buf)
         return AVERROR(ENOMEM);
 
@@ -11218,7 +11248,7 @@ static int mov_parse_exif_item(AVFormatContext *s,
     }
 
     avio_seek(s->pb, ref->extent_offset + offset, SEEK_SET);
-    err = avio_read(s->pb, buf->data, ref->extent_length);
+    err = avio_read(s->pb, buf, ref->extent_length);
     if (err != ref->extent_length) {
         if (err > 0)
             err = AVERROR_INVALIDDATA;
@@ -11228,66 +11258,37 @@ static int mov_parse_exif_item(AVFormatContext *s,
     // HEIF spec states that Exif metadata is informative. The irot item property is
     // the normative source of rotation information. So we remove any Orientation tag
     // present in the Exif buffer.
-    err = av_exif_parse_buffer(s, buf->data, ref->extent_length, &ifd, AV_EXIF_T_OFF);
+    err = av_exif_parse_buffer(s, buf, ref->extent_length, ifd, AV_EXIF_T_OFF);
     if (err < 0) {
         av_log(s, AV_LOG_ERROR, "Unable to parse Exif metadata\n");
         goto fail;
     }
 
-    err = av_exif_remove_entry(s, &ifd, orientation_id, 0);
+    err = av_exif_remove_entry(s, ifd, orientation_id, 0);
     if (err < 0)
         goto fail;
-    else if (!err)
-        goto finish;
-
-    av_buffer_unref(&buf);
-    err = av_exif_write(s, &ifd, &buf, AV_EXIF_T_OFF);
-    if (err < 0)
-        goto fail;
-
-finish:
-    offset = AV_RB32(buf->data) + 4;
-    if (offset >= buf->size) {
-        err = AVERROR_INVALIDDATA;
-        goto fail;
-    }
-    sd = av_packet_side_data_new(coded_side_data, nb_coded_side_data,
-                                 AV_PKT_DATA_EXIF, buf->size - offset, 0);
-    if (!sd) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
-    memcpy(sd->data, buf->data + offset, buf->size - offset);
 
     err = 0;
 fail:
-    av_buffer_unref(&buf);
-    av_exif_free(&ifd);
+    av_free(buf);
+    if (err < 0)
+        av_exif_free(ifd);
     avio_seek(s->pb, pos, SEEK_SET);
 
     return err;
 }
 
-static int mov_parse_heif_item_references(AVFormatContext *s, HEIFItem *item,
+static int mov_apply_heif_item_references(AVFormatContext *s, HEIFItem *item,
                                           AVPacketSideData **coded_side_data,
                                           int *nb_coded_side_data)
 {
-    MOVContext *mov = s->priv_data;
     int err;
 
-    for (int j = 0; j < item->nb_iref_list; j++) {
-        HEIFItem *ref = get_heif_item(mov, item->iref_list[j].item_id);
-
-        av_assert0(ref);
-        switch(ref->type) {
-        case MKTAG('E','x','i','f'):
-            err = mov_parse_exif_item(s, coded_side_data, nb_coded_side_data, ref);
-            if (err < 0 && (s->error_recognition & AV_EF_EXPLODE))
-                return err;
-            break;
-        default:
-            break;
-        }
+    /* exif */
+    if (item->ifd.count) {
+        err = set_exif_from_item(s, coded_side_data, nb_coded_side_data, item);
+        if (err < 0)
+            return err;
     }
 
     /* rotation */
@@ -11303,6 +11304,35 @@ static int mov_parse_heif_item_references(AVFormatContext *s, HEIFItem *item,
         if (err < 0)
             return err;
     }
+
+    return 0;
+}
+
+static int mov_parse_heif_item_references(AVFormatContext *s, HEIFItem *item,
+                                          AVPacketSideData **coded_side_data,
+                                          int *nb_coded_side_data)
+{
+    MOVContext *mov = s->priv_data;
+    int err;
+
+    for (int j = 0; j < item->nb_iref_list; j++) {
+        HEIFItem *ref = get_heif_item(mov, item->iref_list[j].item_id);
+
+        av_assert0(ref);
+        switch(ref->type) {
+        case MKTAG('E','x','i','f'):
+            err = mov_parse_exif_item(s, item, ref);
+            if (err < 0 && (s->error_recognition & AV_EF_EXPLODE))
+                return err;
+            break;
+        default:
+            break;
+        }
+    }
+
+    err = mov_apply_heif_item_references(s, item, coded_side_data, nb_coded_side_data);
+    if (err < 0)
+        return err;
 
     return 0;
 }
