@@ -116,9 +116,9 @@ typedef struct fn(ThreadData) {
 static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
                            const int start, const int end)
 {
-    const ftype width_p = s->width[0] + FEPS;
-    const ftype width_c = s->width[1] + FEPS;
-    const ftype width_f = s->width[2] + FEPS;
+    const ftype width_p = F(1.0) / (s->width[0] + FEPS);
+    const ftype width_c = F(1.0) / (s->width[1] + FEPS);
+    const ftype width_f = F(1.0) / (s->width[2] + FEPS);
     const ftype center_p = s->center[0];
     const ftype center_c = s->center[1];
     const ftype center_f = s->center[2];
@@ -138,13 +138,10 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
         const ftype p = (r_m-l_m)/(FMAX(l_m, r_m) + FEPS);
         const ftype f = F(2.0) * i / size_f - F(1.0);
         const ftype c = F(1.0)-FABS(a * M_2PI);
-        const ftype ic = (c - center_c) / width_c;
-        const ftype ip = (p - center_p) / width_p;
-        const ftype ff = (f - center_f) / width_f;
-        const ftype oc = FEXP(F(-0.5) * ic * ic);
-        const ftype op = FEXP(F(-0.5) * ip * ip);
-        const ftype of = FEXP(F(-0.5) * ff * ff);
-        const ftype scale = oc * op * of;
+        const ftype ic = (c - center_c) * width_c;
+        const ftype ip = (p - center_p) * width_p;
+        const ftype ff = (f - center_f) * width_f;
+        const ftype scale = FEXP(F(-0.5) * ic * ic + F(-0.5) * ip * ip + F(-0.5) * ff * ff);
         const ftype g = type ? F(1.0) - scale : scale;
 
         fl[i].re = l_re * g;
