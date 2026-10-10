@@ -46,10 +46,10 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     AudioInversionContext *s = ctx->priv;
-    const ftype unity = s->unity;
-    const ftype maxf = s->maxf;
 
     for (int ch = start; ch < end; ch++) {
+        const ftype unity = s->unity[FFMIN(ch, s->nb_unity-1)];
+        const ftype maxf = s->maxf[FFMIN(ch, s->nb_maxf-1)];
         enum AVChannel channel = av_channel_layout_channel_from_index(&in->ch_layout, ch);
         const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
         const ftype *src = (const ftype *)in->extended_data[ch];
