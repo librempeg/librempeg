@@ -1108,4 +1108,5 @@ const FFFilter ff_vf_zscale = {
     FILTER_OUTPUTS(zscale_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .process_command = process_command,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };
