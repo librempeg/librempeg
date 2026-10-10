@@ -39,6 +39,7 @@
 #include "libavutil/avutil.h"
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/downmix_info.h"
 #include "libavutil/display.h"
 #include "libavutil/film_grain_params.h"
 #include "libavutil/hdr_dynamic_metadata.h"
@@ -142,6 +143,7 @@ static int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
 static char *output_format;
 static char *stream_specifier;
 static char *show_data_hash;
+static char *data_dump_format;
 
 typedef struct ReadInterval {
     int id;             ///< identifier
@@ -342,7 +344,6 @@ static const char *print_input_filename;
 static const AVInputFormat *iformat = NULL;
 static const char *output_filename = NULL;
 
-static const char unit_second_str[]         = "s"    ;
 static const char unit_hertz_str[]          = "Hz"   ;
 static const char unit_byte_str[]           = "byte" ;
 static const char unit_bit_per_second_str[] = "bit/s";
@@ -454,7 +455,9 @@ static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 #define print_ts(k, v)          avtext_print_ts(tfc, k, v, 0)
 #define print_duration_time(k, v, tb) avtext_print_time(tfc, k, v, tb, 1)
 #define print_duration_ts(k, v)       avtext_print_ts(tfc, k, v, 1)
-#define print_val(k, v, u)      avtext_print_unit_int(tfc, k, v, u)
+#define print_val(k, v, u)            avtext_print_unit_integer(tfc, k, v, AV_TEXTFORMAT_VALUE_FMT_INT, u)
+#define print_int_fmt(k, v, f, u)     avtext_print_unit_integer(tfc, k, v, f, u)
+#define print_decibel(k, v)           avtext_print_unit_double(tfc, k, v, AV_TEXTFORMAT_VALUE_FMT_DECIBEL, 0)
 
 static void print_integers(AVTextFormatContext *tfc, const char *key,
                            const void *data, int size, const char *format,
@@ -504,6 +507,30 @@ static inline int show_tags(AVTextFormatContext *tfc, AVDictionary *tags, int se
     avtext_print_section_footer(tfc);
 
     return ret;
+}
+
+static void print_downmix_info(AVTextFormatContext *tfc,
+                                      const AVDownmixInfo *downmix_info)
+{
+    switch (downmix_info->preferred_downmix_type) {
+    case AV_DOWNMIX_TYPE_LORO:
+        print_str("preferred_downmix_type", "loro");
+        break;
+    case AV_DOWNMIX_TYPE_LTRT:
+        print_str("preferred_downmix_type", "ltrt");
+        break;
+    case AV_DOWNMIX_TYPE_DPLII:
+        print_str("preferred_downmix_type", "dplII");
+        break;
+    default:
+        print_str("preferred_downmix_type", "unknown");
+        break;
+    }
+    print_decibel("center_mix_level_db", downmix_info->center_mix_level);
+    print_decibel("center_mix_level_ltrt_db", downmix_info->center_mix_level_ltrt);
+    print_decibel("surround_mix_level_db", downmix_info->surround_mix_level);
+    print_decibel("surround_mix_level_ltrt_db", downmix_info->surround_mix_level_ltrt);
+    print_decibel("lfe_mix_level_db", downmix_info->lfe_mix_level);
 }
 
 static void print_displaymatrix(AVTextFormatContext *tfc, const int32_t matrix[9])
@@ -1338,7 +1365,7 @@ static void show_packet(AVTextFormatContext *tfc, InputFile *ifile, AVPacket *pk
     print_time("dts_time",        pkt->dts, &st->time_base);
     print_duration_ts("duration",        pkt->duration);
     print_duration_time("duration_time", pkt->duration, &st->time_base);
-    print_val("size",             pkt->size, unit_byte_str);
+    print_int_fmt("size",         pkt->size, AV_TEXTFORMAT_VALUE_FMT_BYTE, unit_byte_str);
     if (pkt->pos != -1) print_fmt    ("pos", "%"PRId64, pkt->pos);
     else                print_str_opt("pos", "N/A");
     print_fmt("flags", "%c%c%c",      pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_',
@@ -1414,7 +1441,9 @@ static void print_frame_side_data(AVTextFormatContext *tfc,
         avtext_print_section_header(tfc, sd, SECTION_ID_FRAME_SIDE_DATA);
         name = av_frame_side_data_name(sd->type);
         print_str("side_data_type", name ? name : "unknown");
-        if (sd->type == AV_FRAME_DATA_DISPLAYMATRIX && sd->size >= 9*4) {
+        if (sd->type == AV_FRAME_DATA_DOWNMIX_INFO) {
+            print_downmix_info(tfc, (AVDownmixInfo *)sd->data);
+        } else if (sd->type == AV_FRAME_DATA_DISPLAYMATRIX && sd->size >= 9*4) {
             print_displaymatrix(tfc, (const int32_t*)sd->data);
         } else if (sd->type == AV_FRAME_DATA_AFD && sd->size > 0) {
             print_int("active_format", *sd->data);
@@ -1501,7 +1530,7 @@ static void show_frame(AVTextFormatContext *tfc, AVFrame *frame, AVStream *strea
     print_duration_time("duration_time",     frame->duration, &stream->time_base);
     if (fd && fd->pkt_pos != -1)  print_fmt    ("pkt_pos", "%"PRId64, fd->pkt_pos);
     else                          print_str_opt("pkt_pos", "N/A");
-    if (fd && fd->pkt_size != -1) print_val    ("pkt_size", fd->pkt_size, unit_byte_str);
+    if (fd && fd->pkt_size != -1) print_int_fmt("pkt_size", fd->pkt_size, AV_TEXTFORMAT_VALUE_FMT_BYTE, unit_byte_str);
     else                          print_str_opt("pkt_size", "N/A");
 
     switch (stream->codecpar->codec_type) {
@@ -2447,7 +2476,7 @@ static int show_format(AVTextFormatContext *tfc, InputFile *ifile)
     }
     print_time("start_time",      fmt_ctx->start_time, &AV_TIME_BASE_Q);
     print_time("duration",        fmt_ctx->duration,   &AV_TIME_BASE_Q);
-    if (size >= 0) print_val    ("size", size, unit_byte_str);
+    if (size >= 0) print_int_fmt("size", size, AV_TEXTFORMAT_VALUE_FMT_BYTE, unit_byte_str);
     else           print_str_opt("size", "N/A");
     if (fmt_ctx->bit_rate > 0) print_val    ("bit_rate", fmt_ctx->bit_rate, unit_bit_per_second_str);
     else                       print_str_opt("bit_rate", "N/A");
@@ -3280,6 +3309,7 @@ static const OptionDef real_options[] = {
     { "of",                    OPT_TYPE_STRING,      0, { &output_format }, "alias for -output_format", "format" },
     { "select_streams",        OPT_TYPE_STRING,      0, { &stream_specifier }, "select the specified streams", "stream_specifier" },
     { "sections",              OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
+    { "data_dump_format",      OPT_TYPE_STRING,      0, { &data_dump_format }, "set data dump format (available formats are: xxd, base64)" },
     { "show_data",             OPT_TYPE_BOOL,        0, { &do_show_data }, "show packets data" },
     { "show_data_hash",        OPT_TYPE_STRING,      0, { &show_data_hash }, "show packets data hash" },
     { "show_error",            OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_error },  "show probing error" },
@@ -3344,13 +3374,13 @@ static inline int check_section_show_entries(int section_id, int require_explici
 
 int main(int argc, char **argv)
 {
-    AVTextFormatOptions tf_options;
     const AVTextFormatter *f;
     AVTextFormatContext *tctx;
     AVTextWriterContext *wctx;
     char *buf;
     char *f_name = NULL, *f_args = NULL;
-    int ret;
+    int ret, input_ret;
+    AVTextFormatDataDump data_dump_format_id = AV_TEXTFORMAT_DATADUMP_XXD;
 
     init_dynload();
 
@@ -3434,6 +3464,23 @@ int main(int argc, char **argv)
         ret = AVERROR(EINVAL);
         goto end;
     }
+    if (f->flags & AV_TEXTFORMAT_FLAG_IS_DIAGRAM_FORMATTER) {
+        av_log(NULL, AV_LOG_ERROR, "Output format '%s' can only draw filter graphs\n", f_name);
+        ret = AVERROR(EINVAL);
+        goto end;
+    }
+
+    if (data_dump_format) {
+        if (!strcmp(data_dump_format, "xxd")) {
+            data_dump_format_id = AV_TEXTFORMAT_DATADUMP_XXD;
+        } else if (!strcmp(data_dump_format, "base64")) {
+            data_dump_format_id = AV_TEXTFORMAT_DATADUMP_BASE64;
+        } else {
+            av_log(NULL, AV_LOG_ERROR, "Unknown data dump format with name '%s'\n", data_dump_format);
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+    }
 
     if (output_filename) {
         ret = avtextwriter_create_file(&wctx, output_filename);
@@ -3443,12 +3490,15 @@ int main(int argc, char **argv)
     if (ret < 0)
         goto end;
 
-    tf_options.is_key_selected = is_key_selected_callback;
-    tf_options.show_optional_fields = show_optional_fields;
-    tf_options.show_value_unit = show_value_unit;
-    tf_options.use_value_prefix = use_value_prefix;
-    tf_options.use_byte_value_binary_prefix = use_byte_value_binary_prefix;
-    tf_options.use_value_sexagesimal_format = use_value_sexagesimal_format;
+    AVTextFormatOptions tf_options = {
+        .is_key_selected              = is_key_selected_callback,
+        .show_optional_fields = show_optional_fields,
+        .show_value_unit = show_value_unit,
+        .use_value_prefix = use_value_prefix,
+        .use_byte_value_binary_prefix = use_byte_value_binary_prefix,
+        .use_value_sexagesimal_format = use_value_sexagesimal_format,
+        .data_dump_format             = data_dump_format_id,
+    };
 
     if ((ret = avtext_context_open(&tctx, f, wctx, f_args, sections, FF_ARRAY_ELEMS(sections), tf_options, show_data_hash)) >= 0) {
         if (f == &avtextformatter_xml)
@@ -3476,11 +3526,19 @@ int main(int argc, char **argv)
                 show_error(tctx, ret);
         }
 
+        input_ret = ret;
+
         avtext_print_section_footer(tctx);
 
-        avtextwriter_context_close(&wctx);
+        ret = avtextwriter_context_close(&wctx);
+        if (ret < 0)
+            av_log(NULL, AV_LOG_ERROR, "Writing output failed (closing writer): %s\n", av_err2str(ret));
 
-        avtext_context_close(&tctx);
+        ret = avtext_context_close(&tctx);
+        if (ret < 0)
+            av_log(NULL, AV_LOG_ERROR, "Writing output failed (closing formatter): %s\n", av_err2str(ret));
+
+        ret = FFMIN(ret, input_ret);
     }
 
 end:

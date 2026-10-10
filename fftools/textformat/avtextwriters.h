@@ -33,7 +33,7 @@ typedef struct AVTextWriter {
     const char *name;
 
     int (*init)(AVTextWriterContext *wctx);
-    void (*uninit)(AVTextWriterContext *wctx);
+    int (*uninit)(AVTextWriterContext *wctx);
     void (*writer_w8)(AVTextWriterContext *wctx, int b);
     void (*writer_put_str)(AVTextWriterContext *wctx, const char *str);
     void (*writer_vprintf)(AVTextWriterContext *wctx, const char *fmt, va_list vl);
@@ -49,7 +49,7 @@ typedef struct AVTextWriterContext {
 
 int avtextwriter_context_open(AVTextWriterContext **pwctx, const AVTextWriter *writer);
 
-void avtextwriter_context_close(AVTextWriterContext **pwctx);
+int avtextwriter_context_close(AVTextWriterContext **pwctx);
 
 int avtextwriter_create_stdout(AVTextWriterContext **pwctx);
 
