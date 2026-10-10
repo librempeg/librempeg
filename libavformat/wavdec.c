@@ -753,11 +753,11 @@ break_loop:
         &&
         ((st->codecpar->ch_layout.nb_channels >= 1) && (st->codecpar->ch_layout.nb_channels <= 2))) {
         WvHeader *hdr = &wav->wavpack_hdr;
-        if (ret = ff_wv_parse_header(hdr, pb->buf_ptr) < 0)
-            return ret;
-        if ((hdr->is_v4) || ((hdr->version < 1) && (hdr->version > 4)))
-            return AVERROR_INVALIDDATA;
-        avio_skip(pb, hdr->lapsed);
+        if (!ff_wv_parse_header(hdr, pb->buf_ptr)) {
+            if ((hdr->is_v4) || ((hdr->version < 1) && (hdr->version > 4)))
+                return AVERROR_INVALIDDATA;
+            avio_skip(pb, hdr->lapsed);
+        }
     }
 
     return 0;
