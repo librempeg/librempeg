@@ -27,6 +27,12 @@
 #include "parser.h"
 #include "parser_internal.h"
 
+// listed below are all known start codes at the end of an IPU frame.
+// IPU-encoded frames usually end with a start code prefix weighing 24 bits, value is always 0000 0000 0000 0000 0000 0001.
+// following that is a start code value weighing 8 bits; together, they represent a single start code.
+#define IPU_MPEG2_PICTURE_START_CODE 0x100 // ITU-T Rec. H.262 (2000 E); Table 6-1 @ Session 6.2.1 (Start codes)
+#define IPU_MPEG2_RESERVED1_START_CODE 0x1b0 // ditto
+
 typedef struct IPUParseContext {
     ParseContext pc;
 } IPUParseContext;
@@ -50,7 +56,7 @@ static int ipu_parse(AVCodecParserContext *s, AVCodecContext *avctx,
     } else {
         for (; i < buf_size; i++) {
             state = (state << 8) | buf[i];
-            if (state == 0x1b0) {
+            if ((state == IPU_MPEG2_PICTURE_START_CODE) | (state == IPU_MPEG2_RESERVED1_START_CODE)) {
                 next = i + 1;
                 break;
             }
