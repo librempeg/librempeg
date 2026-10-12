@@ -47,6 +47,7 @@
 #include "riff.h"
 #include "w64.h"
 #include "spdif.h"
+#include "wv.h"
 
 typedef struct WAVDemuxContext {
     const AVClass *class;
@@ -66,6 +67,7 @@ typedef struct WAVDemuxContext {
     int smv_given_first;
     int unaligned; // e.g. if an odd number of bytes ID3 tag was prepended
     int rifx; // RIFX: integer byte order for parameters is big endian
+    WvHeader wavpack_hdr;
 } WAVDemuxContext;
 
 #define OFFSET(x) offsetof(WAVDemuxContext, x)
@@ -743,6 +745,20 @@ break_loop:
 
     if (st->codecpar->codec_id == AV_CODEC_ID_SONARC)
         avio_skip(pb, 4);
+
+    /* (todo) WavPack can support PCM of any bits, ranging from 16-24 bits *per sample*.
+     * ffmpeg does not support a PCM codec where bits-per-sample value can be set;
+     * what happens instead is that a codec ID must be assigned beforehand from the "fmt " chunk info. */
+    if (((st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE) || (st->codecpar->codec_id == AV_CODEC_ID_PCM_S24LE))
+        &&
+        ((st->codecpar->ch_layout.nb_channels >= 1) && (st->codecpar->ch_layout.nb_channels <= 2))) {
+        WvHeader *hdr = &wav->wavpack_hdr;
+        if (!ff_wv_parse_header(hdr, pb->buf_ptr)) {
+            if ((hdr->is_v4) || ((hdr->version < 1) && (hdr->version > 4)))
+                return AVERROR_INVALIDDATA;
+            avio_skip(pb, hdr->lapsed);
+        }
+    }
 
     return 0;
 }
