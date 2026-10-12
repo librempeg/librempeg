@@ -95,11 +95,10 @@ static int choose_encoder(const OptionsContext *o, AVFormatContext *s,
         ms->par_in->codec_id = av_guess_codec(s->oformat, NULL, s->url, NULL, ost->type);
         *enc = avcodec_find_encoder(ms->par_in->codec_id);
         if (!*enc) {
-            const char *type_str = av_get_media_type_string(ms->par_in->codec_type);
-            av_log(ost, AV_LOG_FATAL, "Automatic encoder selection failed; "
-                   "Default %s encoder for format %s (codec %s) is "
+            av_log(ost, AV_LOG_FATAL, "Automatic encoder selection failed "
+                   "Default encoder for format %s (codec %s) is "
                    "probably disabled. Please choose an encoder manually.\n",
-                    type_str ? type_str : "?", s->oformat->name, avcodec_get_name(ms->par_in->codec_id));
+                    s->oformat->name, avcodec_get_name(ms->par_in->codec_id));
             return AVERROR_ENCODER_NOT_FOUND;
         }
     } else if (strcmp(codec_name, "copy")) {
@@ -1001,7 +1000,7 @@ ost_bind_filter(const Muxer *mux, MuxStream *ms, OutputFilter *ofilter,
         if (!keep_pix_fmt) {
             ret = avcodec_get_supported_config(enc_ctx, NULL,
                                                AV_CODEC_CONFIG_PIX_FORMAT, 0,
-                                               (const void **) &opts.formats, NULL);
+                                               (const void **) &opts.pixel_formats, NULL);
             if (ret < 0)
                 return ret;
         }
@@ -1035,7 +1034,7 @@ ost_bind_filter(const Muxer *mux, MuxStream *ms, OutputFilter *ofilter,
     } else {
         ret = avcodec_get_supported_config(enc_ctx, NULL,
                                            AV_CODEC_CONFIG_SAMPLE_FORMAT, 0,
-                                           (const void **) &opts.formats, NULL);
+                                           (const void **) &opts.sample_formats, NULL);
         if (ret < 0)
             return ret;
         ret = avcodec_get_supported_config(enc_ctx, NULL,
@@ -3662,10 +3661,6 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
         return err;
     }
     mux->fc = oc;
-
-    err = av_opt_set_dict(oc, &o->g->format_opts);
-    if (err < 0)
-        return err;
 
     av_strlcat(mux->log_name, "/",               sizeof(mux->log_name));
     av_strlcat(mux->log_name, oc->oformat->name, sizeof(mux->log_name));

@@ -1761,7 +1761,7 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
     while (graphi->sink_links_count) {
         oldesti = graphi->sink_links[0];
         oldest  = &oldesti->l.pub;
-        if (fffilter(oldest->dst->filter)->activate && strstr(oldest->dst->filter->name, "buffersink")) {
+        if (fffilter(oldest->dst->filter)->activate) {
             r = av_buffersink_get_frame_flags(oldest->dst, NULL,
                                               AV_BUFFERSINK_FLAG_PEEK);
             if (r != AVERROR_EOF)

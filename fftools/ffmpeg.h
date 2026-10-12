@@ -38,6 +38,7 @@
 #include "libavfilter/avfilter.h"
 
 #include "libavutil/avutil.h"
+#include "libavutil/bprint.h"
 #include "libavutil/dict.h"
 #include "libavutil/eval.h"
 #include "libavutil/fifo.h"
@@ -215,6 +216,7 @@ typedef struct OptionsContext {
     SpecifierOptList copy_prior_start;
     SpecifierOptList filters;
     SpecifierOptList reinit_filters;
+    SpecifierOptList drop_changed;
     SpecifierOptList fix_sub_duration;
     SpecifierOptList fix_sub_duration_heartbeat;
     SpecifierOptList canvas_sizes;
@@ -245,7 +247,10 @@ typedef struct OptionsContext {
 
 enum IFilterFlags {
     IFILTER_FLAG_AUTOROTATE     = (1 << 0),
-    IFILTER_FLAG_CFR            = (1 << 1),
+    IFILTER_FLAG_REINIT         = (1 << 1),
+    IFILTER_FLAG_CFR            = (1 << 2),
+    IFILTER_FLAG_CROP           = (1 << 3),
+    IFILTER_FLAG_DROPCHANGED    = (1 << 4),
 };
 
 enum IFilterParamChange {
@@ -266,6 +271,11 @@ typedef struct InputFilterOptions {
      * Otherwise, this is an estimate that should not be relied upon to be
      * accurate */
     AVRational          framerate;
+
+    unsigned            crop_top;
+    unsigned            crop_bottom;
+    unsigned            crop_left;
+    unsigned            crop_right;
 
     int                 sub2video_width;
     int                 sub2video_height;
@@ -331,7 +341,10 @@ typedef struct OutputFilterOptions {
     int                 sample_rate;
     AVChannelLayout     ch_layout;
 
-    const int                *formats;
+    union {
+        const enum AVPixelFormat *pixel_formats;
+        const enum AVSampleFormat *sample_formats;
+    };
     const int                *sample_rates;
     const AVChannelLayout    *ch_layouts;
     const AVRational         *frame_rates;
@@ -353,6 +366,18 @@ typedef struct OutputFilterOptions {
 typedef struct InputFilter {
     struct FilterGraph *graph;
     uint8_t            *name;
+    int                 index;
+
+    // filter data type
+    enum AVMediaType    type;
+
+    AVFilterContext    *filter;
+
+    char               *input_name;
+
+    /* for filters that are not yet bound to an input stream,
+     * this stores the input linklabel, if any */
+    uint8_t            *linklabel;
 } InputFilter;
 
 typedef struct OutputFilter {
@@ -360,6 +385,11 @@ typedef struct OutputFilter {
 
     struct FilterGraph  *graph;
     uint8_t             *name;
+    int                  index;
+
+    AVFilterContext     *filter;
+
+    char                *output_name;
 
     /* for filters that are not yet bound to an output stream,
      * this stores the output linklabel, if any */
@@ -386,7 +416,10 @@ typedef struct FilterGraph {
     // true when the filtergraph is created internally for
     // purposes like stream group merging. Meant to be freed
     // if unbound.
-    int        is_internal;
+    int                 is_internal;
+
+    const char      *graph_desc;
+    struct AVBPrint graph_print_buf;
 } FilterGraph;
 
 enum DecoderFlags {
@@ -399,13 +432,6 @@ enum DecoderFlags {
     DECODER_FLAG_SEND_END_TS      = (1 << 4),
     // force bitexact decoding
     DECODER_FLAG_BITEXACT         = (1 << 5),
-};
-
-enum CroppingType {
-    CROP_DISABLED = 0,
-    CROP_ALL,
-    CROP_CODEC,
-    CROP_CONTAINER,
 };
 
 typedef struct DecoderOpts {
@@ -428,14 +454,6 @@ typedef struct DecoderOpts {
     // Either forced (when DECODER_FLAG_FRAMERATE_FORCED is set) or
     // estimated (otherwise) video framerate.
     AVRational                  framerate;
-
-    enum CroppingType           apply_cropping;
-
-    // container cropping, applied when apply_cropping is ALL or CONTAINER
-    unsigned                    crop_top;
-    unsigned                    crop_bottom;
-    unsigned                    crop_left;
-    unsigned                    crop_right;
 } DecoderOpts;
 
 typedef struct Decoder {
@@ -615,6 +633,13 @@ typedef struct Encoder {
     uint64_t                samples_encoded;
 } Encoder;
 
+enum CroppingType {
+    CROP_DISABLED = 0,
+    CROP_ALL,
+    CROP_CODEC,
+    CROP_CONTAINER,
+};
+
 typedef struct OutputStream {
     const AVClass *class;
 
@@ -752,6 +777,9 @@ extern char *filter_nbthreads;
 extern int filter_complex_nbthreads;
 extern int filter_buffered_frames;
 extern int vstats_version;
+extern int print_graphs;
+extern char *print_graphs_file;
+extern char *print_graphs_format;
 extern int auto_conversion_filters;
 
 extern const AVIOInterruptCB int_cb;
