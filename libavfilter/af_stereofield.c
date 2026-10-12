@@ -39,7 +39,7 @@ enum operation {
 typedef struct StereoFieldContext {
     const AVClass *class;
 
-    double D, P;
+    double D, W, P;
     int mode;
 
     double *A;
@@ -75,6 +75,7 @@ static const AVOptionArrayDef def_att = {.def="1 1", .size_min=2, .size_max=2, .
 
 static const AVOption stereofield_options[] = {
     { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
+    { "w", "set the widening", OFFSET(W), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 16, FLAGS },
     { "a", "set the attenuation", OFFSET(A), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_att}, 0, 16, FLAGS },
     { "p", "set the panning", OFFSET(P), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
     { "o", "set the operating mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=OP_STEREO}, 0, NB_OPERATION-1, FLAGS, "mode" },
