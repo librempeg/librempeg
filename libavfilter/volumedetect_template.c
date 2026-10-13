@@ -121,11 +121,15 @@ static void fn(print_stats)(AVFilterContext *ctx)
     uint64_t nb_samples = 0, sum = 0, idb_sum = 0;
     int last_idb = INT_MAX;
 
+    if (s->print_done)
+        return;
+
     for (int i = 0; i < HISTOGRAM_SIZE; i++)
         nb_samples += s->histogram[i];
     if (!nb_samples)
         return;
 
+    s->print_done = 1;
     av_log(ctx, AV_LOG_INFO, "n_samples: %" PRId64 "\n", nb_samples);
 #if DEPTH == 16 || DEPTH == 32
     /*
