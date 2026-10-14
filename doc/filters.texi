@@ -6955,6 +6955,42 @@ speechnorm=e=50:r=0.0001:l=1
 @end example
 @end itemize
 
+@section stereofield
+Apply Stereo Field effect.
+
+The filter accepts the following options:
+
+@table @option
+@item d
+Set the depth. This controls correlation between front left and front right channels.
+Allowed range is from -1.0 to 1.0. The default value is 0.0 which keeps correlation as it is.
+The -1.0 value makes channels more correlated, into possitive correlation, and 1.0 makes them
+less correlated and may even make channels out of phase - into negative correlation.
+
+@item w
+Set the widening. This controls stereo image width, how much power of one channel is bigger
+than other channel. Allowed range is from 0.0 to 16.0. The default value is 1.0 which keeps
+stereo image width unchanged. The 0.0 value changes non-zero width to near zero or minimal,
+and 16.0 value make extreme width differences between two channels. This can only narrow or
+wide already existing stereo width, so if width is already zero output will stay unchanged.
+
+@item a
+Set the attenuation. This options takes two values. First value controls attenuation of
+correlated channels, and second value controls attenuation of anti-correlated channels.
+Default values are (1 1). Allowed range is from 0.0 to 16.0.
+
+@item p
+Set the panning. This controls panning from left to right channel and other way around.
+Default value is 0.0. Allowed range is from -1.0 to 1.0. The value -1.0 pans to left channel
+and value 1.0 pans to right channel.
+
+@item o
+Set the operating mode. This have fixed values: l, r and s.
+Set what channels to take into processing as reference point when changing correlation between
+channels. The 'l' value use only left channel as reference, 'r' uses only right channel as
+reference and 's' use both left and right channel. Default value is 's'.
+@end table
+
 @section stereotools
 
 This filter has some handy utilities to manage stereo signals, for converting
