@@ -120,7 +120,12 @@ typedef struct FFFormatContext {
     AVDictionary *id3v2_meta;
 
     int missing_streams;
-} FFFormatContext;
+
+    /**
+     * Set if program ids are strictly monotonic.
+     */
+    int program_ids_monotonic;
+ } FFFormatContext;
 
 static av_always_inline FFFormatContext *ffformatcontext(AVFormatContext *s)
 {
