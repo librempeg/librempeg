@@ -1581,10 +1581,13 @@ static void log_type(void *av_log_obj, const AVOption *o,
     if (o->type == AV_OPT_TYPE_CONST && (TYPE_BASE(parent_type) == AV_OPT_TYPE_INT || TYPE_BASE(parent_type) == AV_OPT_TYPE_INT64))
         av_log(av_log_obj, AV_LOG_INFO, "%-12"PRId64" ", o->default_val.i64);
     else if (type < FF_ARRAY_ELEMS(opt_type_desc) && opt_type_desc[type].name) {
-        if (o->type & AV_OPT_TYPE_FLAG_ARRAY)
-            av_log(av_log_obj, AV_LOG_INFO, "[%-10s] ", opt_type_desc[type].name);
-        else
+        if (o->type & AV_OPT_TYPE_FLAG_ARRAY) {
+            const char sep = o->default_val.arr->sep;
+
+            av_log(av_log_obj, AV_LOG_INFO, "[%-9s%c] ", opt_type_desc[type].name, sep ? sep : ',');
+        } else {
             av_log(av_log_obj, AV_LOG_INFO, "%-12s ", opt_type_desc[type].name);
+        }
     }
     else
         av_log(av_log_obj, AV_LOG_INFO, "%-12s ", "");
