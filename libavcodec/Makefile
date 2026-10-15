@@ -1495,6 +1495,7 @@ TESTPROGS = avcodec                                                     \
             htmlsubtitles                                               \
             jpeg2000dwt                                                 \
             mathops                                                    \
+            packet_side_data_handle                                     \
 
 TESTPROGS-$(CONFIG_AC3DSP)                += ac3
 TESTPROGS-$(CONFIG_APV_DECODER)           += apv

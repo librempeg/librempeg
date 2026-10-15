@@ -18,5 +18,6 @@
 /mathops
 /mjpegenc_huffman
 /mpeg12framerate
+/packet_side_data_handle
 /rangecoder
 /snowenc
