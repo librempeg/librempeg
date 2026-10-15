@@ -239,25 +239,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         if (s->depth == 8) {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+                for (int x = 0; x < width; x++)
                     bptr[x] = src[x];
-                }
                 bptr += width;
                 src += in->linesize[plane];
             }
         } else if (s->depth <= 16) {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+                for (int x = 0; x < width; x++)
                     bptr[x] = src16[x];
-                }
                 bptr += width;
                 src16 += in->linesize[plane] / 2;
             }
         } else {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    memcpy(bptr, src32, width * sizeof(float));
-                }
+                memcpy(bptr, src32, width * sizeof(float));
                 bptr += width;
                 src32 += in->linesize[plane] / 4;
             }
@@ -268,25 +264,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         bptr = s->buffer;
         if (s->depth == 8) {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+                for (int x = 0; x < width; x++)
                     dst[x] = av_clip_uint8(lrintf(bptr[x]));
-                }
                 bptr += width;
                 dst += out->linesize[plane];
             }
         } else if (s->depth <= 16) {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+                for (int x = 0; x < width; x++)
                     dst16[x] = av_clip_uintp2_c(lrintf(bptr[x]), s->depth);
-                }
                 bptr += width;
                 dst16 += out->linesize[plane] / 2;
             }
         } else {
             for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    memcpy(dst32, bptr, width * sizeof(float));
-                }
+                memcpy(dst32, bptr, width * sizeof(float));
                 bptr += width;
                 dst32 += out->linesize[plane] / 4;
             }
