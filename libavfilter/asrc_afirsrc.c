@@ -18,6 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/cpu.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/ffmath.h"
@@ -34,7 +36,8 @@
 enum {
     INTERP_LINEAR,
     INTERP_CUBIC,
-    INTERP_SPLINE,
+    INTERP_COSINE,
+    INTERP_SMOOTH,
     NB_INTERP
 };
 
@@ -347,7 +350,8 @@ static const AVOption afireqsrc_options[] = {
     { "i",     "set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_INTERP-1, FLAGS, .unit = "interp" },
     { "linear", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_LINEAR}, 0, 0, FLAGS, .unit = "interp" },
     { "cubic",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_CUBIC},  0, 0, FLAGS, .unit = "interp" },
-    { "spline", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SPLINE}, 0, 0, FLAGS, .unit = "interp" },
+    { "cosine", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_COSINE}, 0, 0, FLAGS, .unit = "interp" },
+    { "smooth", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SMOOTH}, 0, 0, FLAGS, .unit = "interp" },
     { "phase","set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
     { "h",    "set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
     { "linear", "linear phase",  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "phase" },
@@ -413,15 +417,22 @@ static void eq_interp(AVComplexFloat *complexf,
 
                         g = a * x3 + b * x2 + c * x1 + d;
                     }
-                } else if (interp == INTERP_SPLINE) {
-                    const float d = freq[j+1] - freq[j];
-                    const float u = (x - freq[j]) / d;
-                    const float c0 = magnitude[j];
-                    const float c1 = 1/2.f*(magnitude[j+1]-magnitude[j-1]);
-                    const float c2 = magnitude[j-1] - 5/2.f*magnitude[j] + 2*magnitude[j+1] - 1/2.f*magnitude[j+2];
-                    const float c3 = 1/2.f*(magnitude[j+2]-magnitude[j-1]) + 3/2.f*(magnitude[j]-magnitude[j+1]);
+                } else if (interp == INTERP_COSINE) {
+                    const double fx = (x < freq[j]) ? freq[j] : x;
+                    const double t = log((fx + DBL_MIN) / (freq[j] + DBL_MIN)) / log(freq[j+1] / (freq[j] + DBL_MIN));
+                    const double w = 0.5 * (1.0 - cos(M_PI * t));
+                    const double g0 = magnitude[j];
+                    const double g1 = magnitude[j+1];
 
-                    g = ((c3 * u + c2) * u + c1) * u + c0;
+                    g = g0 + (g1 - g0) * w;
+                } else if (interp == INTERP_SMOOTH) {
+                    const double fx = (x < freq[j]) ? freq[j] : x;
+                    const double t = log((fx + DBL_MIN) / (freq[j] + DBL_MIN)) / log(freq[j+1] / (freq[j] + DBL_MIN));
+                    const double w = t * t * (3.0 - 2.0 * t);
+                    const double g0 = magnitude[j];
+                    const double g1 = magnitude[j+1];
+
+                    g = g0 + (g1 - g0) * w;
                 }
 
                 complexf[i].re = g;

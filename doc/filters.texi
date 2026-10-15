@@ -7994,7 +7994,7 @@ Set sample rate of output audio stream, default is @code{44100}.
 Set number of samples per each frame in output audio stream. Default is @code{1024}.
 
 @item interp, i
-Set interpolation method for FIR equalizer coefficients. Can be @code{linear} or @code{cubic} or @code{spline}.
+Set interpolation method for FIR equalizer coefficients. Can be @code{linear} or @code{cubic} or @code{cosine} or @code{smooth}.
 
 @item phase, h
 Set phase type of FIR filter. Can be @code{linear} or @code{min}: minimum-phase.
