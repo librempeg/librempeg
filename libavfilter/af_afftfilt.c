@@ -236,6 +236,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     double values[VAR_VARS_NB];
     AVFrame *out;
 
+    av_assert0(win_size > 0 && s->hop_size > 0 && s->hop_size <= win_size);
+
     extra_samples = in->nb_samples % s->hop_size;
     if (extra_samples)
         extra_samples = FFMIN(s->hop_size - extra_samples, s->flush_size);
