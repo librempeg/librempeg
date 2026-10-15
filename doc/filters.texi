@@ -6985,10 +6985,10 @@ Default value is 0.0. Allowed range is from -1.0 to 1.0. The value -1.0 pans to 
 and value 1.0 pans to right channel.
 
 @item o
-Set the operating mode. This have fixed values: l, r and s.
+Set the operating mode. This have fixed values: @code{l}, @code{r} and @code{s}.
 Set what channels to take into processing as reference point when changing correlation between
-channels. The 'l' value use only left channel as reference, 'r' uses only right channel as
-reference and 's' use both left and right channel. Default value is 's'.
+channels. The @code{l} value use only left channel as reference, @code{r} uses only right channel as
+reference and @code{s} use both left and right channel. Default value is @code{s}.
 @end table
 
 @section stereotools
