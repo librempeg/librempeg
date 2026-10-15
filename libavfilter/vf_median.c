@@ -152,12 +152,19 @@ static int config_input(AVFilterLink *inlink)
     s->coarse_size = s->bins * inlink->w;
     s->coarse = av_calloc(s->nb_threads, sizeof(*s->coarse));
     s->fine   = av_calloc(s->nb_threads, sizeof(*s->fine));
-    if (!s->coarse || !s->fine)
+    s->coarse_tmp = av_calloc(s->nb_threads, sizeof(*s->coarse_tmp));
+    s->fine_tmp   = av_calloc(s->nb_threads, sizeof(*s->fine_tmp));
+    s->luc_tmp    = av_calloc(s->nb_threads, sizeof(*s->luc_tmp));
+    if (!s->coarse || !s->fine || !s->coarse_tmp || !s->fine_tmp || !s->luc_tmp)
         return AVERROR(ENOMEM);
     for (int i = 0; i < s->nb_threads; i++) {
         s->coarse[i] = av_malloc_array(s->coarse_size, sizeof(**s->coarse));
         s->fine[i]   = av_malloc_array(s->fine_size, sizeof(**s->fine));
-        if (!s->coarse[i] || !s->fine[i])
+        s->coarse_tmp[i] = av_malloc_array(s->bins, sizeof(**s->coarse_tmp));
+        s->fine_tmp[i]   = av_malloc_array(s->bins * s->bins, sizeof(**s->fine_tmp));
+        s->luc_tmp[i]    = av_malloc_array(s->bins, sizeof(**s->luc_tmp));
+        if (!s->coarse[i] || !s->fine[i] || !s->coarse_tmp[i] ||
+            !s->fine_tmp[i] || !s->luc_tmp[i])
             return AVERROR(ENOMEM);
     }
 
@@ -240,13 +247,24 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     MedianContext *s = ctx->priv;
 
-    for (int i = 0; i < s->nb_threads && s->coarse && s->fine; i++) {
-        av_freep(&s->coarse[i]);
-        av_freep(&s->fine[i]);
+    for (int i = 0; i < s->nb_threads; i++) {
+        if (s->coarse)
+            av_freep(&s->coarse[i]);
+        if (s->fine)
+            av_freep(&s->fine[i]);
+        if (s->coarse_tmp)
+            av_freep(&s->coarse_tmp[i]);
+        if (s->fine_tmp)
+            av_freep(&s->fine_tmp[i]);
+        if (s->luc_tmp)
+            av_freep(&s->luc_tmp[i]);
     }
 
     av_freep(&s->coarse);
     av_freep(&s->fine);
+    av_freep(&s->coarse_tmp);
+    av_freep(&s->fine_tmp);
+    av_freep(&s->luc_tmp);
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)

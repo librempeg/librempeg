@@ -40,6 +40,7 @@ typedef struct MedianContext {
     int nb_threads;
 
     uint16_t **coarse, **fine;
+    uint16_t **coarse_tmp, **fine_tmp, **luc_tmp;
     int coarse_size, fine_size;
     int bins;
     int t;
