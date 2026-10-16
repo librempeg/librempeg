@@ -31,6 +31,7 @@
 #undef FEXP
 #undef FEPS
 #undef FMAX
+#undef FMIN
 #undef SQRT
 #if DEPTH == 32
 #define M_2PI M_2_PIf
@@ -43,6 +44,7 @@
 #define FABS fabsf
 #define FEXP expf
 #define FMAX fmaxf
+#define FMIN fminf
 #define SQRT sqrtf
 #define FEPS FLT_EPSILON
 #else
@@ -56,6 +58,7 @@
 #define FABS fabs
 #define FEXP exp
 #define FMAX fmax
+#define FMIN fmin
 #define SQRT sqrt
 #define FEPS DBL_EPSILON
 #endif
@@ -123,6 +126,9 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
     const ftype center_c = s->center[1];
     const ftype center_f = s->center[2];
     const ftype size_f = s->fft_size/2+1;
+    const ftype floor_g = FMIN(s->gain[0], s->gain[1]);
+    const ftype ceil_g = FMAX(s->gain[0], s->gain[1]);
+    const ftype range_g = ceil_g - floor_g;
     const int type = s->type;
 
     for (int i = start; i < end; i++) {
@@ -142,7 +148,7 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
         const ftype ip = (p - center_p) * width_p;
         const ftype ff = (f - center_f) * width_f;
         const ftype scale = FEXP(F(-0.5) * ic * ic + F(-0.5) * ip * ip + F(-0.5) * ff * ff);
-        const ftype g = type ? F(1.0) - scale : scale;
+        const ftype g = (type ? F(1.0) - scale : scale) * range_g + floor_g;
 
         fl[i].re = l_re * g;
         fl[i].im = l_im * g;

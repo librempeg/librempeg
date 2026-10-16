@@ -38,6 +38,9 @@ typedef struct StereoFreeContext {
     double *width;
     unsigned width_size;
 
+    double *gain;
+    unsigned gain_size;
+
     int fft_size;
     int overlap;
     int type;
@@ -67,13 +70,15 @@ typedef struct StereoFreeContext {
 
 static const AVOptionArrayDef def_center = {.def="0.0 1.0 -1.0", .size_min=3, .size_max=3, .sep=' '};
 static const AVOptionArrayDef def_width = {.def="0.2 0.2 0.2", .size_min=3, .size_max=3, .sep=' '};
+static const AVOptionArrayDef def_gain = {.def="0.0 1.0", .size_min=2, .size_max=2, .sep=' '};
 
 static const AVOption stereofree_options[] = {
     { "type", "set the filtering type", OFFSET(type), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, .unit = "type" },
-        { "center",  "extract center",  0, AV_OPT_TYPE_CONST, {.i64 = 0}, 0, 0, FLAGS, .unit = "type" },
-        { "residue", "extract residue", 0, AV_OPT_TYPE_CONST, {.i64 = 1}, 0, 0, FLAGS, .unit = "type" },
+        { "center",  "filter center",  0, AV_OPT_TYPE_CONST, {.i64 = 0}, 0, 0, FLAGS, .unit = "type" },
+        { "residue", "filter residue", 0, AV_OPT_TYPE_CONST, {.i64 = 1}, 0, 0, FLAGS, .unit = "type" },
     { "center", "set the pan/correlation/frequency center of window", OFFSET(center), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_center}, -1, 1, FLAGS },
     { "width", "set the standard deviation of the gaussian window for pan/correlation/frequency", OFFSET(width), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_width}, 0, 32, FLAGS },
+    { "gain", "set the floor and ceiling gain factor", OFFSET(gain), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_gain}, 0, 8, FLAGS },
     {NULL}
 };
 
