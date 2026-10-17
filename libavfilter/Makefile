@@ -677,6 +677,7 @@ OBJS-$(CONFIG_SMPTEHDBARS_FILTER)            += vsrc_testsrc.o
 OBJS-$(CONFIG_COLOR_VULKAN_FILTER)           += vsrc_testsrc_vulkan.o vulkan.o vulkan_filter.o
 OBJS-$(CONFIG_TESTSRC_FILTER)                += vsrc_testsrc.o
 OBJS-$(CONFIG_TESTSRC2_FILTER)               += vsrc_testsrc.o
+OBJS-$(CONFIG_TRIANGLE_FILTER)               += vsrc_testsrc.o
 OBJS-$(CONFIG_YUVTESTSRC_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_ZONEPLATE_FILTER)              += vsrc_testsrc.o
 

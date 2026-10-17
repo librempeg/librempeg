@@ -636,6 +636,7 @@ extern const FFFilter ff_vsrc_smptebars;
 extern const FFFilter ff_vsrc_smptehdbars;
 extern const FFFilter ff_vsrc_testsrc;
 extern const FFFilter ff_vsrc_testsrc2;
+extern const FFFilter ff_vsrc_triangle;
 extern const FFFilter ff_vsrc_yuvtestsrc;
 extern const FFFilter ff_vsrc_zoneplate;
 
