@@ -785,6 +785,10 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     if (s->avctx->hwaccel) {
         const FFHWAccel *hwaccel = ffhwaccel(s->avctx->hwaccel);
+        if (!s->raw_image_buffer) {
+            av_log(s->avctx, AV_LOG_ERROR, "SOF without SOI\n");
+            return AVERROR_INVALIDDATA;
+        }
 
         /* A previous frame may have been aborted before its end_frame call,
          * leaving the private data behind. */
@@ -2372,6 +2376,8 @@ int ff_mjpeg_decode_frame_from_buf(AVCodecContext *avctx, AVFrame *frame,
     s->force_pal8 = 0;
 
     s->buf_size = buf_size;
+    s->raw_image_buffer      = NULL;
+    s->raw_image_buffer_size = 0;
 
     av_exif_free(&s->exif_metadata);
     av_freep(&s->stereo3d);
