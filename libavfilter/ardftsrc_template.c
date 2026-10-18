@@ -111,7 +111,7 @@
 #define SAMPLE_FORMAT ldblp
 #define ttype AVComplexLongDouble
 #define TX_TYPE AV_TX_LONG_DOUBLE_RDFT
-#define EPS DBL_EPSILON
+#define EPS LDBL_EPSILON
 #endif
 
 #define F(x) ((ftype)(x))
@@ -268,14 +268,14 @@ static int fn(src_init)(AVFilterContext *ctx)
 
     trim_start = 0;
     for (int n = 0; n < taper_samples; n++) {
-        if (taper[n].re < F(1.0))
+        if ((F(1.0L) - taper[n].re) > EPS)
             break;
         trim_start++;
     }
 
     trim_stop = 0;
     for (int n = taper_samples-1; n > trim_start; n--) {
-        if (taper[n].re > F(0.0))
+        if (taper[n].re >= EPS)
             break;
         trim_stop++;
     }
