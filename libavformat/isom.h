@@ -316,6 +316,7 @@ typedef struct HEIFItem {
     int vflip;
     int type;
     int is_gainmap;
+    int is_alpha;
     int is_idat_relative;
     AVExifMetadata ifd;
     uint8_t *icc_profile;
