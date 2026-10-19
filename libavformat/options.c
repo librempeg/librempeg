@@ -403,6 +403,7 @@ static void *stream_group_child_next(void *obj, void *prev)
         case AV_STREAM_GROUP_PARAMS_LCEVC:
         case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
         case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
+        case AV_STREAM_GROUP_PARAMS_ALPHA:
             return stg->params.layered_video;
         default:
             break;
@@ -435,6 +436,7 @@ static const AVClass *stream_group_child_iterate(void **opaque)
     case AV_STREAM_GROUP_PARAMS_LCEVC:
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
     case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
+    case AV_STREAM_GROUP_PARAMS_ALPHA:
         ret = &layered_video_class;
         break;
     default:
@@ -512,8 +514,9 @@ AVStreamGroup *avformat_stream_group_create(AVFormatContext *s,
         av_opt_set_defaults(stg->params.tref);
         break;
     case AV_STREAM_GROUP_PARAMS_LCEVC:
-    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
+    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
+    case AV_STREAM_GROUP_PARAMS_ALPHA:
         stg->params.layered_video = av_mallocz(sizeof(*stg->params.layered_video));
         if (!stg->params.layered_video)
             goto fail;
