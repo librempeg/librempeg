@@ -2882,6 +2882,7 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     MJpegDecodeContext *s = avctx->priv_data;
     int i, j;
 
+    av_refstruct_unref(&s->hwaccel_picture_private);
     av_frame_free(&s->picture);
     s->picture_ptr = NULL;
     av_frame_free(&s->smv_frame);
@@ -2905,7 +2906,6 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
 
     reset_icc_profile(s);
 
-    av_refstruct_unref(&s->hwaccel_picture_private);
     av_freep(&s->jls_state);
 
     return 0;
