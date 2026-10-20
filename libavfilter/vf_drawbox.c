@@ -33,7 +33,6 @@
 #include "libavutil/eval.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/parseutils.h"
-#include "libavutil/detection_bbox.h"
 #include "avfilter.h"
 #include "drawutils.h"
 #include "filters.h"
@@ -219,28 +218,9 @@ static void draw_region_rgb_packed(AVFrame *frame, DrawBoxContext *ctx, int left
     }
 }
 
-static enum AVFrameSideDataType box_source_string_parse(const char *box_source_string)
-{
-    av_assert0(box_source_string);
-    if (!strcmp(box_source_string, "side_data_detection_bboxes")) {
-        return AV_FRAME_DATA_DETECTION_BBOXES;
-    } else {
-        // will support side_data_regions_of_interest next
-        return AVERROR(EINVAL);
-    }
-}
-
 static av_cold int init(AVFilterContext *ctx)
 {
     DrawBoxContext *s = ctx->priv;
-
-    if (s->box_source_string) {
-        s->box_source = box_source_string_parse(s->box_source_string);
-        if ((int)s->box_source < 0) {
-            av_log(ctx, AV_LOG_ERROR, "Error box source: %s\n",s->box_source_string);
-            return AVERROR(EINVAL);
-        }
-    }
 
     if (!s->invert_color) {
         s->yuv_color[Y] = RGB_TO_Y_CCIR(s->rgba_color[0], s->rgba_color[1], s->rgba_color[2]);
@@ -383,31 +363,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     AVFilterContext *ctx = inlink->dst;
     DrawBoxContext *s = ctx->priv;
-    const AVDetectionBBoxHeader *header = NULL;
-    const AVDetectionBBox *bbox;
-    AVFrameSideData *sd;
     int loop = 1;
 
-    if (s->box_source == AV_FRAME_DATA_DETECTION_BBOXES) {
-        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DETECTION_BBOXES);
-        if (sd) {
-            header = (AVDetectionBBoxHeader *)sd->data;
-            loop = header->nb_bboxes;
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "No detection bboxes.\n");
-            return ff_filter_frame(inlink->dst->outputs[0], frame);
-        }
-    }
-
     for (int i = 0; i < loop; i++) {
-        if (header) {
-            bbox = av_get_detection_bbox(header, i);
-            s->y = bbox->y;
-            s->x = bbox->x;
-            s->h = bbox->h;
-            s->w = bbox->w;
-        }
-
         s->draw_region(frame, s, FFMAX(s->x, 0), FFMAX(s->y, 0), FFMIN(s->x + s->w, frame->width),
                        FFMIN(s->y + s->h, frame->height), pixel_belongs_to_box);
     }

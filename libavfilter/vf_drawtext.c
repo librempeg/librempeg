@@ -57,7 +57,6 @@
 #include "libavutil/time_internal.h"
 #include "libavutil/tree.h"
 #include "libavutil/lfg.h"
-#include "libavutil/detection_bbox.h"
 #include "avfilter.h"
 #include "drawutils.h"
 #include "filters.h"
@@ -1883,21 +1882,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     AVFilterLink *outlink = ctx->outputs[0];
     DrawTextContext *s = ctx->priv;
     int ret;
-    const AVDetectionBBoxHeader *header = NULL;
-    const AVDetectionBBox *bbox;
     AVFrameSideData *sd;
     int loop = 1;
-
-    if (s->text_source == AV_FRAME_DATA_DETECTION_BBOXES) {
-        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DETECTION_BBOXES);
-        if (sd) {
-            header = (AVDetectionBBoxHeader *)sd->data;
-            loop = header->nb_bboxes;
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "No detection bboxes.\n");
-            return ff_filter_frame(outlink, frame);
-        }
-    }
 
     if (s->reload && !(inl->frame_count_out % s->reload)) {
         if ((ret = ff_load_textfile(ctx, (const char *)s->textfile, &s->text, NULL)) < 0) {
@@ -1923,16 +1909,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     s->metadata = frame->metadata;
 
     for (int i = 0; i < loop; i++) {
-        if (header) {
-            bbox = av_get_detection_bbox(header, i);
-            strcpy(s->text, bbox->detect_label);
-            for (int j = 0; j < bbox->classify_count; j++) {
-                strcat(s->text, ", ");
-                strcat(s->text, bbox->classify_labels[j]);
-            }
-            s->x = bbox->x;
-            s->y = bbox->y - s->fontsize;
-        }
         ret = draw_text(ctx, frame);
         if (ret < 0) {
             av_frame_free(&frame);

@@ -24,7 +24,6 @@ HEADERS = adler32.h                                                     \
           crc.h                                                         \
           csp.h                                                         \
           des.h                                                         \
-          detection_bbox.h                                              \
           dict.h                                                        \
           display.h                                                     \
           dovi_meta.h                                                   \
@@ -130,7 +129,6 @@ OBJS = adler32.o                                                        \
        crc.o                                                            \
        csp.o                                                            \
        des.o                                                            \
-       detection_bbox.o                                                 \
        dict.o                                                           \
        display.o                                                        \
        dovi_meta.o                                                      \
@@ -280,7 +278,6 @@ TESTPROGS = adler32                                                     \
             crc                                                         \
             csp                                                         \
             des                                                         \
-            detection_bbox                                              \
             dict                                                        \
             display                                                     \
             dovi_meta                                                   \

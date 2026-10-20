@@ -26,7 +26,6 @@ OBJS = allfilters.o                                                     \
        version.o                                                        \
        video.o                                                          \
 
-include $(SRC_PATH)/libavfilter/dnn/Makefile
 include $(SRC_PATH)/libavfilter/vulkan/Makefile
 
 OBJS-$(HAVE_LIBC_MSVCRT)                     += file_open.o
@@ -36,7 +35,6 @@ OBJS-$(CONFIG_AVFILTER_THREAD_FRAME)         += pthread_frame.o
 # subsystems
 OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
 OBJS-$(CONFIG_SCENE_SAD)                     += scene_sad.o
-OBJS-$(CONFIG_DNN)                           += dnn_filter_common.o
 
 # audio filters
 OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
@@ -349,9 +347,6 @@ OBJS-$(CONFIG_DILATION_FILTER)               += vf_neighbor.o
 OBJS-$(CONFIG_DILATION_OPENCL_FILTER)        += vf_neighbor_opencl.o opencl.o \
                                                 opencl/neighbor.o
 OBJS-$(CONFIG_DISPLACE_FILTER)               += vf_displace.o framesync.o
-OBJS-$(CONFIG_DNN_CLASSIFY_FILTER)           += vf_dnn_classify.o
-OBJS-$(CONFIG_DNN_DETECT_FILTER)             += vf_dnn_detect.o
-OBJS-$(CONFIG_DNN_PROCESSING_FILTER)         += vf_dnn_processing.o
 OBJS-$(CONFIG_DOUBLEWEAVE_FILTER)            += vf_weave.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWGRAPH_FILTER)              += f_drawgraph.o
@@ -736,7 +731,7 @@ TESTPROGS = drawutils filtfmts formats integral
 TOOLS-$(CONFIG_LIBZMQ) += zmqsend
 
 clean::
-	$(RM) $(CLEANSUFFIXES:%=libavfilter/dnn/%) $(CLEANSUFFIXES:%=libavfilter/opencl/%) \
+	$(RM) $(CLEANSUFFIXES:%=libavfilter/opencl/%) \
               $(CLEANSUFFIXES:%=libavfilter/metal/%)
 
 OPENCL = $(subst $(SRC_PATH)/,,$(wildcard $(SRC_PATH)/libavfilter/opencl/*.cl))

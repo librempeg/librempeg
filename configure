@@ -259,8 +259,6 @@ External library support:
   --enable-libopenh264     enable H.264 encoding via OpenH264 [no]
   --enable-libopenjpeg     enable JPEG 2000 encoding via OpenJPEG [no]
   --enable-libopenmpt      enable decoding tracked files via libopenmpt [no]
-  --enable-libopenvino     enable OpenVINO as a DNN module backend
-                           for DNN based filters like dnn_processing [no]
   --enable-libopus         enable Opus de/encoding via libopus [no]
   --enable-libplacebo      enable libplacebo library [no]
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
@@ -279,13 +277,10 @@ External library support:
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libsvtav1       enable AV1 encoding via SVT [no]
   --enable-libsvtjpegxs    enable JPEGXS encoding/decoding via SVT [no]
-  --enable-libtensorflow   enable TensorFlow as a DNN module backend
-                           for DNN based filters like sr [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtls          enable LibreSSL (via libtls), needed for https support
                            if openssl, gnutls or mbedtls is not used [no]
-  --enable-libtorch        enable Torch as one DNN backend [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libuavs3d       enable AVS3 decoding via libuavs3d [no]
   --enable-libv4l2         enable libv4l2/v4l-utils [no]
@@ -2104,11 +2099,9 @@ EXTERNAL_LIBRARY_LIST="
     libssh
     libsvtav1
     libsvtjpegxs
-    libtensorflow
     libtesseract
     libtheora
     libtls
-    libtorch
     libtwolame
     libuavs3d
     libv4l2
@@ -2709,7 +2702,6 @@ CONFIG_EXTRA="
     d3d12va_me_precision_eighth_pixel
     deflate_wrapper
     dirac_parse
-    dnn
     dovi_rpudec
     dovi_rpuenc
     dvprofile
@@ -3029,8 +3021,6 @@ deflate_wrapper_deps="zlib"
 dirac_parse_select="golomb"
 dovi_rpudec_select="golomb"
 dovi_rpuenc_select="golomb"
-dnn_deps="avformat swscale"
-dnn_deps_any="libtensorflow libopenvino libtorch"
 error_resilience_select="me_cmp"
 evcparse_select="golomb"
 faandct_deps="faan"
@@ -4127,13 +4117,9 @@ deinterlace_qsv_filter_select="qsvvpp"
 deinterlace_vaapi_filter_deps="vaapi"
 delogo_filter_deps="gpl"
 denoise_vaapi_filter_deps="vaapi"
-derain_filter_select="dnn"
 deshake_filter_select="pixelutils"
 deshake_opencl_filter_deps="opencl"
 dilation_opencl_filter_deps="opencl"
-dnn_classify_filter_select="dnn"
-dnn_detect_filter_select="dnn"
-dnn_processing_filter_select="dnn"
 drawtext_filter_deps="libfreetype libharfbuzz"
 drawtext_filter_suggest="libfontconfig libfribidi"
 eq_filter_deps="gpl"
@@ -4209,8 +4195,6 @@ signature_filter_deps="gpl avcodec"
 smartblur_filter_deps="gpl swscale"
 sobel_opencl_filter_deps="opencl"
 sofalizer_filter_deps="libmysofa"
-sr_filter_deps="avformat swscale"
-sr_filter_select="dnn"
 stereo3d_filter_deps="gpl"
 subtitles_filter_deps="avformat avcodec libass"
 super2xsai_filter_deps="gpl"
@@ -7270,13 +7254,11 @@ enabled libssh            && require_pkg_config libssh "libssh >= 0.6.0" libssh/
 enabled libspeex          && require_pkg_config libspeex speex speex/speex.h speex_decoder_init
 enabled libsrt            && require_pkg_config libsrt "srt >= 1.3.0" srt/srt.h srt_socket
 enabled libsvtav1         && require_pkg_config libsvtav1 "SvtAv1Enc >= 0.9.0" EbSvtAv1Enc.h svt_av1_enc_init_handle
-enabled libtensorflow     && require libtensorflow tensorflow/c/c_api.h TF_Version -ltensorflow
 enabled libtesseract      && require_pkg_config libtesseract tesseract tesseract/capi.h TessBaseAPICreate
 enabled libtheora         && { check_pkg_config libtheora theoraenc theora/theoraenc.h th_info_init ||
                                require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg; }
 enabled libtls            && require_pkg_config libtls libtls tls.h tls_configure &&
                              { enabled gpl && ! enabled nonfree && die "ERROR: LibreSSL is incompatible with the gpl"; }
-enabled libtorch          && check_cxxflags -std=c++17 && require_cxx libtorch torch/torch.h "torch::Tensor" -ltorch -lc10 -ltorch_cpu -lstdc++ -lpthread
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib libtwolame twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
                                die "ERROR: libtwolame must be installed and version must be >= 0.3.10"; }
