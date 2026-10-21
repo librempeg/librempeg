@@ -16,29 +16,29 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#undef MSQRT1_2
-#undef FTAN
 #undef CLIP
 #undef SQRT
 #undef ftype
+#undef ctype
 #undef MPI
 #undef SAMPLE_FORMAT
+#undef TX_TYPE
 #if DEPTH == 32
-#define MSQRT1_2 M_SQRT1_2f
 #define MPI M_PIf
-#define FTAN tanf
 #define CLIP av_clipf
 #define SQRT sqrtf
 #define ftype float
+#define ctype AVComplexFloat
 #define SAMPLE_FORMAT fltp
+#define TX_TYPE AV_TX_FLOAT_RDFT
 #else
-#define MSQRT1_2 M_SQRT1_2
 #define MPI M_PI
-#define FTAN tan
 #define CLIP av_clipd
 #define SQRT sqrt
 #define ftype double
+#define ctype AVComplexDouble
 #define SAMPLE_FORMAT dblp
+#define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
 
 #define F(x) ((ftype)(x))
@@ -47,24 +47,24 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-#define MIN_FREQ F(0.00001)
-#define MAX_FREQ F(0.49999)
-
 typedef struct fn(StateContext) {
-    ftype la[3], lm[3], lc[2];
-    ftype ha[3], hm[3], hc[2];
-    ftype ip, op;
-    ftype pf, f;
-    unsigned flat;
-    unsigned pos;
-    unsigned size;
-    ftype *queue;
-    ftype *freqs;
-    ftype *block[3];
-    ftype rla[3], rlm[3], rlc[2];
+    int32_t *in_frame;
+    ftype *dequant_frame;
+
+    ftype  *lo;
+    ftype  *hi;
+    ftype  *x;
+    ftype  *y;
+    ftype  *fr;
+    ctype  *spec;
+
+    ftype  sig;
+
+    AVTXContext *tx, *itx;
+    av_tx_fn     tx_fn, itx_fn;
 } fn(StateContext);
 
-static void fn(uninit_state)(AVFilterContext *ctx)
+static void fn(adequant_uninit)(AVFilterContext *ctx)
 {
     ADequantContext *s = ctx->priv;
     fn(StateContext) *stc = s->state;
@@ -73,36 +73,46 @@ static void fn(uninit_state)(AVFilterContext *ctx)
         for (int ch = 0; ch < s->nb_channels; ch++) {
             fn(StateContext) *sc = &stc[ch];
 
-            av_freep(&sc->queue);
-            av_freep(&sc->freqs);
-            for (int n = 0; n < 3; n++)
-                av_freep(&sc->block[n]);
+            av_freep(&sc->in_frame);
+            av_freep(&sc->dequant_frame);
+            av_freep(&sc->lo);
+            av_freep(&sc->hi);
+            av_freep(&sc->x);
+            av_freep(&sc->y);
+            av_freep(&sc->fr);
+            av_freep(&sc->spec);
+
+            av_tx_uninit(&sc->tx);
+            av_tx_uninit(&sc->itx);
         }
 
         av_freep(&s->state);
     }
+
+    av_freep(&s->window);
 }
 
-static void fn(hfilter_prepare)(const ftype f, ftype a[3], ftype m[3])
-{
-    const ftype Q = MSQRT1_2;
-    const ftype g = FTAN(MPI * f);
-    const ftype k = F(1.0) / Q;
-
-    a[0] = F(1.0) / (F(1.0) + g * (g + k));
-    a[1] = g * a[0];
-    a[2] = g * a[1];
-
-    m[0] = F(1.0);
-    m[1] = -k;
-    m[2] = F(-1.0);
-}
-
-static int fn(init_state)(AVFilterContext *ctx)
+static int fn(adequant_init)(AVFilterContext *ctx)
 {
     ADequantContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     fn(StateContext) *stc;
+    const int N = s->block;
+    ftype scale = 1.0 / N;
+    ftype *window;
+    int ret;
+
+    s->window = av_calloc(N, sizeof(ftype));
+    if (!s->window)
+        return AVERROR(ENOMEM);
+    window = s->window;
+
+    s->sq = 0.0;
+    for (int n = 0; n < N; n++) {
+        window[n] = sin(MPI*(n+0.5)/N);
+        s->sq += window[n] * window[n];
+    }
+    s->sq = SQRT(s->sq);
 
     s->state = av_calloc(inlink->ch_layout.nb_channels, sizeof(*stc));
     if (!s->state)
@@ -113,272 +123,193 @@ static int fn(init_state)(AVFilterContext *ctx)
     for (int ch = 0; ch < s->nb_channels; ch++) {
         fn(StateContext) *sc = &stc[ch];
 
-        fn(hfilter_prepare)(F(1.0) / inlink->sample_rate, sc->ha, sc->hm);
-
-        sc->pf = NAN;
-        sc->ip = NAN;
-        sc->op = NAN;
-        sc->f = MAX_FREQ;
-        if (s->blocksize > 0) {
-            for (int n = 0; n < 3; n++) {
-                sc->block[n] = av_calloc(s->blocksize*2, sizeof(*sc->block[n]));
-                if (!sc->block[n])
-                    return AVERROR(ENOMEM);
-            }
-            sc->freqs = av_calloc(s->blocksize*2, sizeof(*sc->freqs));
-            if (!sc->freqs)
-                return AVERROR(ENOMEM);
-        }
-        sc->queue = av_malloc_array(s->max_size, sizeof(*sc->queue));
-        if (!sc->queue)
+        sc->in_frame = av_calloc(N * 2, sizeof(*sc->in_frame));
+        sc->dequant_frame = av_calloc(N * 2, sizeof(*sc->dequant_frame));
+        if (!sc->in_frame || !sc->dequant_frame)
             return AVERROR(ENOMEM);
-        for (int n = 0; n < s->max_size; n++)
-            sc->queue[n] = n+1;
+
+        sc->lo   = av_calloc(N, sizeof(*sc->lo));
+        sc->hi   = av_calloc(N, sizeof(*sc->hi));
+        sc->x    = av_calloc(N, sizeof(*sc->x));
+        sc->y    = av_calloc(N, sizeof(*sc->y));
+        sc->fr   = av_calloc(N, sizeof(*sc->fr));
+        sc->spec = av_calloc(N/2+1, sizeof(*sc->spec));
+        if (!sc->lo || !sc->hi || !sc->x || !sc->y || !sc->fr || !sc->spec)
+            return AVERROR(ENOMEM);
+
+        ret = av_tx_init(&sc->tx, &sc->tx_fn, TX_TYPE, 0, N, NULL, 0);
+        if (ret < 0)
+            return ret;
+
+        ret = av_tx_init(&sc->itx, &sc->itx_fn, TX_TYPE, 1, N, &scale, 0);
+        if (ret < 0)
+            return ret;
     }
 
     return 0;
 }
 
-static void fn(lfilter_prepare)(const ftype f, const ftype A, ftype a[3], ftype m[3])
+static int fn(detect_block)(const int32_t *v, const int N, int native_k, ftype tol)
 {
-    const ftype Q = MSQRT1_2;
-    const ftype g = FTAN(MPI * f) * SQRT(A);
-    const ftype k = F(1.0) / Q;
+    int hist[33] = { 0 };
+    int nz = 0, cnt = 0;
 
-    a[0] = F(1.0) / (F(1.0) + g * (g + k));
-    a[1] = g * a[0];
-    a[2] = g * a[1];
-
-    m[0] = A * A;
-    m[1] = k * (F(1.0) - A) * A;
-    m[2] = F(1.0) - A * A;
-}
-
-static ftype fn(filter_sample)(const ftype sample,
-                                const ftype a[3],
-                                const ftype m[3],
-                                ftype c[2])
-{
-    ftype v0 = sample;
-    ftype v3 = v0 - c[1];
-    ftype v1 = a[0] * c[0] + a[1] * v3;
-    ftype v2 = c[1] + a[1] * c[0] + a[2] * v3;
-
-    c[0] = F(2.0) * v1 - c[0];
-    c[1] = F(2.0) * v2 - c[1];
-
-    return m[0] * v0 + m[1] * v1 + m[2] * v2;
-}
-
-static void fn(update_state)(ftype *lc, ftype *hc)
-{
-    lc[0] = isnormal(lc[0]) ? lc[0] : F(0.0);
-    lc[1] = isnormal(lc[1]) ? lc[1] : F(0.0);
-
-    hc[0] = isnormal(hc[0]) ? hc[0] : F(0.0);
-    hc[1] = isnormal(hc[1]) ? hc[1] : F(0.0);
-}
-
-static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ADequantContext *s = ctx->priv;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const ftype gain = s->gain;
-    const unsigned max_size = s->max_size;
-    const unsigned cur_size = s->cur_size;
-    const int start = ff_slice_pos(s->nb_channels, jobnr, nb_jobs);
-    const int end = ff_slice_pos(s->nb_channels, jobnr+1, nb_jobs);
-    const int nb_samples = in->nb_samples;
-    const int is_disabled = ff_filter_disabled(ctx);
-    fn(StateContext) *st = s->state;
-
-    for (int chan = start; chan < end; chan++) {
-        const ftype *src = (const ftype *)in->extended_data[chan];
-        ftype *dst = (ftype *)out->extended_data[chan];
-        fn(StateContext) *stc = &st[chan];
-        unsigned flat = stc->flat;
-        unsigned pos = stc->pos;
-        unsigned size = stc->size;
-        ftype *q = stc->queue;
-        ftype ip = stc->ip;
-        ftype op = stc->op;
-        ftype pf = stc->pf;
-        ftype *la = stc->la;
-        ftype *lm = stc->lm;
-        ftype *lc = stc->lc;
-        ftype *ha = stc->ha;
-        ftype *hm = stc->hm;
-        ftype *hc = stc->hc;
-        ftype f = stc->f;
-
-        for (int n = 0; n < nb_samples; n++) {
-            const unsigned idx = (pos >= cur_size)? (pos-cur_size) : (pos+max_size-cur_size);
-            const unsigned pidx = (idx < max_size-1) ? (idx+1) : 0;
-            const ftype isample = src[n];
-            ftype osample;
-
-            ip = isnan(ip) ? isample : ip;
-            op = isnan(op) ? isample : op;
-
-            flat += isample == ip;
-            flat -= q[idx] == q[pidx];
-            q[pos] = isample;
-            pos++;
-            if (size < cur_size)
-                size++;
-            if (pos >= max_size)
-                pos = 0;
-
-            f = CLIP(MAX_FREQ * F(size-flat) / (F(size)), MIN_FREQ, MAX_FREQ);
-            if (f != pf)
-                fn(lfilter_prepare)(f, gain, la, lm);
-            pf = f;
-
-            osample = fn(filter_sample)(isample-ip, la, lm, lc);
-            osample = op + fn(filter_sample)(osample, ha, hm, hc);
-
-            dst[n] = is_disabled ? isample : osample;
-
-            ip = isample;
-            op = osample;
+    for (int n = 0; n < N; n++) {
+        if (v[n]) {
+            hist[ff_ctz(v[n])]++;
+            nz++;
         }
-
-        fn(update_state)(lc, hc);
-
-        stc->f = f;
-        stc->pf = pf;
-        stc->ip = ip;
-        stc->op = op;
-        stc->pos = pos;
-        stc->size = size;
-        stc->flat = flat;
     }
 
-    return 0;
-}
+    if (nz < MIN_NONZERO)
+        return -1;
 
-static void fn(reverse_samples)(ftype *_dst, const ftype *_src,
-                                int oo, int io, const int nb_samples)
-{
-    const ftype *src = _src + io;
-    ftype *dst = _dst + oo;
-
-    for (int i = 0, j = nb_samples - 1; i < nb_samples; i++, j--)
-        dst[i] = src[j];
-}
-
-static int fn(filter_block_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ADequantContext *s = ctx->priv;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const ftype gain = SQRT(s->gain);
-    const unsigned max_size = s->max_size;
-    const unsigned cur_size = s->cur_size;
-    const int start = ff_slice_pos(s->nb_channels, jobnr, nb_jobs);
-    const int end = ff_slice_pos(s->nb_channels, jobnr+1, nb_jobs);
-    const int nb_samples = in->nb_samples;
-    const int is_disabled = ff_filter_disabled(ctx);
-    const int blocksize = s->blocksize;
-    fn(StateContext) *st = s->state;
-
-    for (int chan = start; chan < end; chan++) {
-        const ftype *src = (const ftype *)in->extended_data[chan];
-        ftype *dst = (ftype *)out->extended_data[chan];
-        fn(StateContext) *stc = &st[chan];
-        unsigned flat = stc->flat;
-        unsigned pos = stc->pos;
-        unsigned size = stc->size;
-        ftype *freqs = stc->freqs;
-        ftype *b0 = stc->block[0];
-        ftype *b1 = stc->block[1];
-        ftype *b2 = stc->block[2];
-        ftype *q = stc->queue;
-        ftype *rla = stc->rla;
-        ftype *rlm = stc->rlm;
-        ftype *rlc = stc->rlc;
-        ftype *la = stc->la;
-        ftype *lm = stc->lm;
-        ftype *lc = stc->lc;
-        ftype *ha = stc->ha;
-        ftype *hm = stc->hm;
-        ftype *hc = stc->hc;
-        ftype ip = stc->ip;
-        ftype op = stc->op;
-        ftype pf = stc->pf;
-        ftype f = stc->f;
-
-        for (int n = 0; n < nb_samples; n++) {
-            const unsigned idx = (pos >= cur_size)? (pos-cur_size) : (pos+max_size-cur_size);
-            const unsigned pidx = (idx < max_size-1) ? (idx+1) : 0;
-            const ftype isample = src[n];
-            ftype osample;
-
-            ip = isnan(ip) ? isample : ip;
-            op = isnan(op) ? isample : op;
-
-            flat += isample == ip;
-            flat -= q[idx] == q[pidx];
-            q[pos] = isample;
-            pos++;
-            if (size < cur_size)
-                size++;
-            if (pos >= max_size)
-                pos = 0;
-
-            f = CLIP(MAX_FREQ * F(size-flat) / (F(size)), MIN_FREQ, MAX_FREQ);
-            freqs[n+blocksize] = f;
-            if (f != pf)
-                fn(lfilter_prepare)(f, gain, la, lm);
-            pf = f;
-            osample = fn(filter_sample)(isample-ip, la, lm, lc);
-
-            b0[n+blocksize] = osample;
-
-            ip = isample;
-        }
-
-        for (int n = nb_samples; n < blocksize; n++) {
-            b0[n+blocksize] = F(0.0);
-            freqs[n+blocksize] = f;
-        }
-
-        fn(update_state)(lc, hc);
-
-        fn(reverse_samples)(b1, b0, 0, 0, 2 * blocksize);
-
-        for (int n = 0; n < 2 * blocksize; n++) {
-            fn(lfilter_prepare)(freqs[n], gain, rla, rlm);
-            b1[n] = fn(filter_sample)(b1[n], rla, rlm, rlc);
-        }
-
-        fn(reverse_samples)(b2, b1, 0, 0, 2 * blocksize);
-
-        for (int n = 0; n < blocksize; n++) {
-            ftype osample = b2[n];
-
-            osample = op + fn(filter_sample)(osample, ha, hm, hc);
-            dst[n] = is_disabled ? src[n] : osample;
-
-            op = osample;
-        }
-
-        fn(update_state)(rlc, hc);
-
-        memcpy(b0, b0 + blocksize, blocksize * sizeof(*b0));
-        memcpy(freqs, freqs + blocksize, blocksize * sizeof(*freqs));
-
-        stc->f = f;
-        stc->pf = pf;
-        stc->ip = ip;
-        stc->op = op;
-        stc->pos = pos;
-        stc->size = size;
-        stc->flat = flat;
+    for (int k = 31; k > native_k; k--) {
+        cnt += hist[k];
+        if (cnt >= tol * nz)
+            return k;
     }
+
+    return native_k;
+}
+
+static void fn(reconstruct)(ADequantContext *s, const int ch, const int N)
+{
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    const ftype *win = s->window;
+    const ftype *lo = stc->lo;
+    const ftype *hi = stc->hi;
+    ctype *spec = stc->spec;
+    const int half = N / 2;
+    ftype *fr = stc->fr;
+    ftype *x = stc->x;
+    ftype *y = stc->y;
+
+    for (int it = 0; it < s->iters; it++) {
+        ftype tau = s->tau * fmax(0.0, 1.0 - (it+0.5) / F(s->iters));
+
+        memset(y, 0, N * sizeof(*y));
+
+        ftype thr = tau * stc->sig * s->sq;
+
+        for (int n = 0; n < N; n++)
+            fr[n] = x[n] * win[n];
+
+        if (thr > 0.0) {
+            stc->tx_fn(stc->tx, spec, fr, sizeof(ftype));
+
+            for (int k = 0; k <= half; k++) {
+                ftype re = spec[k].re, im = spec[k].im;
+                ftype g = 1.0 - thr / (SQRT(re * re + im * im) + 1e-30);
+                if (g < 0.0)
+                    g = 0.0;
+                spec[k].re = re * g;
+                spec[k].im = im * g;
+            }
+
+            stc->itx_fn(stc->itx, fr, spec, sizeof(ctype));
+        }
+
+        for (int n = 0; n < N; n++)
+            y[n] = fr[n] / win[n];
+
+        for (int n = 0; n < N; n++)
+            x[n] = CLIP(y[n], lo[n], hi[n]);
+    }
+}
+
+static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
+                                  ftype *dst, const int32_t *src)
+{
+    const int is_disabled = ff_filter_disabled(ctx);
+    ADequantContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    const int native_k = s->native;
+    const int mode = s->mode;
+    ftype *lo = stc->lo;
+    ftype *hi = stc->hi;
+    ftype *x = stc->x;
+    int any = 0;
+    int k = s->bits ? 32 - s->bits : 32 - fn(detect_block)(src, N, 32 - native_k, s->tol);
+
+    if (k < native_k) {
+        ftype delta = ldexp(1.0, -k+1);
+
+        if (mode == MODE_ROUND) {
+            const ftype hdelta = 0.5 * delta;
+
+            for (int n = 0; n < N; n++) {
+                ftype x0 = src[n] * (1.0 / 2147483648.0);
+
+                lo[n] = x0 - hdelta;
+                hi[n] = x0 + hdelta;
+            }
+        } else {
+            for (int n = 0; n < N; n++) {
+                ftype x0 = src[n] * (1.0 / 2147483648.0);
+
+                lo[n] = x0;
+                hi[n] = x0 + delta;
+            }
+        }
+
+        stc->sig = delta * INV_SQRT12 * 2.0;
+        any |= 1;
+    } else {
+        for (int n = 0; n < N; n++) {
+            ftype x0 = src[n] * (1.0 / 2147483648.0);
+            lo[n] = hi[n] = x[n] = x0;
+        }
+
+        stc->sig = 0.0;
+    }
+
+    if (any)
+        fn(reconstruct)(s, ch, N);
+
+    if (is_disabled) {
+        for (int n = 0; n < N; n++)
+            dst[n] = src[n];
+    } else {
+        for (int n = 0; n < N; n++)
+            dst[n] = x[n];
+    }
+}
+
+static void fn(get_output)(ADequantContext *s, const int N, int32_t *dst, const ftype *src)
+{
+    const int outbits = s->outbits;
+    const ftype scale = ldexp(1.0, outbits - 1);
+    const int64_t qmax = ((int64_t)1 << (outbits - 1)) - 1;
+    const int64_t qmin = -((int64_t)1 << (outbits - 1));
+
+    for (int n = 0; n < N; n++) {
+        int64_t q = lrint(src[n] * scale);
+        q = av_clip64(q, qmin, qmax);
+        dst[n] = (int32_t)(q * ((int64_t)1 << (32 - outbits)));
+    }
+}
+
+static int fn(adequant_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch)
+{
+    const int32_t *in_samples = (const int32_t *)in->extended_data[ch];
+    int32_t *out_samples = (int32_t *)out->extended_data[ch];
+    ADequantContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    const int N = s->rdft_size;
+    const int overlap = s->overlap;
+    const int nb_samples = FFMIN(in->nb_samples, overlap);
+    const int offset = N - overlap;
+
+    memmove(stc->in_frame, stc->in_frame + overlap, offset * sizeof(*stc->in_frame));
+    memcpy(stc->in_frame + offset, in_samples, sizeof(*stc->in_frame) * nb_samples);
+
+    fn(dequantize_window)(ctx, ch, N, stc->dequant_frame, stc->in_frame);
+
+    fn(get_output)(s, out->nb_samples, out_samples, stc->dequant_frame + overlap/2);
 
     return 0;
 }

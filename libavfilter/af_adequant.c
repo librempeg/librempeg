@@ -18,41 +18,79 @@
 
 #include <float.h>
 
-#include "libavutil/ffmath.h"
+#include "libavutil/avassert.h"
+#include "libavutil/channel_layout.h"
+#include "libavutil/intmath.h"
+#include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+#include "libavutil/tx.h"
+
+#include "audio.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "audio.h"
+
+#define MIN_NONZERO 32          /* fewer nonzero samples => block is ambiguous */
+#define INV_SQRT12  0.28867513459481287
+
+enum { MODE_ROUND, MODE_TRUNC };
 
 typedef struct ADequantContext {
     const AVClass *class;
 
-    unsigned cur_size;
-    unsigned max_size;
-    int nb_channels;
-    int blocksize;
-    double window;
-    double gain;
+    int    native;
+    int    bits;
+    int    mode;
+    int    block;
+    double tol;
+    int    iters;
+    double tau;
+    int    outbits;
 
-    void *state;
+    int     overlap;
+    int     rdft_size;
+    int     nb_channels;
+    int     trim_size;
+    int     flush_size;
+    int64_t last_pts;
 
-    int64_t pts;
-    int nb_samples;
+    double  sq;
+    void    *window;
+    void    *state;
 
-    int (*init_state)(AVFilterContext *ctx);
-    void (*uninit_state)(AVFilterContext *ctx);
-    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*adequant_init)(AVFilterContext *ctx);
+    void (*adequant_uninit)(AVFilterContext *ctx);
+    int (*adequant_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch);
 } ADequantContext;
 
-typedef struct ThreadData {
-    AVFrame *in, *out;
-} ThreadData;
+#define OFFSET(x) offsetof(ADequantContext, x)
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS FLAGS | AV_OPT_FLAG_RUNTIME_PARAM
 
-#define DEPTH 32
-#include "adequant_template.c"
+static const AVOption adequant_options[] = {
+    { "native",  "bit depth of the input audio",
+                 OFFSET(native),  AV_OPT_TYPE_INT,    { .i64 = 24 },    8, 32, TFLAGS },
+    { "bits",    "force a fixed effective bit depth",
+                 OFFSET(bits),    AV_OPT_TYPE_INT,    { .i64 = 0 },     0, 32, TFLAGS },
+    { "mode",    "quantizer type of the source",
+                 OFFSET(mode),    AV_OPT_TYPE_INT,    { .i64 = MODE_ROUND }, 0, 1, TFLAGS, .unit = "mode" },
+    {   "round", "cell centered in the middle", 0, AV_OPT_TYPE_CONST, { .i64 = MODE_ROUND }, 0, 0, TFLAGS, .unit = "mode" },
+    {   "trunc", "bits dropped",                0, AV_OPT_TYPE_CONST, { .i64 = MODE_TRUNC }, 0, 0, TFLAGS, .unit = "mode" },
+    { "block",   "processing block size in samples",
+                 OFFSET(block),   AV_OPT_TYPE_INT,    { .i64 = 1024 },  64, 65536, FLAGS },
+    { "tol",     "fraction of nonzero samples that must lie on the lattice",
+                 OFFSET(tol),     AV_OPT_TYPE_DOUBLE, { .dbl = 0.995 }, 0.5, 1.0, TFLAGS },
+    { "iters",   "number of reconstruction iterations",
+                 OFFSET(iters),   AV_OPT_TYPE_INT,    { .i64 = 120 },   1, 5000, TFLAGS },
+    { "tau",     "initial threshold in units of quantization-noise std",
+                 OFFSET(tau),     AV_OPT_TYPE_DOUBLE, { .dbl = 1.0 },   0, 50, TFLAGS },
+    { "outbits", "bit depth of the output audio",
+                 OFFSET(outbits), AV_OPT_TYPE_INT,    { .i64 = 24 },    16, 32, TFLAGS },
+    { NULL }
+};
 
-#undef DEPTH
+AVFILTER_DEFINE_CLASS(adequant);
+
 #define DEPTH 64
 #include "adequant_template.c"
 
@@ -61,26 +99,45 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ADequantContext *s = ctx->priv;
 
-    s->pts = AV_NOPTS_VALUE;
-    s->max_size = inlink->sample_rate;
-    s->cur_size = lrint(s->window * s->max_size);
+    if (s->outbits < s->native)
+        av_log(ctx, AV_LOG_WARNING, "outbits is below the source depth\n");
+
+    s->rdft_size = s->block;
+    s->overlap = s->rdft_size/2;
+    s->trim_size = s->overlap/2;
+    s->flush_size = s->overlap/2;
 
     switch (inlink->format) {
-    case AV_SAMPLE_FMT_FLTP:
-        s->init_state = init_state_fltp;
-        s->uninit_state = uninit_state_fltp;
-        s->filter_channels = (s->blocksize > 0) ? filter_block_channels_fltp : filter_channels_fltp;
-        break;
-    case AV_SAMPLE_FMT_DBLP:
-        s->init_state = init_state_dblp;
-        s->uninit_state = uninit_state_dblp;
-        s->filter_channels = (s->blocksize > 0) ? filter_block_channels_dblp : filter_channels_dblp;
+    case AV_SAMPLE_FMT_S32P:
+        s->adequant_channel = adequant_channel_dblp;
+        s->adequant_uninit = adequant_uninit_dblp;
+        s->adequant_init = adequant_init_dblp;
         break;
     default:
         return AVERROR_BUG;
     }
 
-    return s->init_state(ctx);
+    return s->adequant_init(ctx);
+}
+
+typedef struct ThreadData {
+    AVFrame *in;
+    AVFrame *out;
+} ThreadData;
+
+static int adequant_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ADequantContext *s = ctx->priv;
+    ThreadData *td = arg;
+    AVFrame *in = td->in;
+    AVFrame *out = td->out;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
+
+    for (int ch = start; ch < end; ch++)
+        s->adequant_channel(ctx, in, out, ch);
+
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -88,87 +145,82 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     ADequantContext *s = ctx->priv;
+    int extra_samples, nb_samples;
     ThreadData td;
     AVFrame *out;
-    int drop = 0;
 
-    if (av_frame_is_writable(in) && s->blocksize == 0) {
-        out = in;
-    } else {
-        out = ff_get_audio_buffer(outlink, s->blocksize > 0 ? s->blocksize : in->nb_samples);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-        av_frame_copy_props(out, in);
+    extra_samples = in->nb_samples % s->overlap;
+    if (extra_samples)
+        extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
+    nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
     }
 
-    if (s->blocksize > 0 && s->pts == AV_NOPTS_VALUE)
-        drop = 1;
-
-    td.in = in; td.out = out;
-    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
-                      FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
-
-    if (s->blocksize > 0) {
-        int nb_samples = in->nb_samples;
-        int64_t pts = in->pts;
-
-        out->pts = s->pts;
-        out->nb_samples = s->nb_samples;
-        s->pts = pts;
-        s->nb_samples = nb_samples;
+    out = ff_get_audio_buffer(outlink, nb_samples);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
     }
+    av_frame_copy_props(out, in);
 
-    if (in != out)
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, adequant_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+    out->pts = in->pts;
+    out->pts -= av_rescale_q(s->rdft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    s->last_pts = out->pts + out->duration;
+
+    if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+
+        out->nb_samples -= s->trim_size;
+        s->trim_size = 0;
+    } else if (s->trim_size > 0) {
+        s->trim_size -= out->nb_samples;
+        ff_graph_frame_free(ctx, &out);
         ff_graph_frame_free(ctx, &in);
-    if (!drop) {
-        return ff_filter_frame(outlink, out);
-    } else {
-        av_frame_free(&out);
-        ff_filter_set_ready(ctx, 10);
+
+        ff_inlink_request_frame(inlink);
+
         return 0;
     }
+
+    ff_graph_frame_free(ctx, &in);
+
+    return ff_filter_frame(outlink, out);
 }
 
 static int activate(AVFilterContext *ctx)
 {
-    AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
     ADequantContext *s = ctx->priv;
+    int ret, status, wanted;
     AVFrame *in = NULL;
     int64_t pts;
-    int status;
-    int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (s->blocksize > 0) {
-        ret = ff_inlink_consume_samples(inlink, s->blocksize, s->blocksize, &in);
-    } else {
-        ret = ff_inlink_consume_frame(inlink, &in);
-    }
+    wanted = s->overlap;
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
+
     if (ret > 0)
         return filter_frame(inlink, in);
 
-    if (s->blocksize > 0 && ff_inlink_queued_samples(inlink) >= s->blocksize) {
+    if (ff_inlink_queued_samples(inlink) >= s->overlap) {
         ff_filter_set_ready(ctx, 10);
         return 0;
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        if (s->blocksize > 0) {
-            in = ff_get_audio_buffer(outlink, s->blocksize);
-            if (!in)
-                return AVERROR(ENOMEM);
-
-            ret = filter_frame(inlink, in);
-        }
-
         ff_outlink_set_status(outlink, status, pts);
-
         return ret;
     }
 
@@ -181,22 +233,9 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ADequantContext *s = ctx->priv;
 
-    if (s->uninit_state)
-        s->uninit_state(ctx);
+    if (s->adequant_uninit)
+        s->adequant_uninit(ctx);
 }
-
-#define OFFSET(x) offsetof(ADequantContext, x)
-#define TF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
-#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
-
-static const AVOption adequant_options[] = {
-    { "window",   "set the window size", OFFSET(window),    AV_OPT_TYPE_DOUBLE, {.dbl=1.0},  0.1, 1.0, TF },
-    { "gain",     "set the gain",        OFFSET(gain),      AV_OPT_TYPE_DOUBLE, {.dbl=0.01}, 0.0, 1.0, TF },
-    { "blocksize","set the block size",  OFFSET(blocksize), AV_OPT_TYPE_INT,    {.i64=0},      0, 32768, FLAGS },
-    { NULL }
-};
-
-AVFILTER_DEFINE_CLASS(adequant);
 
 static const AVFilterPad inputs[] = {
     {
@@ -207,16 +246,16 @@ static const AVFilterPad inputs[] = {
 };
 
 const FFFilter ff_af_adequant = {
-    .p.name          = "adequant",
-    .p.description   = NULL_IF_CONFIG_SMALL("Apply Dynamic Dequantization of input audio."),
-    .p.priv_class    = &adequant_class,
-    .priv_size       = sizeof(ADequantContext),
-    .activate        = activate,
-    .uninit          = uninit,
+    .p.name        = "adequant",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply Dynamic Dequantization of input audio."),
+    .p.priv_class  = &adequant_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
+    .priv_size     = sizeof(ADequantContext),
+    .uninit        = uninit,
+    .activate      = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                       AVFILTER_FLAG_SLICE_THREADS,
+    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_S32P),
     .process_command = ff_filter_process_command,
 };
