@@ -283,7 +283,7 @@ static int rgbawrap_slice ## depth(AVFilterContext *ctx, void *arg, int jobnr, i
             continue;                                                                     \
         for (int x = 0; x < w; x++) {                                                     \
             int ax = (x - ah) % w;                                                        \
-            int ay = (x - av) % h;                                                        \
+            int ay = (y - av) % h;                                                        \
                                                                                           \
             if (ax < 0)                                                                   \
                 ax += w;                                                                  \
