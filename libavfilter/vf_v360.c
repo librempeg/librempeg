@@ -298,9 +298,9 @@ static int remap##ws##_##bits##bit_slice(AVFilterContext *ctx, void *arg, int jo
     for (int stereo = 0; stereo < 1 + (s->out_stereo > STEREO_2D); stereo++) {                             \
         for (int plane = 0; plane < s->nb_planes; plane++) {                                               \
             const unsigned map = s->map[plane];                                                            \
-            const int in_linesize  = in->linesize[plane];                                                  \
-            const int out_linesize = out->linesize[plane];                                                 \
-            const int uv_linesize = s->uv_linesize[plane];                                                 \
+            const ptrdiff_t in_linesize  = in->linesize[plane];                                            \
+            const ptrdiff_t out_linesize = out->linesize[plane];                                           \
+            const ptrdiff_t uv_linesize = s->uv_linesize[plane];                                           \
             const int in_offset_w = stereo ? s->in_offset_w[plane] : 0;                                    \
             const int in_offset_h = stereo ? s->in_offset_h[plane] : 0;                                    \
             const int out_offset_w = stereo ? s->out_offset_w[plane] : 0;                                  \
@@ -4473,7 +4473,7 @@ static int v360_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     for (int p = 0; p < s->nb_allocated; p++) {
         const int max_value = s->max_value;
         const int width = s->pr_width[p];
-        const int uv_linesize = s->uv_linesize[p];
+        const ptrdiff_t uv_linesize = s->uv_linesize[p];
         const int height = s->pr_height[p];
         const int in_width = s->inplanewidth[p];
         const int in_height = s->inplaneheight[p];
