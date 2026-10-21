@@ -296,11 +296,12 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
 
         for (int y = 0; y < avctx->height; y += 16) {
             for (int x = 0; x < avctx->width; x += 16) {
-                unsigned m = bytestream2_get_le32(gb);
-                unsigned offset = bytestream2_get_le32(gb);
+                unsigned m, offset;
                 int alpha0, alpha1;
                 uint64_t control;
 
+                m = bytestream2_get_le32(gb);
+                offset = bytestream2_get_le32(gb);
                 if (offset >= UINT_MAX / 4)
                     return AVERROR_INVALIDDATA;
                 offset = offset * 4 + s->uv_data_offset + s->a_data_offset;
