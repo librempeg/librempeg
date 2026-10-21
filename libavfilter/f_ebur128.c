@@ -1279,6 +1279,7 @@ enum MeanMode {
     MM_HARMONIC,
     MM_GEOMETRIC,
     MM_MAXIMUM,
+    MM_MINIMUM,
     MM_MODES
 };
 
@@ -1482,6 +1483,9 @@ static double add_item(int mode, double offset, double item)
     case MM_MAXIMUM:
         offset = fmax(offset, item);
         break;
+    case MM_MINIMUM:
+        offset = fmin(offset, item);
+        break;
     case MM_GEOMETRIC:
         offset *= item;
         break;
@@ -1519,13 +1523,14 @@ static double get_loudness(LoudNormContext *s,
         p += 1.0;
     }
 
-    if (s->dynamic_mode & DM_MOMENTARY) {
+    if (dynamic_mode & DM_MOMENTARY) {
         offset = add_item(mean_mode, offset, s->i400);
         p += 1.0;
     }
 
-    switch (s->mean_mode) {
+    switch (mean_mode) {
     case MM_MAXIMUM:
+    case MM_MINIMUM:
         break;
     case MM_GEOMETRIC:
         offset = -pow(fabs(offset), 1.0 / p);
@@ -1789,6 +1794,7 @@ static const AVOption loudnorm_options[] = {
     {  "h",               "harmonic",                          0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_HARMONIC},      0, 0,  FLAGS, "mean_mode" },
     {  "g",               "geometric",                         0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_GEOMETRIC},     0, 0,  FLAGS, "mean_mode" },
     {  "m",               "maximum",                           0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_MAXIMUM},       0, 0,  FLAGS, "mean_mode" },
+    {  "n",               "minimum",                           0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_MINIMUM},       0, 0,  FLAGS, "mean_mode" },
     { "rangeup",          "set max expansion",                 OFFSET(rangeup),          AV_OPT_TYPE_DOUBLE,  {.dbl =  0},        0,      70,    FLAGS },
     { "rangedown",        "set max compression",               OFFSET(rangedown),        AV_OPT_TYPE_DOUBLE,  {.dbl =  70},       1,      70,    FLAGS },
     { "attack",           "set attack",                        OFFSET(attack),           AV_OPT_TYPE_DOUBLE,  {.dbl =  1},        1,      2000,  FLAGS },
