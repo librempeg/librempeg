@@ -284,7 +284,8 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
     rgb = *gb;
     dgb = *gb;
     bytestream2_seek(gb, s->a_control_word_offset, SEEK_SET);
-    if (s->uv_count_offset == s->a_control_word_offset) {
+    if (s->uv_count_offset == s->a_control_word_offset ||
+        s->uv_data_offset  == s->a_control_word_offset) {
         for (int y = 0; y < avctx->height; y++) {
             for (int x = 0; x < avctx->width; x++)
                 dsta[x] = 4095;
