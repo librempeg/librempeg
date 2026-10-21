@@ -6963,9 +6963,9 @@ The filter accepts the following options:
 @table @option
 @item d
 Set the depth. This controls correlation between front left and front right channels.
-Allowed range is from -1.0 to 1.0. The default value is 0.0 which keeps correlation as it is.
-The -1.0 value makes channels more correlated, into possitive correlation, and 1.0 makes them
-less correlated and may even make channels out of phase - into negative correlation.
+Allowed range is from 0.0 to 64.0. The default value is 1.0 which keeps correlation as it is.
+The 0.0 value makes channels more correlated, into possitive correlation, and >1.0 values makes
+them less correlated and may even make channels out of phase - into negative correlation.
 
 @item w
 Set the widening. This controls stereo image width, how much power of one channel is bigger
@@ -6973,11 +6973,6 @@ than other channel. Allowed range is from 0.0 to 16.0. The default value is 1.0 
 stereo image width unchanged. The 0.0 value changes non-zero width to near zero or minimal,
 and 16.0 value make extreme width differences between two channels. This can only narrow or
 wide already existing stereo width, so if width is already zero output will stay unchanged.
-
-@item a
-Set the attenuation. This options takes two values. First value controls attenuation of
-correlated channels, and second value controls attenuation of anti-correlated channels.
-Default values are (1 1). Allowed range is from 0.0 to 16.0.
 
 @item p
 Set the panning. This controls panning from left to right channel and other way around.

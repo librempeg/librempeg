@@ -115,19 +115,16 @@ typedef struct fn(ThreadData) {
 
 static void fn(stereofield)(ctype *fl, ctype *fr,
                             const ftype d, const ftype w,
-                            const ftype a0, const ftype a1,
                             const ftype p, const int M,
                             const int start, const int end)
 {
     const ftype lx = (p > F(0.0)) ? F(1.0)-p : F(1.0);
     const ftype rx = (p < F(0.0)) ? F(1.0)+p : F(1.0);
-    const ftype m = (d < F(0.0)) ? d : F(0.0);
-    const ftype s = (d > F(0.0)) ? d : F(0.0);
 
     switch (M) {
     case OP_LEFT:
         for (int i = start; i < end; i++) {
-            if (d != F(0.0)) {
+            if (d < F(1.0)) {
                 const ftype l_re = fl[i].re;
                 const ftype l_im = fl[i].im;
                 const ftype r_re = fr[i].re;
@@ -135,27 +132,36 @@ static void fn(stereofield)(ctype *fl, ctype *fr,
                 const ftype re = l_re * r_re + l_im * r_im;
                 const ftype im = l_re * r_im - l_im * r_re;
                 const ftype a = ATAN2(im, re);
-                const ftype aa = FABS(a);
-                const ftype lf = m * -a + s * (F(M_PI) - aa);
-                const ftype lc = COS(lf);
-                const ftype ls = SIN(lf);
-                const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
+                const ftype da = (F(1.0) - d) * a;
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
                 fl[i].re = l_re * lc - l_im * ls;
                 fl[i].im = l_re * ls + l_im * lc;
                 fr[i].re = r_re;
                 fr[i].im = r_im;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (F(1.0) - F(1.0) / d) * (a - FFSIGN(a) * F(M_PI));
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-                fl[i].re *= bx;
-                fl[i].im *= bx;
-                fr[i].re *= bx;
-                fr[i].im *= bx;
-
-                fl[i].re *= lx;
-                fl[i].im *= lx;
-                fr[i].re *= rx;
-                fr[i].im *= rx;
+                fl[i].re = l_re * lc - l_im * ls;
+                fl[i].im = l_re * ls + l_im * lc;
+                fr[i].re = r_re;
+                fr[i].im = r_im;
             }
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
 
             if (w != F(1.0)) {
                 const ftype l_re = fl[i].re;
@@ -181,7 +187,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr,
         break;
     case OP_RIGHT:
         for (int i = start; i < end; i++) {
-            if (d != F(0.0)) {
+            if (d < F(1.0)) {
                 const ftype l_re = fl[i].re;
                 const ftype l_im = fl[i].im;
                 const ftype r_re = fr[i].re;
@@ -189,27 +195,36 @@ static void fn(stereofield)(ctype *fl, ctype *fr,
                 const ftype re = l_re * r_re + l_im * r_im;
                 const ftype im = l_re * r_im - l_im * r_re;
                 const ftype a = ATAN2(im, re);
-                const ftype aa = FABS(a);
-                const ftype lf = m * a - s * (F(M_PI) - aa);
-                const ftype lc = COS(lf);
-                const ftype ls = SIN(lf);
-                const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
+                const ftype da = ((1.0) - d) * -a;
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
                 fl[i].re = l_re;
                 fl[i].im = l_im;
                 fr[i].re = r_re * lc - r_im * ls;
                 fr[i].im = r_re * ls + r_im * lc;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (F(1.0) - F(1.0) / d) * (FFSIGN(a) * F(M_PI) - a);
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-                fl[i].re *= bx;
-                fl[i].im *= bx;
-                fr[i].re *= bx;
-                fr[i].im *= bx;
-
-                fl[i].re *= lx;
-                fl[i].im *= lx;
-                fr[i].re *= rx;
-                fr[i].im *= rx;
+                fl[i].re = l_re;
+                fl[i].im = l_im;
+                fr[i].re = r_re * lc - r_im * ls;
+                fr[i].im = r_re * ls + r_im * lc;
             }
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
 
             if (w != F(1.0)) {
                 const ftype l_re = fl[i].re;
@@ -235,7 +250,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr,
         break;
     case OP_STEREO:
         for (int i = start; i < end; i++) {
-            if (d != F(0.0)) {
+            if (d < F(1.0)) {
                 const ftype l_re = fl[i].re;
                 const ftype l_im = fl[i].im;
                 const ftype r_re = fr[i].re;
@@ -243,30 +258,43 @@ static void fn(stereofield)(ctype *fl, ctype *fr,
                 const ftype re = l_re * r_re + l_im * r_im;
                 const ftype im = l_re * r_im - l_im * r_re;
                 const ftype a = ATAN2(im, re) * F(0.5);
-                const ftype aa = FABS(a);
-                const ftype lfl = m * -a + s * (F(M_PI) - aa);
-                const ftype lfr = m *  a + s * aa;
-                const ftype lcl = COS(lfl);
-                const ftype lsl = SIN(lfl);
-                const ftype lcr = COS(lfr);
-                const ftype lsr = SIN(lfr);
-                const ftype bx = a1 * aa * F(M_2_PI) + a0 * ((F(M_PI_2) - aa) * F(M_2_PI));
+                const ftype dal = (F(1.0) - d) *  a;
+                const ftype dar = (F(1.0) - d) * -a;
+                const ftype lcl = COS(dal);
+                const ftype lsl = SIN(dal);
+                const ftype lcr = COS(dar);
+                const ftype lsr = SIN(dar);
 
                 fl[i].re = l_re * lcl - l_im * lsl;
                 fl[i].im = l_re * lsl + l_im * lcl;
                 fr[i].re = r_re * lcr - r_im * lsr;
                 fr[i].im = r_re * lsr + r_im * lcr;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (a - FFSIGN(a) * F(M_PI)) * F(0.5);
+                const ftype dal = (F(1.0) - F(1.0) / d) *  da;
+                const ftype dar = (F(1.0) - F(1.0) / d) * -da;
+                const ftype lcl = COS(dal);
+                const ftype lsl = SIN(dal);
+                const ftype lcr = COS(dar);
+                const ftype lsr = SIN(dar);
 
-                fl[i].re *= bx;
-                fl[i].im *= bx;
-                fr[i].re *= bx;
-                fr[i].im *= bx;
-
-                fl[i].re *= lx;
-                fl[i].im *= lx;
-                fr[i].re *= rx;
-                fr[i].im *= rx;
+                fl[i].re = l_re * lcl - l_im * lsl;
+                fl[i].im = l_re * lsl + l_im * lcl;
+                fr[i].re = r_re * lcr - r_im * lsr;
+                fr[i].im = r_re * lsr + r_im * lcr;
             }
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
 
             if (w != F(1.0)) {
                 const ftype l_re = fl[i].re;
@@ -302,14 +330,12 @@ static int fn(stereofield_slice)(AVFilterContext *ctx, void *arg, int jobnr, int
     ctype *windowed_oright = td->windowed_oright;
     const int start = ff_slice_pos(N, jobnr, nb_jobs);
     const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
-    const ftype A0 = s->A[0];
-    const ftype A1 = s->A[1];
     const int M = s->mode;
     const ftype D = s->D;
     const ftype W = s->W;
     const ftype P = s->P;
 
-    fn(stereofield)(windowed_oleft, windowed_oright, D, W, A0, A1, P, M, start, end);
+    fn(stereofield)(windowed_oleft, windowed_oright, D, W, P, M, start, end);
 
     return 0;
 }

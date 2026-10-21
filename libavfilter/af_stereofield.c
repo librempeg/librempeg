@@ -42,9 +42,6 @@ typedef struct StereoFieldContext {
     double D, W, P;
     int mode;
 
-    double *A;
-    unsigned A_size;
-
     int fft_size;
     int overlap;
 
@@ -69,14 +66,10 @@ typedef struct StereoFieldContext {
 
 #define OFFSET(x) offsetof(StereoFieldContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
-#define AR AV_OPT_TYPE_FLAG_ARRAY
-
-static const AVOptionArrayDef def_att = {.def="1 1", .size_min=2, .size_max=2, .sep=' '};
 
 static const AVOption stereofield_options[] = {
-    { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
+    { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 64, FLAGS },
     { "w", "set the widening", OFFSET(W), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 16, FLAGS },
-    { "a", "set the attenuation", OFFSET(A), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_att}, 0, 16, FLAGS },
     { "p", "set the panning", OFFSET(P), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
     { "o", "set the operating mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=OP_STEREO}, 0, NB_OPERATION-1, FLAGS, "mode" },
     {  "l", "left",   0, AV_OPT_TYPE_CONST, {.i64=OP_LEFT},   0, 0, FLAGS, .unit = "mode"},
