@@ -36,6 +36,7 @@ struct BitpackedContext {
                              int width);
 };
 
+void ff_bitpacked_init_aarch64(struct BitpackedContext *s);
 void ff_bitpacked_init_x86(struct BitpackedContext *s);
 
 #endif /* AVCODEC_BITPACKED_DEC_H */
