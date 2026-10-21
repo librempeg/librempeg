@@ -520,6 +520,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *p,
             return AVERROR_INVALIDDATA;
 
         bytestream2_init(gb, s->uncompressed_buffer, uncompressed_size);
+    } else {
+        if (bytestream2_get_bytes_left(gb) < uncompressed_size)
+            return AVERROR_INVALIDDATA;
+
+        bytestream2_init(gb, avpkt->data + bytestream2_tell(gb), uncompressed_size);
     }
 
     ret = decode_blocks(avctx, p, uncompressed_size);
