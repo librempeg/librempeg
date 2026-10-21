@@ -58,7 +58,7 @@ int ff_lzf_uncompress(GetByteContext *gb, uint8_t **buf, size_t *size, unsigned 
     uint8_t *p  = *buf;
     int64_t len = 0;
 
-    while (bytestream2_get_bytes_left(gb) > 2) {
+    while (bytestream2_get_bytes_left(gb) >= 2) {
         uint8_t s = bytestream2_get_byte(gb);
 
         if (s < LZF_LITERAL_MAX) {
