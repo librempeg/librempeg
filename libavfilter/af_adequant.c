@@ -43,8 +43,7 @@ typedef struct ADequantContext {
     int    mode;
     int    block;
     double tol;
-    int    iters;
-    double tau;
+    double alpha;
     int    outbits;
 
     int     overlap;
@@ -77,13 +76,11 @@ static const AVOption adequant_options[] = {
     {   "round", "cell centered in the middle", 0, AV_OPT_TYPE_CONST, { .i64 = MODE_ROUND }, 0, 0, TFLAGS, .unit = "mode" },
     {   "trunc", "bits dropped",                0, AV_OPT_TYPE_CONST, { .i64 = MODE_TRUNC }, 0, 0, TFLAGS, .unit = "mode" },
     { "block",   "processing block size in samples",
-                 OFFSET(block),   AV_OPT_TYPE_INT,    { .i64 = 1024 },  64, 65536, FLAGS },
+                 OFFSET(block),   AV_OPT_TYPE_INT,    { .i64 = 4096 },  64, 65536, FLAGS },
     { "tol",     "fraction of nonzero samples that must lie on the lattice",
                  OFFSET(tol),     AV_OPT_TYPE_DOUBLE, { .dbl = 0.995 }, 0.5, 1.0, TFLAGS },
-    { "iters",   "number of reconstruction iterations",
-                 OFFSET(iters),   AV_OPT_TYPE_INT,    { .i64 = 120 },   1, 5000, TFLAGS },
-    { "tau",     "initial threshold in units of quantization-noise std",
-                 OFFSET(tau),     AV_OPT_TYPE_DOUBLE, { .dbl = 1.0 },   0, 50, TFLAGS },
+    { "alpha",   "noise-power overestimate",
+                 OFFSET(alpha),   AV_OPT_TYPE_DOUBLE, { .dbl = 7.5 },   0, 20, TFLAGS },
     { "outbits", "bit depth of the output audio",
                  OFFSET(outbits), AV_OPT_TYPE_INT,    { .i64 = 24 },    16, 32, TFLAGS },
     { NULL }

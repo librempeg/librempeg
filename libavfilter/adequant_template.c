@@ -17,6 +17,7 @@
  */
 
 #undef CLIP
+#undef FMAX
 #undef SQRT
 #undef ftype
 #undef ctype
@@ -26,6 +27,7 @@
 #if DEPTH == 32
 #define MPI M_PIf
 #define CLIP av_clipf
+#define FMAX fmaxf
 #define SQRT sqrtf
 #define ftype float
 #define ctype AVComplexFloat
@@ -34,6 +36,7 @@
 #else
 #define MPI M_PI
 #define CLIP av_clipd
+#define FMAX fmax
 #define SQRT sqrt
 #define ftype double
 #define ctype AVComplexDouble
@@ -112,7 +115,6 @@ static int fn(adequant_init)(AVFilterContext *ctx)
         window[n] = sin(MPI*(n+0.5)/N);
         s->sq += window[n] * window[n];
     }
-    s->sq = SQRT(s->sq);
 
     s->state = av_calloc(inlink->ch_layout.nb_channels, sizeof(*stc));
     if (!s->state)
@@ -131,7 +133,7 @@ static int fn(adequant_init)(AVFilterContext *ctx)
         sc->lo   = av_calloc(N, sizeof(*sc->lo));
         sc->hi   = av_calloc(N, sizeof(*sc->hi));
         sc->x    = av_calloc(N, sizeof(*sc->x));
-        sc->y    = av_calloc(N, sizeof(*sc->y));
+        sc->y    = av_calloc(N/2+1, sizeof(*sc->y));
         sc->fr   = av_calloc(N, sizeof(*sc->fr));
         sc->spec = av_calloc(N/2+1, sizeof(*sc->spec));
         if (!sc->lo || !sc->hi || !sc->x || !sc->y || !sc->fr || !sc->spec)
@@ -181,42 +183,33 @@ static void fn(reconstruct)(ADequantContext *s, const int ch, const int N)
     const ftype *lo = stc->lo;
     const ftype *hi = stc->hi;
     ctype *spec = stc->spec;
-    const int half = N / 2;
+    const int N_2 = N / 2;
     ftype *fr = stc->fr;
     ftype *x = stc->x;
-    ftype *y = stc->y;
 
-    for (int it = 0; it < s->iters; it++) {
-        ftype tau = s->tau * fmax(0.0, 1.0 - (it+0.5) / F(s->iters));
+    for (int n = 0; n < N; n++)
+        fr[n] = x[n] * win[n];
 
-        memset(y, 0, N * sizeof(*y));
+    stc->tx_fn(stc->tx, spec, fr, sizeof(ftype));
 
-        ftype thr = tau * stc->sig * s->sq;
+    ftype npow = s->alpha * stc->sig * stc->sig * s->sq;
 
-        for (int n = 0; n < N; n++)
-            fr[n] = x[n] * win[n];
+    for (int k = 0; k <= N_2; k++) {
+        ftype re = spec[k].re, im = spec[k].im;
+        ftype P = re * re + im * im;
+        ftype g = FMAX(P - npow, F(0.0)) / (P + 1e-30);
 
-        if (thr > 0.0) {
-            stc->tx_fn(stc->tx, spec, fr, sizeof(ftype));
-
-            for (int k = 0; k <= half; k++) {
-                ftype re = spec[k].re, im = spec[k].im;
-                ftype g = 1.0 - thr / (SQRT(re * re + im * im) + 1e-30);
-                if (g < 0.0)
-                    g = 0.0;
-                spec[k].re = re * g;
-                spec[k].im = im * g;
-            }
-
-            stc->itx_fn(stc->itx, fr, spec, sizeof(ctype));
-        }
-
-        for (int n = 0; n < N; n++)
-            y[n] = fr[n] / win[n];
-
-        for (int n = 0; n < N; n++)
-            x[n] = CLIP(y[n], lo[n], hi[n]);
+        spec[k].re = re * g;
+        spec[k].im = im * g;
     }
+
+    stc->itx_fn(stc->itx, fr, spec, sizeof(ctype));
+
+    for (int n = 0; n < N; n++)
+        x[n] = fr[n] / win[n];
+
+    for (int n = 0; n < N; n++)
+        x[n] = CLIP(x[n], lo[n], hi[n]);
 }
 
 static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
@@ -245,6 +238,7 @@ static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
 
                 lo[n] = x0 - hdelta;
                 hi[n] = x0 + hdelta;
+                x[n] = x0;
             }
         } else {
             for (int n = 0; n < N; n++) {
@@ -252,10 +246,11 @@ static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
 
                 lo[n] = x0;
                 hi[n] = x0 + delta;
+                x[n] = x0;
             }
         }
 
-        stc->sig = delta * INV_SQRT12 * 2.0;
+        stc->sig = delta * INV_SQRT12;
         any |= 1;
     } else {
         for (int n = 0; n < N; n++) {
@@ -269,17 +264,15 @@ static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
     if (any)
         fn(reconstruct)(s, ch, N);
 
-    if (is_disabled) {
-        for (int n = 0; n < N; n++)
-            dst[n] = src[n];
-    } else {
+    if (!is_disabled) {
         for (int n = 0; n < N; n++)
             dst[n] = x[n];
     }
 }
 
-static void fn(get_output)(ADequantContext *s, const int N, int32_t *dst, const ftype *src)
+static void fn(get_output)(AVFilterContext *ctx, const int N, int32_t *dst, const ftype *src)
 {
+    ADequantContext *s = ctx->priv;
     const int outbits = s->outbits;
     const ftype scale = ldexp(1.0, outbits - 1);
     const int64_t qmax = ((int64_t)1 << (outbits - 1)) - 1;
@@ -294,6 +287,7 @@ static void fn(get_output)(ADequantContext *s, const int N, int32_t *dst, const 
 
 static int fn(adequant_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch)
 {
+    const int is_disabled = ff_filter_disabled(ctx);
     const int32_t *in_samples = (const int32_t *)in->extended_data[ch];
     int32_t *out_samples = (int32_t *)out->extended_data[ch];
     ADequantContext *s = ctx->priv;
@@ -309,7 +303,14 @@ static int fn(adequant_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     fn(dequantize_window)(ctx, ch, N, stc->dequant_frame, stc->in_frame);
 
-    fn(get_output)(s, out->nb_samples, out_samples, stc->dequant_frame + overlap/2);
+    if (is_disabled) {
+        const int nb_samples = FFMIN(out->nb_samples, overlap);
+
+        for (int n = 0; n < nb_samples; n++)
+            out_samples[n] = in_samples[n];
+    } else {
+        fn(get_output)(ctx, out->nb_samples, out_samples, stc->dequant_frame + overlap/2);
+    }
 
     return 0;
 }
