@@ -100,6 +100,7 @@ extern const FFFilter ff_af_aoverlay;
 extern const FFFilter ff_af_apad;
 extern const FFFilter ff_af_aperms;
 extern const FFFilter ff_af_aphaser;
+extern const FFFilter ff_af_aphaserotate;
 extern const FFFilter ff_af_aphaseshift;
 extern const FFFilter ff_af_apsnr;
 extern const FFFilter ff_af_apsyclip;
