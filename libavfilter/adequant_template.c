@@ -228,10 +228,10 @@ static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
     int k = s->bits ? 32 - s->bits : 32 - fn(detect_block)(src, N, 32 - native_k, s->tol);
 
     if (k < native_k) {
-        ftype delta = ldexp(1.0, -k+1);
+        const ftype delta = ldexp(1.0, -k+1);
+        const ftype hdelta = 0.5 * delta;
 
         if (mode == MODE_ROUND) {
-            const ftype hdelta = 0.5 * delta;
 
             for (int n = 0; n < N; n++) {
                 ftype x0 = src[n] * (1.0 / 2147483648.0);
@@ -246,7 +246,7 @@ static void fn(dequantize_window)(AVFilterContext *ctx, const int ch, int N,
 
                 lo[n] = x0;
                 hi[n] = x0 + delta;
-                x[n] = x0;
+                x[n] = x0 + hdelta;
             }
         }
 
