@@ -18,13 +18,16 @@
 
 #undef ftype
 #undef ROUND
+#undef TRUNC
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define ROUND roundf
+#define TRUNC truncf
 #define SAMPLE_FORMAT float
 #define ftype float
 #else
 #define ROUND round
+#define TRUNC trunc
 #define SAMPLE_FORMAT double
 #define ftype double
 #endif
@@ -127,18 +130,37 @@ static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             ftype w2 = fcache[1];
             ftype quant_err = stc->quant_err;
 
-            for (int n = 0; n < nb_samples; n++) {
-                ftype filter_out, quant_out, quant_in, in = input[n];
+            switch (s->mode) {
+            case MODE_ROUND:
+                for (int n = 0; n < nb_samples; n++) {
+                    ftype filter_out, quant_out, quant_in, in = input[n];
 
-                filter_out = quant_err + w1;
+                    filter_out = quant_err + w1;
 
-                w1 = b1 * quant_err + w2 + a1 * filter_out;
-                w2 = b2 * quant_err + a2 * filter_out;
+                    w1 = b1 * quant_err + w2 + a1 * filter_out;
+                    w2 = b2 * quant_err + a2 * filter_out;
 
-                quant_in = in + filter_out;
-                quant_out = ROUND(quant_in * factor) * scale;
-                quant_err = quant_out - quant_in;
-                output[n] = quant_out;
+                    quant_in = in + filter_out;
+                    quant_out = ROUND(quant_in * factor) * scale;
+                    quant_err = quant_out - quant_in;
+                    output[n] = quant_out;
+                }
+                break;
+            case MODE_TRUNC:
+                for (int n = 0; n < nb_samples; n++) {
+                    ftype filter_out, quant_out, quant_in, in = input[n];
+
+                    filter_out = quant_err + w1;
+
+                    w1 = b1 * quant_err + w2 + a1 * filter_out;
+                    w2 = b2 * quant_err + a2 * filter_out;
+
+                    quant_in = in + filter_out;
+                    quant_out = TRUNC(quant_in * factor) * scale;
+                    quant_err = quant_out - quant_in;
+                    output[n] = quant_out;
+                }
+                break;
             }
 
             stc->quant_err = isnormal(quant_err) ? quant_err : F(0.0);
@@ -174,8 +196,16 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             continue;
         }
 
-        for (int n = 0; n < nb_samples; n++)
-            output[n] = ROUND(input[n] * factor) * scale;
+        switch (s->mode) {
+        case MODE_ROUND:
+            for (int n = 0; n < nb_samples; n++)
+                output[n] = ROUND(input[n] * factor) * scale;
+            break;
+        case MODE_TRUNC:
+            for (int n = 0; n < nb_samples; n++)
+                output[n] = TRUNC(input[n] * factor) * scale;
+            break;
+        }
     }
 
     return 0;
