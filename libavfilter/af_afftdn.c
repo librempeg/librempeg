@@ -1132,7 +1132,7 @@ static int output_subframe(AVFilterLink *inlink,
     const int sample_advance = s->sample_advance;
     const int offset = s->window_length - sample_advance;
     const int in_nb_samples = in ? FFMIN(in->nb_samples, sample_advance) : 0;
-    const int out_nb_samples = FFMIN(out->nb_samples, sample_advance);
+    const int out_nb_samples = FFMIN(out->nb_samples - doffset, sample_advance);
 
     for (int ch = 0; ch < s->channels; ch++) {
         uint8_t *src = (uint8_t *)s->winframe->extended_data[ch];
