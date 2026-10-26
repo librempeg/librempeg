@@ -61,7 +61,7 @@ typedef struct AudioSpectralSubtractionContext {
 #define  FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption aspectralsub_options[] = {
-    { "reduction", "set noise reduction",         OFFSET(reduction), AV_OPT_TYPE_DOUBLE,   {.dbl=0.05},  0,   1, TFLAGS },
+    { "reduction", "set percentage of noise reduction", OFFSET(reduction), AV_OPT_TYPE_DOUBLE,{.dbl=95}, 0, 100, TFLAGS },
     { "beta",      "set exponent factor",         OFFSET(beta),      AV_OPT_TYPE_DOUBLE,   {.dbl=30},    0, 100, TFLAGS },
     { "history",   "set look-back history",       OFFSET(history),   AV_OPT_TYPE_INT,      {.i64=12},    2,  64, FLAGS },
     { "channels",  "set channels to filter",      OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0,   0, TFLAGS },

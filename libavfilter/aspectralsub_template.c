@@ -205,7 +205,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     AudioSpectralSubtractionContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
     fn(StateContext) *st = &stc[ch];
-    const ftype gmin = s->reduction;
+    const ftype gmin = F(1.0) - s->reduction * F(0.01);
     const ftype beta = s->beta;
     const int rdft_size = s->rdft_size;
     const int nb_coeffs = rdft_size/2 + 1;
