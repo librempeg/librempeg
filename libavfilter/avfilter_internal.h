@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include "libavutil/fifo.h"
+#include "libavutil/framepool.h"
 #include "libavutil/thread.h"
 
 #include "avfilter.h"

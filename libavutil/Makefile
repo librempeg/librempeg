@@ -230,11 +230,12 @@ OBJS-$(HAVE_THREADS)                    += thread.o
 OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 # Object files to satisfy dependencies of other libraries for static builds
+STLIBOBJS-$(CONFIG_AVFILTER)            += framepool.o
 STLIBOBJS-$(CONFIG_EXR_DECODER)         += half2float.o float2half.o
 STLIBOBJS-$(CONFIG_EXR_ENCODER)         += float2half.o
 STLIBOBJS-$(CONFIG_PHM_DECODER)         += half2float.o
 STLIBOBJS-$(CONFIG_PHM_ENCODER)         += float2half.o
-STLIBOBJS-$(CONFIG_SWSCALE)             += half2float.o
+STLIBOBJS-$(CONFIG_SWSCALE)             += framepool.o half2float.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avutilres.o

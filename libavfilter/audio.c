@@ -24,11 +24,11 @@
 #include "libavutil/common.h"
 #include "libavutil/cpu.h"
 #include "libavutil/eval.h"
+#include "libavutil/framepool.h"
 
 #include "audio.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "framepool.h"
 
 const AVFilterPad ff_audio_default_filterpad[1] = {
     {

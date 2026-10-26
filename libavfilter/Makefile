@@ -19,7 +19,6 @@ OBJS = allfilters.o                                                     \
        drawutils.o                                                      \
        fifo.o                                                           \
        formats.o                                                        \
-       framepool.o                                                      \
        framequeue.o                                                     \
        graphdump.o                                                      \
        graphparser.o                                                    \
@@ -709,7 +708,7 @@ OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
 # Objects duplicated from other libraries for shared builds
-SHLIBOBJS                                    += log2_tab.o
+SHLIBOBJS                                    += framepool.o log2_tab.o
 
 SHLIBOBJS-$(CONFIG_AVFILTER_THREAD_FRAME)    += thread.o threadprogress.o
 

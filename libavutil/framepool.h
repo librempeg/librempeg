@@ -16,13 +16,13 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef AVFILTER_FRAMEPOOL_H
-#define AVFILTER_FRAMEPOOL_H
+#ifndef AVUTIL_FRAMEPOOL_H
+#define AVUTIL_FRAMEPOOL_H
 
-#include "libavutil/buffer.h"
-#include "libavutil/frame.h"
-#include "libavutil/internal.h"
-#include "libavutil/thread.h"
+#include "buffer.h"
+#include "frame.h"
+#include "internal.h"
+#include "thread.h"
 
 #include "ffframepool.h"
 #include "avfilter_internal.h"
@@ -79,5 +79,4 @@ void ff_frame_pool_uninit(FFFramePool *pool);
  */
 AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi);
 
-
-#endif /* AVFILTER_FRAMEPOOL_H */
+#endif /* AVUTIL_FRAMEPOOL_H */
