@@ -438,15 +438,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     if (in) {
         av_frame_copy_props(out, in);
-        out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     } else {
         out->pts = s->last_pts;
     }
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    s->last_pts = out->pts + out->duration;
 
     if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
         for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
@@ -462,7 +456,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_inlink_request_frame(inlink);
 
         return 0;
+    } else if (in) {
+        out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     }
+
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
 
     ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
@@ -489,7 +491,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
     int ret, status, available, wanted;
-    AVFrame *in = NULL;
+    AVFrame *in;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
