@@ -44,25 +44,11 @@ typedef struct AudioWienerContext {
     void *window;
     void *st;
 
-    AVFrame *wiener_frame;
-    AVFrame *sbb;
-    AVFrame *ss[2];
-    AVFrame *in;
-    AVFrame *in_buffer;
-    AVFrame *in_frame;
-    AVFrame *out_dist_frame;
-    AVFrame *spectrum_buf;
-    AVFrame *windowed_frame;
-
     AVChannelLayout ch_layout;
-
-    AVTXContext **tx_ctx;
-    av_tx_fn tx_fn;
-    AVTXContext **itx_ctx;
-    av_tx_fn itx_fn;
 
     void (*generate_window)(void *window, int size);
     int (*init)(AVFilterContext *ctx);
+    void (*uninit)(AVFilterContext *ctx);
     int (*wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch);
     int (*wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
 } AudioWienerContext;
@@ -90,10 +76,7 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioWienerContext *s = ctx->priv;
-    union { double d; float f; } scale, iscale;
-    enum AVTXType tx_type;
     size_t sample_size;
-    int ret;
 
     s->rdft_size = 1 << av_ceil_log2(outlink->sample_rate * 80 / 1000);
     s->overlap = s->rdft_size / 4;
@@ -102,24 +85,20 @@ static int config_output(AVFilterLink *outlink)
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        scale.f  = 1.f / s->rdft_size;
-        iscale.f = 1.f / 1.5f;
-        tx_type  = AV_TX_FLOAT_RDFT;
         sample_size = sizeof(float);
         s->generate_window = generate_hann_window_fltp;
         s->wiener_channel = wiener_channel_fltp;
         s->wiener_flush_channel = wiener_flush_channel_fltp;
         s->init = init_fltp;
+        s->uninit = uninit_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        scale.d  = 1.0 / s->rdft_size;
-        iscale.d = 1.0 / 1.5;
-        tx_type  = AV_TX_DOUBLE_RDFT;
         sample_size = sizeof(double);
         s->generate_window = generate_hann_window_dblp;
         s->wiener_channel = wiener_channel_dblp;
         s->wiener_flush_channel = wiener_flush_channel_dblp;
         s->init = init_dblp;
+        s->uninit = uninit_dblp;
         break;
     default:
         return AVERROR_BUG;
@@ -129,47 +108,23 @@ static int config_output(AVFilterLink *outlink)
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->wiener_frame   = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->sbb            = ff_get_audio_buffer(outlink, s->rdft_size + 2);
-    s->ss[0]          = ff_get_audio_buffer(outlink, s->rdft_size + 2);
-    s->ss[1]          = ff_get_audio_buffer(outlink, s->rdft_size + 2);
-    s->in_buffer      = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->in_frame       = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->out_dist_frame = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->spectrum_buf   = ff_get_audio_buffer(outlink, s->rdft_size + 2);
-    s->windowed_frame = ff_get_audio_buffer(outlink, s->rdft_size);
-    if (!s->in_buffer || !s->in_frame || !s->ss[0] || !s->ss[1] ||
-        !s->out_dist_frame || !s->windowed_frame ||
-        !s->wiener_frame || !s->spectrum_buf || !s->sbb)
-        return AVERROR(ENOMEM);
-
     s->generate_window(s->window, s->rdft_size);
 
     s->channels = outlink->ch_layout.nb_channels;
 
-    s->tx_ctx = av_calloc(s->channels, sizeof(*s->tx_ctx));
-    s->itx_ctx = av_calloc(s->channels, sizeof(*s->itx_ctx));
-    if (!s->tx_ctx || !s->itx_ctx)
-        return AVERROR(ENOMEM);
-
-    for (int ch = 0; ch < s->channels; ch++) {
-        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, tx_type, 0, s->rdft_size, &scale, 0);
-        if (ret < 0)
-            return ret;
-
-        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, tx_type, 1, s->rdft_size, &iscale, 0);
-        if (ret < 0)
-            return ret;
-    }
-
     return s->init(ctx);
 }
+
+typedef struct ThreadData {
+    AVFrame *out, *in;
+} ThreadData;
 
 static int wiener_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioWienerContext *s = ctx->priv;
-    AVFrame *in = s->in;
-    AVFrame *out = arg;
+    ThreadData *td = arg;
+    AVFrame *in = td->in;
+    AVFrame *out = td->out;
     const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
     const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
@@ -185,6 +140,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioWienerContext *s = ctx->priv;
     int extra_samples, nb_samples;
+    ThreadData td;
     AVFrame *out;
 
     extra_samples = in->nb_samples % s->overlap;
@@ -203,8 +159,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
-    s->in = in;
-    ff_filter_execute(ctx, wiener_channels, out, NULL,
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, wiener_channels, &td, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->pts = in->pts;
@@ -227,7 +184,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return 0;
     }
 
-    s->in = NULL;
     ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
@@ -319,28 +275,10 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioWienerContext *s = ctx->priv;
 
+    if (s->uninit)
+        s->uninit(ctx);
+
     av_freep(&s->window);
-    av_freep(&s->st);
-
-    av_frame_free(&s->wiener_frame);
-    av_frame_free(&s->sbb);
-    av_frame_free(&s->ss[0]);
-    av_frame_free(&s->ss[1]);
-    av_frame_free(&s->in_buffer);
-    av_frame_free(&s->in_frame);
-    av_frame_free(&s->out_dist_frame);
-    av_frame_free(&s->spectrum_buf);
-    av_frame_free(&s->windowed_frame);
-
-    for (int ch = 0; ch < s->channels; ch++) {
-        if (s->tx_ctx)
-            av_tx_uninit(&s->tx_ctx[ch]);
-        if (s->itx_ctx)
-            av_tx_uninit(&s->itx_ctx[ch]);
-    }
-
-    av_freep(&s->tx_ctx);
-    av_freep(&s->itx_ctx);
 }
 
 static const AVFilterPad outputs[] = {
