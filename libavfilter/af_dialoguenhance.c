@@ -175,13 +175,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
         s->de_stereo(ctx, out, offset);
 
-    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    s->last_pts = out->pts + out->duration;
-
     if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
         for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
             out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
@@ -196,7 +189,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_inlink_request_frame(inlink);
 
         return 0;
+    } else {
+        out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     }
+
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
 
     s->in = NULL;
     ff_graph_frame_free(ctx, &in);
