@@ -193,7 +193,7 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             memset(c->row_cbp, 0, c->row_cbp_size);
 
         if (!(c->frame_flags & 0x4000))
-            bink2_get_block_flags(gb, 1, (((avctx->width + 15) & ~15) >> 3) - 1, c->col_cbp);
+            bink2_get_block_flags(gb, 1, (avctx->coded_width >> 3) - 1, c->col_cbp);
         else
             memset(c->col_cbp, 0, c->col_cbp_size);
     } else {
