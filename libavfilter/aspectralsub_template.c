@@ -150,15 +150,15 @@ static void fn(uninit)(AVFilterContext *ctx)
     for (int ch = 0; ch < s->channels && st; ch++) {
         fn(StateContext) *stc = &st[ch];
 
-        av_freep(&st->r2c_in);
-        av_freep(&st->r2c_out);
-        av_freep(&st->c2r_in);
-        av_freep(&st->c2r_out);
-        av_freep(&st->input);
-        av_freep(&st->output);
-        av_freep(&st->p_n);
-        av_freep(&st->p_sn);
-        av_freep(&st->history);
+        av_freep(&stc->r2c_in);
+        av_freep(&stc->r2c_out);
+        av_freep(&stc->c2r_in);
+        av_freep(&stc->c2r_out);
+        av_freep(&stc->input);
+        av_freep(&stc->output);
+        av_freep(&stc->p_n);
+        av_freep(&stc->p_sn);
+        av_freep(&stc->history);
 
         av_tx_uninit(&stc->tx_ctx);
         av_tx_uninit(&stc->itx_ctx);
