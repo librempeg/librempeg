@@ -125,11 +125,20 @@ fail:
     return ret;
 }
 
-AVFrame *ff_frame_pool_get(FFFramePool *pool)
+AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames, AVMutex *fifo_lock)
 {
     const AVPixFmtDescriptor *desc;
+    AVFrame *frame = NULL;
 
-    AVFrame *frame = av_frame_alloc();
+    if (fifo_empty_frames && fifo_lock) {
+        ff_mutex_lock(fifo_lock);
+        if (av_fifo_can_read(fifo_empty_frames) > 0)
+            av_fifo_read(fifo_empty_frames, &frame, 1);
+        ff_mutex_unlock(fifo_lock);
+    }
+
+    if (!frame)
+        frame = av_frame_alloc();
     if (!frame)
         return NULL;
 

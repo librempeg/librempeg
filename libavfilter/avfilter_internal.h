@@ -33,7 +33,6 @@
 
 #include "avfilter.h"
 #include "filters.h"
-#include "ffframepool.h"
 #include "framequeue.h"
 
 typedef struct FilterLinkInternal {

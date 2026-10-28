@@ -25,7 +25,7 @@
 #include "thread.h"
 
 #include "ffframepool.h"
-#include "avfilter_internal.h"
+#include "libavfilter/avfilter_internal.h"
 
 /**
  * Recreate the video frame pool if its current configuration differs from the
@@ -77,6 +77,6 @@ void ff_frame_pool_uninit(FFFramePool *pool);
  *
  * @return a new AVFrame on success, NULL on error.
  */
-AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi);
+AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames, AVMutex *fifo_lock);
 
 #endif /* AVUTIL_FRAMEPOOL_H */

@@ -1,5 +1,5 @@
-#ifndef AVFILTER_FFFRAMEPOOL_H
-#define AVFILTER_FFFRAMEPOOL_H
+#ifndef AVUTIL_FFFRAMEPOOL_H
+#define AVUTIL_FFFRAMEPOOL_H
 
 /**
  * Frame pool. This structure must be initialized with
