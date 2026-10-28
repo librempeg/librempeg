@@ -152,6 +152,7 @@ static int decode_fint(AVCodecContext *avctx,
     avctx->width  = w;
     avctx->height = h;
     avctx->pix_fmt = fmt;
+    avctx->coded_width = avctx->width + 4;
 
     ret = init_frames(avctx);
     if (ret < 0)
@@ -717,8 +718,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static av_cold int decode_close(AVCodecContext *avctx)
 {
     RASCContext *s = avctx->priv_data;
-
-    avctx->coded_width = avctx->width + 4;
 
     av_freep(&s->cursor);
     s->cursor_size = 0;
