@@ -613,14 +613,19 @@ typedef struct AVFilterGraph {
      */
     avfilter_execute_func *execute;
 
+#if FF_API_MAX_BUFFERED_FRAMES
     /**
      * Sets the maximum number of combined buffered frames of each media type
      * in the filtergraph.
      *
      * Zero means no limit. This field must be set before calling
      * avfilter_graph_config().
+     *
+     * @deprecated use avfilter_graph_set_max_buffered_frames() instead
      */
+    attribute_deprecated
     unsigned max_buffered_frames;
+#endif
 } AVFilterGraph;
 
 /**
