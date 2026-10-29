@@ -176,7 +176,7 @@ typedef struct FFFilterGraph {
 
     void *thread;
     avfilter_execute_func *thread_execute;
-    FFFrameQueueGlobal frame_queues;
+    FFFrameQueueGlobal frame_queues[AVMEDIA_TYPE_NB];
 
     // used by frame threads to avoid concurrent get_buffer() calls
     AVMutex get_buffer_lock;
