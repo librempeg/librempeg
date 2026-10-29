@@ -25,6 +25,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
+#include <float.h>
 #include <math.h>
 #include <mysofa.h>
 
@@ -107,6 +108,7 @@ typedef struct SOFAlizerContext {
     int normalize;       /* should all IRs be normalized upon import ? */
     int interpolate;     /* should wanted IRs be interpolated from neighbors ? */
     int minphase;        /* should all IRs be minphased upon import ? */
+    float threshold;
     float anglestep;     /* neighbor search angle step, in agles */
     float radstep;       /* neighbor search radius step, in meters */
 
@@ -165,7 +167,7 @@ static int preload_sofa(AVFilterContext *ctx, char *filename, int *samplingrate)
         mysofa_loudness(s->sofa.hrtf);
 
     if (s->minphase)
-        mysofa_minphase(s->sofa.hrtf, 0.01f);
+        mysofa_minphase(s->sofa.hrtf, s->threshold);
 
     mysofa_tocartesian(s->sofa.hrtf);
 
@@ -1085,6 +1087,7 @@ static const AVOption sofalizer_options[] = {
     { "normalize", "normalize IRs",  OFFSET(normalize), AV_OPT_TYPE_BOOL,   {.i64=1},       0,   1, .flags = FLAGS },
     { "interpolate","interpolate IRs from neighbors",   OFFSET(interpolate),AV_OPT_TYPE_BOOL,    {.i64=0},       0,   1, .flags = FLAGS },
     { "minphase",  "minphase IRs",   OFFSET(minphase),  AV_OPT_TYPE_BOOL,   {.i64=0},       0,   1, .flags = FLAGS },
+    { "threshold", "threshold for minphase IR",   OFFSET(threshold),  AV_OPT_TYPE_FLOAT,   {.dbl=0.0001}, FLT_MIN, 0.1, .flags = FLAGS },
     { "anglestep", "set neighbor search angle step",    OFFSET(anglestep),  AV_OPT_TYPE_FLOAT,   {.dbl=.5},      0.01, 10, .flags = FLAGS },
     { "radstep",   "set neighbor search radius step",   OFFSET(radstep),    AV_OPT_TYPE_FLOAT,   {.dbl=.01},     0.01,  1, .flags = FLAGS },
     { NULL }
