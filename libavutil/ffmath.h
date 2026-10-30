@@ -48,7 +48,7 @@ static av_always_inline double ff_exp10(double x)
 
 static av_always_inline float ff_exp10f(float x)
 {
-    return exp2f(M_LOG2_10 * x);
+    return exp2f(M_LOG2_10f * x);
 }
 
 /**
