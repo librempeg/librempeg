@@ -253,15 +253,17 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink, const int re
     return 0;
 }
 
-static ftype fn(get_volume)(const CompandContext *s, ftype in_log)
+static ftype fn(get_volume)(const CompandContext *s, ftype in_log,
+                            const ftype in_min_log,
+                            const ftype out_min_lin)
 {
     const fn(CompandSegment) *css = s->segments;
     const fn(CompandSegment) *cs;
     ftype out_log;
     int i;
 
-    if (in_log < s->in_min_log)
-        return s->out_min_lin;
+    if (in_log < in_min_log)
+        return out_min_lin;
 
     for (i = 1; i < s->nb_segments; i++)
         if (in_log <= css[i].x)
@@ -298,6 +300,8 @@ static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
     CompandContext *s = ctx->priv;
     const int delay_samples = s->delay_samples;
     const int nb_samples = frame->nb_samples;
+    const ftype out_min_lin = s->out_min_lin;
+    const ftype in_min_log = s->in_min_log;
     fn(ChanParam) *cps = s->channels;
 
     for (int ch = 0; ch < channels; ch++) {
@@ -308,7 +312,8 @@ static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
         int dindex = cp->delay_index;
 
         for (int i = 0; i < nb_samples; i++) {
-            dst[i] = dbuf[dindex] * fn(get_volume)(s, cp->volume);
+            dst[i] = dbuf[dindex] * fn(get_volume)(s, cp->volume,
+                                                   in_min_log, out_min_lin);
 #define MOD(a, b) (((a) >= (b)) ? (a) - (b) : (a))
             dindex = MOD(dindex + 1, delay_samples);
         }
@@ -344,6 +349,8 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
     const int is_disabled = ff_filter_disabled(ctx);
     const int start = ff_slice_pos(channels, jobnr, nb_jobs);
     const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
+    const ftype out_min_lin = s->out_min_lin;
+    const ftype in_min_log = s->in_min_log;
 
     for (int ch = start; ch < end; ch++) {
         const ftype *scsrc = (const ftype *)sc->extended_data[ch];
@@ -374,7 +381,7 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
         for (int i = 0; i < nb_samples; i++) {
             volume = fn(update_volume)(attack, decay, FABS(scsrc[i]), volume);
 
-            dst[i] = src[i] * fn(get_volume)(s, volume);
+            dst[i] = src[i] * fn(get_volume)(s, volume, in_min_log, out_min_lin);
         }
 
         cp->volume = volume;
@@ -425,6 +432,8 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
     const int start = ff_slice_pos(channels, jobnr, nb_jobs);
     const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = s->in->nb_samples;
+    const ftype out_min_lin = s->out_min_lin;
+    const ftype in_min_log = s->in_min_log;
     AVFrame *delay_frame = s->delay_frame;
     AVFrame *sc = s->sc ? s->sc : s->in;
     fn(ChanParam) *cps = s->channels;
@@ -462,7 +471,7 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
             if (count >= delay_samples) {
                 dst[oindex] = dbuf[dindex];
                 if (is_enabled)
-                    dst[oindex] *= fn(get_volume)(s, volume);
+                    dst[oindex] *= fn(get_volume)(s, volume, in_min_log, out_min_lin);
                 oindex++;
             } else {
                 count++;
