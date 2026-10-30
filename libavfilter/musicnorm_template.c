@@ -139,7 +139,7 @@ static int fn(musicnorm_init)(AVFilterContext *ctx)
 
 static ftype fn(static_gain_db)(const fn(StateContext) *d, ftype level_db)
 {
-    ftype pos = (level_db - DIP_LUT_MIN_DB) * (F(1.0) / DIP_LUT_STEP_DB);
+    ftype pos = (level_db - F(DIP_LUT_MIN_DB)) * (F(1.0) / F(DIP_LUT_STEP_DB));
     if (pos <= F(0.0))
         return d->lut[0];
     int i = (int)pos;
