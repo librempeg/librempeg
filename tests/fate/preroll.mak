@@ -14,9 +14,9 @@ define FATE_PREROLL_TEST
 FATE_PREROLL_FFPROBE-$(call DEMDEC, $(2), $(3)) += fate-preroll-$(1)-declared fate-preroll-$(1)-landing
 fate-preroll-$(1)-declared: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -select_streams a:0 -show_entries stream=codec_name,sample_rate,initial_padding,seek_preroll -print_format compact $(TARGET_SAMPLES)/$(4)
 fate-preroll-$(1)-landing: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -select_streams a:0 -read_intervals $(PREROLL_SEEK_TS)%+\#3 -show_entries packet=pts,dts,duration -print_format compact $(TARGET_SAMPLES)/$(4)
-FATE_PREROLL_FFMPEG-$(call FRAMECRC, $(2), $(3), PCM_S16LE_ENCODER ARESAMPLE_FILTER VOLUME_FILTER) += fate-preroll-$(1)-decode
+FATE_PREROLL_FFMPEG-$(call FRAMECRC, $(2), $(3), PCM_S16LE_ENCODER ASF2SF_FILTER VOLUME_FILTER) += fate-preroll-$(1)-decode
 fate-preroll-$(1)-decode: CMD = framecrc -ss $(PREROLL_SEEK_TS) -t 0.15 -i $(TARGET_SAMPLES)/$(4) -map 0:a:0 -af volume=0,aresample -c:a pcm_s16le
-FATE_PREROLL_FFMPEG-$(call FRAMECRC, $(2), $(3), PCM_S16LE_ENCODER ARESAMPLE_FILTER VOLUME_FILTER) += fate-preroll-$(1)-decode-noaccurate
+FATE_PREROLL_FFMPEG-$(call FRAMECRC, $(2), $(3), PCM_S16LE_ENCODER ASF2SF_FILTER VOLUME_FILTER) += fate-preroll-$(1)-decode-noaccurate
 fate-preroll-$(1)-decode-noaccurate: CMD = framecrc -noaccurate_seek -ss $(PREROLL_SEEK_TS) -t 0.15 -i $(TARGET_SAMPLES)/$(4) -map 0:a:0 -af volume=0,aresample -c:a pcm_s16le
 endef
 
@@ -36,7 +36,7 @@ $(eval $(call FATE_PREROLL_TEST,mp3-itunes,MP3,MP3FLOAT,gapless/gapless-itunes.m
 
 # A seek that lands inside the priming, which here spans the first three
 # packets: the rest of the priming, or the pre-roll if longer, is skipped.
-FATE_PREROLL_FFMPEG-$(call FRAMECRC, CAF, AAC, PCM_S16LE_ENCODER ARESAMPLE_FILTER VOLUME_FILTER) += fate-preroll-aac-caf-decode-in-priming
+FATE_PREROLL_FFMPEG-$(call FRAMECRC, CAF, AAC, PCM_S16LE_ENCODER ASF2SF_FILTER VOLUME_FILTER) += fate-preroll-aac-caf-decode-in-priming
 fate-preroll-aac-caf-decode-in-priming: CMD = framecrc -noaccurate_seek -ss 0.01 -t 0.1 -i $(TARGET_SAMPLES)/caf/aac.caf -af volume=0,aresample -c:a pcm_s16le
 
 # A forward seek, as ffplay does: the range starts before the target and is

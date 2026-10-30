@@ -436,7 +436,7 @@ fate-ffmpeg-filter-closed-input: CMD = framecrc -auto_conversion_filters -filter
     -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
     -filter_complex "[2:v][1:v]scale2ref=w=iw:h=ih[m][s1];[3:v][s1]scale2ref=w=iw:h=ih[f][s2];[f][m]alphamerge[k];[s2]vflip[bg];[bg][k]overlay=format=yuv420,null,null,null,null,null,null,null,null,trim=duration=1.64,setpts=PTS-STARTPTS[l];[0:v][l]overlay=format=yuv420:eof_action=pass[v]" \
     -map "[v]" -t 3 -c:v rawvideo
-FATE_FFMPEG-$(call FRAMECRC, RAWVIDEO, RAWVIDEO, SCALE_FILTER SCALE2REF_FILTER \
+FATE_FFMPEG-$(call FRAMECRC, RAWVIDEO, RAWVIDEO, SCALE_FILTER \
     ALPHAMERGE_FILTER VFLIP_FILTER OVERLAY_FILTER NULL_FILTER TRIM_FILTER      \
     SETPTS_FILTER) += fate-ffmpeg-filter-closed-input
 
