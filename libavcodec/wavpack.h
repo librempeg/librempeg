@@ -41,11 +41,13 @@
 #define WV_DSD_DATA       0x80000000
 
 #define WV_HYBRID_MODE    0x00000008
-#define WV_HYBRID_SHAPE   0x00000008
+#define WV_HYBRID_SHAPE   0x00000040
 #define WV_HYBRID_BITRATE 0x00000200
 #define WV_HYBRID_BALANCE 0x00000400
 #define WV_INITIAL_BLOCK  0x00000800
 #define WV_FINAL_BLOCK    0x00001000
+
+#define WV_NEW_SHAPING    0x20000000
 
 #define WV_MONO_DATA    (WV_MONO | WV_FALSE_STEREO)
 
@@ -83,10 +85,12 @@ enum WP_ID {
     WP_ID_EXTRABITS,
     WP_ID_CHANINFO,
     WP_ID_DSD_DATA,
+    WP_ID_CFG = 0x25,
     WP_ID_SAMPLE_RATE = 0x27,
+    WP_ID_NEWCFG = 0x2a,
 };
 
-typedef struct Decorr {
+typedef struct DecorrPass {
     int delta;
     int value;
     int weightA;
@@ -95,7 +99,13 @@ typedef struct Decorr {
     int samplesB[MAX_TERM];
     int sumA;
     int sumB;
-} Decorr;
+} DecorrPass;
+
+typedef struct WvDc {
+    int shaping_acc[2];
+    int shaping_delta[2];
+    int error[2];
+} WvDc;
 
 typedef struct WvChannel {
     int median[3];
