@@ -957,6 +957,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (s->history_filled < s->history_nb_samples) {
             if (!s->status) {
                 ff_inlink_request_frame(inlink);
+                ff_filter_set_ready(ctx, 10);
                 return 0;
             }
         }
