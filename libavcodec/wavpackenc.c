@@ -2616,7 +2616,7 @@ static int wavpack_encode_block(WavPackEncodeContext *s,
         bytestream2_put_byte(&pb, 0);
     }
 
-    put_metadata_block(&pb, WP_ID_DECTERMS, s->num_terms);
+    put_metadata_block(&pb, WP_ID_DECORR_TERMS, s->num_terms);
     for (i = 0; i < s->num_terms; i++) {
         struct Decorr *dpp = &s->decorr_passes[i];
         bytestream2_put_byte(&pb, ((dpp->value + 5) & 0x1f) | ((dpp->delta << 5) & 0xe0));
@@ -2630,7 +2630,7 @@ static int wavpack_encode_block(WavPackEncodeContext *s,
         type = restore_weight(temp);  \
     } while (0)
 
-    bytestream2_put_byte(&pb, WP_ID_DECWEIGHTS);
+    bytestream2_put_byte(&pb, WP_ID_DECORR_WEIGHTS);
     bytestream2_put_byte(&pb, 0);
     start = bytestream2_tell_p(&pb);
     for (i = s->num_terms - 1; i >= 0; --i) {
@@ -2652,7 +2652,7 @@ static int wavpack_encode_block(WavPackEncodeContext *s,
         }
     }
     end = bytestream2_tell_p(&pb);
-    out[start - 2] = WP_ID_DECWEIGHTS | (((end - start) & 1) ? WP_IDF_ODD: 0);
+    out[start - 2] = WP_ID_DECORR_WEIGHTS | (((end - start) & 1) ? WP_IDF_ODD: 0);
     out[start - 1] = (end - start + 1) >> 1;
     if ((end - start) & 1)
         bytestream2_put_byte(&pb, 0);
@@ -2663,7 +2663,7 @@ static int wavpack_encode_block(WavPackEncodeContext *s,
         bytestream2_put_le16(&pb, temp);  \
     } while (0)
 
-    bytestream2_put_byte(&pb, WP_ID_DECSAMPLES);
+    bytestream2_put_byte(&pb, WP_ID_DECORR_SAMPLES);
     bytestream2_put_byte(&pb, 0);
     start = bytestream2_tell_p(&pb);
     for (i = 0; i < s->num_terms; i++) {
