@@ -146,7 +146,7 @@ av_cold void ff_apv_dsp_init(APVDSPContext *dsp)
     dsp->prepare_constants = ff_apv_prepare_constants_c;
     dsp->decode_transquant = apv_decode_transquant_c;
 
-#if ARCH_X86_64
+#if ARCH_X86_64 && HAVE_X86ASM
     ff_apv_dsp_init_x86_64(dsp);
 #endif
 #if ARCH_AARCH64
