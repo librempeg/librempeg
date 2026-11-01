@@ -231,7 +231,7 @@ OBJS-$(CONFIG_VOLUME_FILTER)                 += af_volume.o
 
 OBJS-$(CONFIG_AEVALSRC_FILTER)               += aeval.o
 OBJS-$(CONFIG_AFDELAYSRC_FILTER)             += asrc_afdelaysrc.o
-OBJS-$(CONFIG_AFIREQSRC_FILTER)              += asrc_afirsrc.o
+OBJS-$(CONFIG_AFIREQSRC_FILTER)              += asrc_afireqsrc.o
 OBJS-$(CONFIG_AFIRSRC_FILTER)                += asrc_afirsrc.o
 OBJS-$(CONFIG_ALSFIRSRC_FILTER)              += asrc_alsfirsrc.o
 OBJS-$(CONFIG_ANOISESRC_FILTER)              += asrc_anoisesrc.o
