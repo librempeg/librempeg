@@ -317,7 +317,7 @@ static av_cold int config_output(AVFilterLink *outlink)
         s->complexf[i].re = ff_exp10f(s->complexf[i].re / 20.f);
 
     if (s->phaset) {
-        const float threshold = powf(10.f, -100.f / 20.f);
+        const float threshold = FLT_MIN;
         const float logt = logf(threshold);
 
         scale = 1.f;
