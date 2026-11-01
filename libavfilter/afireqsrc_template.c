@@ -231,13 +231,12 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
             complexf[i + asize].im /= fft_size;
         }
 
-        for (int i = 1; i < s->nb_taps; i++) {
+        for (int i = 1; i < fft_size/2; i++) {
             complexf[asize + i].re += complexf[asize + fft_size - i].re;
             complexf[asize + i].im -= complexf[asize + fft_size - i].im;
             complexf[asize + fft_size - i].re = F(0.0);
             complexf[asize + fft_size - i].im = F(0.0);
         }
-        complexf[asize + s->nb_taps - 1].im *= F(-1.0);
 
         s->tx_fn(s->tx_ctx, complexf, complexf + asize, sizeof(ctype));
 
