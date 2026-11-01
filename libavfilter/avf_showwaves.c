@@ -282,7 +282,7 @@ static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t line
                                         const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
     uint8_t *bufk;
 
     if (start > end)
@@ -301,7 +301,7 @@ static void draw_sample_line_rgba_scaleh(uint8_t *buf, int width,
                                          const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
     uint8_t *bufk;
 
     if (start > end)
@@ -320,7 +320,7 @@ static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t lines
                                        const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
     uint32_t clr = AV_RN32(color);
     uint8_t *bufk;
 
@@ -336,7 +336,7 @@ static void draw_sample_line_rgba_fullh(uint8_t *buf, int width,
                                         const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
     uint32_t clr = AV_RN32(color);
     uint8_t *bufk;
 
@@ -524,7 +524,7 @@ static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                   const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
 
     if (start > end)
         FFSWAP(int, start, end);
@@ -576,7 +576,7 @@ static void draw_sample_line_grayh(uint8_t *buf, int width,
                                   const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
 
     if (start > end)
         FFSWAP(int, start, end);
