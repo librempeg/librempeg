@@ -35,6 +35,10 @@
 
 #define DSS_SP_FRAME_SIZE        42
 #define DSS_SP_SAMPLE_COUNT     (66 * SUBFRAMES)
+#define DSS_SP_FORMULA(a, b, c) ((int)((((a) * (1 << 15)) + (b) * (unsigned)(c)) + 0x4000) >> 15)
+
+/* audio format in the file header, given by the demuxer as extradata */
+#define DSS_ACODEC_DSS_SP_VR 0x1 /* SP mode, variable rate */
 
 typedef struct DssSpSubframe {
     int16_t gain;
@@ -62,6 +66,10 @@ typedef struct DssSpContext {
     int32_t deemph_state;
 
     int pulse_dec_mode;
+
+    int variable_rate;
+    int noise_frame;
+    uint16_t noise_seed;
 
     DECLARE_ALIGNED(16, uint8_t, bits)[DSS_SP_FRAME_SIZE +
                                        AV_INPUT_BUFFER_PADDING_SIZE];
@@ -263,6 +271,15 @@ static const uint16_t dss_sp_adaptive_gain[] = {
     3194, 3323, 3451, 3580, 3709, 3838, 3967, 4096,
 };
 
+static const int16_t dss_sp_vr_filter_cb13[4] = {
+    -8166, -2419, 1997, 6705,
+};
+
+static const uint8_t dss_sp_noise_gain[32] = {
+     0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+    16, 17, 18, 20, 22, 24, 26, 28, 30, 34, 40, 46, 52, 60, 72, 84,
+};
+
 static const int32_t dss_sp_sinc[67] = {
       262,   293,   323,   348,   356,   336,   269,   139,
       -67,  -358,  -733, -1178, -1668, -2162, -2607, -2940,
@@ -291,6 +308,7 @@ static av_cold int dss_sp_decode_init(AVCodecContext *avctx)
 
     p->pulse_dec_mode = 1;
     p->avctx          = avctx;
+    p->variable_rate  = avctx->extradata_size >= 1 && avctx->extradata[0] == DSS_ACODEC_DSS_SP_VR;
 
     return 0;
 }
@@ -312,12 +330,23 @@ static void dss_sp_unpack_coeffs(DssSpContext *p, const uint8_t *src)
 
     init_get_bits(&gb, p->bits, DSS_SP_FRAME_SIZE * 8);
 
+    /* Variable rate frames start with a type bit; a 0 marks a short frame
+     * that carries only the filter and four noise gains. */
+    p->noise_frame = p->variable_rate && !get_bits1(&gb);
+
     for (i = 0; i < 2; i++)
         fparam->filter_idx[i] = get_bits(&gb, 5);
     for (; i < 8; i++)
         fparam->filter_idx[i] = get_bits(&gb, 4);
-    for (; i < 14; i++)
+    for (; i < 13; i++)
         fparam->filter_idx[i] = get_bits(&gb, 3);
+    fparam->filter_idx[13] = get_bits(&gb, p->variable_rate ? 2 : 3);
+
+    if (p->noise_frame) {
+        for (subframe_idx = 0; subframe_idx < 4; subframe_idx++)
+            fparam->sf_adaptive_gain[subframe_idx] = get_bits(&gb, 5);
+        return;
+    }
 
     for (subframe_idx = 0; subframe_idx < 4; subframe_idx++) {
         fparam->sf_adaptive_gain[subframe_idx] = get_bits(&gb, 5);
@@ -425,6 +454,8 @@ static void dss_sp_unpack_filter(DssSpContext *p)
 
     for (i = 0; i < 14; i++)
         p->lpc_filter[i] = dss_sp_filter_cb[i][p->fparam.filter_idx[i]];
+    if (p->variable_rate)
+        p->lpc_filter[13] = dss_sp_vr_filter_cb13[p->fparam.filter_idx[13]];
 }
 
 static void dss_sp_add_pulses(int32_t *vector_buf,
@@ -436,6 +467,16 @@ static void dss_sp_add_pulses(int32_t *vector_buf,
         vector_buf[sf->pulse_pos[i]] += (dss_sp_fixed_cb_gain[sf->gain] *
                                          dss_sp_pulse_val[sf->pulse_val[i]] +
                                          0x4000) >> 15;
+}
+
+static void dss_sp_gen_noise(DssSpContext *p, int32_t *vector, int gain)
+{
+    int i;
+
+    for (i = 0; i < 72; i++) {
+        p->noise_seed = p->noise_seed * 0x209 + 0x103;
+        vector[i]     = (int16_t)p->noise_seed * gain >> 14;
+    }
 }
 
 static void dss_sp_gen_exc(int32_t *vector, int32_t *prev_exc,
@@ -568,18 +609,23 @@ static int dss_sp_decode_one_frame(DssSpContext *p,
     /* No polynomial conversion -- lattice uses raw reflection coefficients */
 
     for (j = 0; j < SUBFRAMES; j++) {
-        dss_sp_gen_exc(p->vector_buf, p->history,
-                       p->fparam.pitch_lag[j],
-                       dss_sp_adaptive_gain[p->fparam.sf_adaptive_gain[j]]);
+        if (p->noise_frame) {
+            dss_sp_gen_noise(p, p->vector_buf,
+                             dss_sp_noise_gain[p->fparam.sf_adaptive_gain[j]]);
+        } else {
+            dss_sp_gen_exc(p->vector_buf, p->history,
+                           p->fparam.pitch_lag[j],
+                           dss_sp_adaptive_gain[p->fparam.sf_adaptive_gain[j]]);
 
-        dss_sp_add_pulses(p->vector_buf, &p->fparam.sf[j]);
+            dss_sp_add_pulses(p->vector_buf, &p->fparam.sf[j]);
 
-        dss_sp_update_buf(p->vector_buf, p->history);
+            dss_sp_update_buf(p->vector_buf, p->history);
 
-        /* Copy excitation from history into vector_buf (reversed back to
-         * chronological order -- update_buf stores it reversed) */
-        for (i = 0; i < 72; i++)
-            p->vector_buf[i] = p->history[72 - i];
+            /* Copy excitation from history into vector_buf (reversed back to
+             * chronological order -- update_buf stores it reversed) */
+            for (i = 0; i < 72; i++)
+                p->vector_buf[i] = p->history[72 - i];
+        }
 
         /* Lattice IIR synthesis */
         dss_sp_lattice_filter(p->lpc_filter, 14, p->lattice_state,
