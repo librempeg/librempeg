@@ -8270,7 +8270,7 @@ Set window function to be used when generating FIR coefficients.
 
 @section sinc
 
-Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, or band-reject FIR coefficients.
+Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, band-stop, low-shelf, high-shelf or peaking FIR coefficients.
 
 The resulting stream can be used with @ref{afir} filter for filtering the audio signal.
 
@@ -8291,6 +8291,12 @@ Set low-pass frequency. Default is 0.
 If high-pass frequency is lower than low-pass frequency and low-pass frequency
 is higher than 0 then filter will create band-pass filter coefficients,
 otherwise band-reject filter coefficients.
+
+@item gain
+Set peaking or low-shelf or high-shelf filter gain.
+If this value is set to higher value than 0.0, it will generate low-shelf, high-shelf
+or peaking filter FIR coefficients depending upon if @var{lp} or @var{hp} or both are set.
+Peaking filter also needs @var{hp} to be higher value thap @var{lp}.
 
 @item phase
 Set filter phase response. Default is 50. Allowed range is from 0 to 100.
