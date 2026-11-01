@@ -54,12 +54,12 @@ typedef struct AudioFIRSourceContext {
     int interp;
     int phaset;
 
-    AVComplexFloat *complexf;
-    float *freq;
-    float *magnitude;
-
-    float *taps;
     int64_t pts;
+
+    void *taps;
+    void *complexf;
+    void *freq;
+    void *magnitude;
 
     AVTXContext *tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -156,7 +156,7 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_FLT,
+        AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL,
         AV_SAMPLE_FMT_NONE
     };
     int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
@@ -170,202 +170,23 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
-static void eq_interp(AVComplexFloat *complexf,
-                      const float *freq,
-                      const float *magnitude,
-                      int m, int interp, int minterp,
-                      const float factor)
-{
-    for (int i = 0; i < minterp; i++) {
-        for (int j = 0; j < m; j++) {
-            const float x = factor * i;
+#define DEPTH 32
+#include "afireqsrc_template.c"
 
-            if (x <= freq[j+1]) {
-                float g = 1.f;
-
-                if (interp == INTERP_LINEAR) {
-                    const float d  = freq[j+1] - freq[j];
-                    const float d0 = x - freq[j];
-                    const float d1 = freq[j+1] - x;
-                    const float g0 = magnitude[j];
-                    const float g1 = magnitude[j+1];
-
-                    if (d0 && d1) {
-                        g = (d0 * g1 + d1 * g0) / d;
-                    } else if (d0) {
-                        g = g1;
-                    } else {
-                        g = g0;
-                    }
-                } else if (interp == INTERP_CUBIC) {
-                    if (x <= freq[j]) {
-                        g = magnitude[j];
-                    } else {
-                        float x1, x2, x3;
-                        float a, b, c, d;
-                        float m0, m1, m2, msum;
-                        const float unit = freq[j+1] - freq[j];
-
-                        m0 = j != 0 ? unit * (magnitude[j] - magnitude[j-1]) / (freq[j] - freq[j-1]) : 0;
-                        m1 = magnitude[j+1] - magnitude[j];
-                        m2 = j != minterp - 1 ? unit * (magnitude[j+2] - magnitude[j+1]) / (freq[j+2] - freq[j+1]) : 0;
-
-                        msum = fabsf(m0) + fabsf(m1);
-                        m0 = msum > 0.f ? (fabsf(m0) * m1 + fabsf(m1) * m0) / msum : 0.f;
-                        msum = fabsf(m1) + fabsf(m2);
-                        m1 = msum > 0.f ? (fabsf(m1) * m2 + fabsf(m2) * m1) / msum : 0.f;
-
-                        d = magnitude[j];
-                        c = m0;
-                        b = 3.f * magnitude[j+1] - m1 - 2.f * c - 3.f * d;
-                        a = magnitude[j+1] - b - c - d;
-
-                        x1 = (x - freq[j]) / unit;
-                        x2 = x1 * x1;
-                        x3 = x2 * x1;
-
-                        g = a * x3 + b * x2 + c * x1 + d;
-                    }
-                } else if (interp == INTERP_COSINE) {
-                    const double fx = (x < freq[j]) ? freq[j] : x;
-                    const double t = log((fx + DBL_MIN) / (freq[j] + DBL_MIN)) / log(freq[j+1] / (freq[j] + DBL_MIN));
-                    const double w = 0.5 * (1.0 - cos(M_PI * t));
-                    const double g0 = magnitude[j];
-                    const double g1 = magnitude[j+1];
-
-                    g = g0 + (g1 - g0) * w;
-                } else if (interp == INTERP_SMOOTH) {
-                    const double fx = (x < freq[j]) ? freq[j] : x;
-                    const double t = log((fx + DBL_MIN) / (freq[j] + DBL_MIN)) / log(freq[j+1] / (freq[j] + DBL_MIN));
-                    const double w = t * t * (3.0 - 2.0 * t);
-                    const double g0 = magnitude[j];
-                    const double g1 = magnitude[j+1];
-
-                    g = g0 + (g1 - g0) * w;
-                }
-
-                complexf[i].re = g;
-                complexf[i].im = 0;
-                complexf[minterp * 2 - i - 1].re = g;
-                complexf[minterp * 2 - i - 1].im = 0;
-
-                break;
-            }
-        }
-    }
-}
+#undef DEPTH
+#define DEPTH 64
+#include "afireqsrc_template.c"
 
 static av_cold int config_output(AVFilterLink *outlink)
 {
-    AVFilterContext *ctx = outlink->src;
-    AudioFIRSourceContext *s = ctx->priv;
-    int fft_size, middle, asize, ret;
-    float scale, factor;
-
-    if (s->preset >= 0) {
-        const int nb_magnitude = FF_ARRAY_ELEMS(eq_presets[s->preset].gains);
-
-        if (s->nb_freq != nb_magnitude) {
-            av_log(ctx, AV_LOG_ERROR, "Number of bands and gains must be same and >= 2.\n");
-            return AVERROR(EINVAL);
-        }
-
-        s->freq = av_calloc(s->nb_freq+1, sizeof(*s->freq));
-        s->magnitude = av_calloc(nb_magnitude+1, sizeof(*s->magnitude));
-        if (!s->magnitude || !s->freq)
-            return AVERROR(ENOMEM);
-
-        memcpy(s->freq, s->freq_points_opt, sizeof(*s->freq) * s->nb_freq);
-        memcpy(s->magnitude, eq_presets[s->preset].gains, sizeof(*s->magnitude) * nb_magnitude);
-    } else {
-        if (s->nb_freq != s->nb_magnitude || s->nb_freq < 2) {
-            av_log(ctx, AV_LOG_ERROR, "Number of bands and gains must be same and >= 2.\n");
-            return AVERROR(EINVAL);
-        }
-
-        s->freq = av_calloc(s->nb_magnitude+1, sizeof(*s->freq));
-        s->magnitude = av_calloc(s->nb_magnitude+1, sizeof(*s->magnitude));
-        if (!s->magnitude || !s->freq)
-            return AVERROR(ENOMEM);
-
-        memcpy(s->freq, s->freq_points_opt, sizeof(*s->freq) * s->nb_magnitude);
-        memcpy(s->magnitude, s->magnitude_opt, sizeof(*s->magnitude) * s->nb_magnitude);
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_FLT:
+        return config_output_flt(outlink);
+    case AV_SAMPLE_FMT_DBL:
+        return config_output_dbl(outlink);
+    default:
+        return AVERROR_BUG;
     }
-
-    s->freq[s->nb_freq] = outlink->sample_rate * 0.5f;
-    s->magnitude[s->nb_freq] = s->magnitude[s->nb_freq-1];
-
-    fft_size = s->nb_taps * 2;
-    factor = FFMIN(outlink->sample_rate * 0.5f, s->freq[s->nb_freq - 1]) / (float)s->nb_taps;
-    asize = FFALIGN(fft_size, av_cpu_max_align());
-    s->complexf = av_calloc(asize * 2, sizeof(*s->complexf));
-    if (!s->complexf)
-        return AVERROR(ENOMEM);
-
-    scale = 1.f;
-    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, AV_TX_FLOAT_FFT, 1, fft_size, &scale, 0);
-    if (ret < 0)
-        return ret;
-
-    s->taps = av_calloc(s->nb_taps, sizeof(*s->taps));
-    if (!s->taps)
-        return AVERROR(ENOMEM);
-
-    eq_interp(s->complexf, s->freq, s->magnitude, s->nb_freq, s->interp, s->nb_taps, factor);
-
-    for (int i = 0; i < fft_size; i++)
-        s->complexf[i].re = ff_exp10f(s->complexf[i].re / 20.f);
-
-    if (s->phaset) {
-        const float threshold = FLT_MIN;
-        const float logt = logf(threshold);
-
-        scale = 1.f;
-        ret = av_tx_init(&s->tx_ctx, &s->tx_fn, AV_TX_FLOAT_FFT, 0, fft_size, &scale, 0);
-        if (ret < 0)
-            return ret;
-
-        for (int i = 0; i < fft_size; i++)
-            s->complexf[i].re = s->complexf[i].re < threshold ? logt : logf(s->complexf[i].re);
-
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
-        for (int i = 0; i < fft_size; i++) {
-            s->complexf[i + asize].re /= fft_size;
-            s->complexf[i + asize].im /= fft_size;
-        }
-
-        for (int i = 1; i < s->nb_taps; i++) {
-            s->complexf[asize + i].re += s->complexf[asize + fft_size - i].re;
-            s->complexf[asize + i].im -= s->complexf[asize + fft_size - i].im;
-            s->complexf[asize + fft_size - i].re = 0.f;
-            s->complexf[asize + fft_size - i].im = 0.f;
-        }
-        s->complexf[asize + s->nb_taps - 1].im *= -1.f;
-
-        s->tx_fn(s->tx_ctx, s->complexf, s->complexf + asize, sizeof(AVComplexFloat));
-
-        for (int i = 0; i < fft_size; i++) {
-            float eR = expf(s->complexf[i].re);
-
-            s->complexf[i].re = eR * cosf(s->complexf[i].im);
-            s->complexf[i].im = eR * sinf(s->complexf[i].im);
-        }
-
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
-
-        for (int i = 0; i < s->nb_taps; i++)
-            s->taps[i] = s->complexf[i + asize].re / fft_size;
-    } else {
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
-
-        middle = s->nb_taps / 2;
-        for (int i = 0; i < middle; i++) {
-            s->taps[middle - i] = s->complexf[i + asize].re / fft_size;
-            s->taps[middle + i] = s->complexf[i + asize].re / fft_size;
-        }
-    }
-
-    s->pts = 0;
 
     return 0;
 }
@@ -389,7 +210,14 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    memcpy(frame->data[0], s->taps + s->pts, nb_samples * sizeof(float));
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_FLT:
+        memcpy(frame->data[0], (float *)s->taps + s->pts, nb_samples * sizeof(float));
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        memcpy(frame->data[0], (double *)s->taps + s->pts, nb_samples * sizeof(double));
+        break;
+    }
 
     frame->pts = s->pts;
     s->pts    += nb_samples;
@@ -404,6 +232,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->freq);
     av_freep(&s->magnitude);
     av_freep(&s->complexf);
+
     av_tx_uninit(&s->tx_ctx);
     av_tx_uninit(&s->itx_ctx);
 }
