@@ -58,6 +58,7 @@ extern const FFFilter ff_af_afdelay;
 extern const FFFilter ff_af_afftdn;
 extern const FFFilter ff_af_afftfilt;
 extern const FFFilter ff_af_afir;
+extern const FFFilter ff_af_afirgen;
 extern const FFFilter ff_af_afirphase;
 extern const FFFilter ff_af_aformat;
 extern const FFFilter ff_af_afreqshift;

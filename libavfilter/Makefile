@@ -72,6 +72,7 @@ OBJS-$(CONFIG_AFDELAY_FILTER)                += af_afdelay.o
 OBJS-$(CONFIG_AFFTDN_FILTER)                 += af_afftdn.o
 OBJS-$(CONFIG_AFFTFILT_FILTER)               += af_afftfilt.o
 OBJS-$(CONFIG_AFIR_FILTER)                   += af_afir.o
+OBJS-$(CONFIG_AFIRGEN_FILTER)                += af_afirgen.o
 OBJS-$(CONFIG_AFIRPHASE_FILTER)              += af_afirphase.o
 OBJS-$(CONFIG_AFORMAT_FILTER)                += af_aformat.o
 OBJS-$(CONFIG_AFREQSHIFT_FILTER)             += af_afreqshift.o
