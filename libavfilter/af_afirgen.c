@@ -51,7 +51,7 @@ typedef struct AFIRGenContext {
     AVTXContext *tx;
     av_tx_fn tx_fn;
 
-    double *in[2];          ///< collected input samples: 0 = magnitude [dB], 1 = phase [rad]
+    AVFrame *in[2];         ///< collected input samples: 0 = magnitude [dB], 1 = phase [rad]
     int nb_in[2];
     int eof[2];
     int64_t eof_pts;
@@ -97,12 +97,6 @@ static av_cold int init(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
-    for (int i = 0; i < 2; i++) {
-        s->in[i] = av_calloc(s->size, sizeof(*s->in[i]));
-        if (!s->in[i])
-            return AVERROR(ENOMEM);
-    }
-
     s->spec = av_calloc(s->size / 2 + 1, sizeof(*s->spec));
     s->ir   = av_calloc(s->size, sizeof(*s->ir));
     s->win  = av_calloc(s->taps, sizeof(*s->win));
@@ -128,46 +122,31 @@ static av_cold void uninit(AVFilterContext *ctx)
     AFIRGenContext *s = ctx->priv;
 
     av_tx_uninit(&s->tx);
-    av_freep(&s->in[0]);
-    av_freep(&s->in[1]);
+    av_frame_free(&s->in[0]);
+    av_frame_free(&s->in[1]);
     av_freep(&s->spec);
     av_freep(&s->ir);
     av_freep(&s->win);
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
-{
-    static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE
-    };
-    AVFilterChannelLayouts *mono = NULL;
-    int ret;
-
-    ret = ff_add_channel_layout(&mono, &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO);
-    if (ret < 0)
-        return ret;
-
-    for (int i = 0; i < ctx->nb_inputs; i++) {
-        ret = ff_channel_layouts_ref(mono, &cfg_in[i]->channel_layouts);
-        if (ret < 0)
-            return ret;
-    }
-
-    ret = ff_channel_layouts_ref(mono, &cfg_out[0]->channel_layouts);
-    if (ret < 0)
-        return ret;
-
-    return ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
-}
-
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
+    AFIRGenContext *s = ctx->priv;
 
     outlink->sample_rate = ctx->inputs[0]->sample_rate;
     outlink->time_base   = (AVRational){ 1, outlink->sample_rate };
+
+    for (int i = 0; i < 2; i++) {
+        s->in[i] = av_frame_alloc();
+        if (!s->in[i])
+            return AVERROR(ENOMEM);
+
+        s->in[i]->nb_samples = s->size;
+        int ret = ff_filter_get_buffer(ctx, s->in[i]);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
 }
@@ -175,7 +154,6 @@ static int config_output(AVFilterLink *outlink)
 static int append_frame(AVFilterContext *ctx, int idx, const AVFrame *frame)
 {
     AFIRGenContext *s = ctx->priv;
-    const double *src = (const double *)frame->extended_data[0];
     static const char *const names[2] = { "magnitude", "phase" };
     const int nb_samples = frame->nb_samples;
 
@@ -185,16 +163,22 @@ static int append_frame(AVFilterContext *ctx, int idx, const AVFrame *frame)
         return AVERROR(EINVAL);
     }
 
-    for (int n = 0; n < nb_samples; n++) {
-        double v = src[n];
+    for (int ch = 0; ch < frame->ch_layout.nb_channels; ch++) {
+        const double *src = (const double *)frame->extended_data[ch];
+        double *dst = (double *)s->in[idx]->extended_data[ch];
 
-        if (idx == 0 ? (isnan(v) || v == INFINITY) : !isfinite(v)) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid (non-finite) %s sample at index %d.\n",
-                   names[idx], s->nb_in[idx] + n);
-            return AVERROR_INVALIDDATA;
+        for (int n = 0; n < nb_samples; n++) {
+            double v = src[n];
+
+            if (idx == 0 ? (isnan(v) || v == INFINITY) : !isfinite(v)) {
+                av_log(ctx, AV_LOG_ERROR, "Invalid (non-finite) %s sample at index %d, channel %d.\n",
+                       names[idx], s->nb_in[idx] + n, ch);
+                return AVERROR_INVALIDDATA;
+            }
+
+            // -inf dB is legal (zero gain); floor it so interpolation stays finite
+            dst[s->nb_in[idx] + n] = idx == 0 ? FFMAX(v, -400.0) : v;
         }
-        // -inf dB is legal (zero gain); floor it so interpolation stays finite
-        s->in[idx][s->nb_in[idx] + n] = idx == 0 ? FFMAX(v, -400.0) : v;
     }
 
     s->nb_in[idx] += nb_samples;
@@ -224,61 +208,69 @@ static int design_and_send(AVFilterContext *ctx)
         return AVERROR(EINVAL);
     }
 
-    for (int k = 0; k < nb_bins; k++) {
-        const double pos = M > 1 ? (double)k * (M - 1) / (s->size / 2) : 0.0;
-        const int i0 = FFMIN((int)pos, M - 1);
-        const int i1 = FFMIN(i0 + 1, M - 1);
-        const double t = pos - i0;
-        const double db = s->in[0][i0] * (1.0 - t) + s->in[0][i1] * t;
-        double ph = s->in[1][i0] * (1.0 - t) + s->in[1][i1] * t;
-        const double mag = exp(db * (M_LN10 / 20.0));
-
-        if (!s->phase_has_delay)
-            ph -= 2.0 * M_PI * k / s->size * delay;   // centre the response
-
-        s->spec[k].re = mag * cos(ph);
-        s->spec[k].im = mag * sin(ph);
-    }
-
-    s->spec[0].im = 0.0;                    // DC and Nyquist bins of a real
-    s->spec[nb_bins - 1].im = 0.0;          // signal are purely real
-
-    s->tx_fn(s->tx, s->ir, s->spec, sizeof(*s->spec));
-
-    // Time-domain aliasing check: the response is centred at `delay`, so the
-    // point furthest away (circularly) is delay + size/2.
-    for (int n = 0; n < s->size; n++)
-        peak = FFMAX(peak, fabs(s->ir[n]));
-    {
-        const int centre = (int)lrint(delay + s->size / 2) % s->size;
-        const int half = FFMAX(1, s->size / 40);
-
-        for (int j = -half; j <= half; j++)
-            tail = FFMAX(tail, fabs(s->ir[((centre + j) % s->size + s->size) % s->size]));
-    }
-
-    if (peak <= 0.0) {
-        av_log(ctx, AV_LOG_WARNING, "Target response is all zero.\n");
-    } else {
-        const double alias_db = 20.0 * log10(FFMAX(tail, 1e-300) / peak);
-
-        av_log(ctx, AV_LOG_INFO, "%d input samples, FFT size %d, %d taps, "
-               "delay %.1f samples, far-end impulse level %.1f dB.\n",
-               M, s->size, s->taps, delay, alias_db);
-        if (alias_db > ALIAS_WARN_DB)
-            av_log(ctx, AV_LOG_WARNING, "Impulse response only decays to %.1f dB "
-                   "at the far end of the FFT: time-domain aliasing is likely. "
-                   "Increase 'size' or smooth sharp features in the inputs.\n",
-                   alias_db);
-    }
-
     out = ff_get_audio_buffer(outlink, s->taps);
     if (!out)
         return AVERROR(ENOMEM);
 
-    dst = (double *)out->extended_data[0];
-    for (int n = 0; n < s->taps; n++)
-        dst[n] = s->ir[n] * s->win[n];
+    for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
+        const double *phase = (const double *)s->in[1]->extended_data[ch];
+        const double *magn = (const double *)s->in[0]->extended_data[ch];
+
+        for (int k = 0; k < nb_bins; k++) {
+            const double pos = M > 1 ? (double)k * (M - 1) / (s->size / 2) : 0.0;
+            const int i0 = FFMIN((int)pos, M - 1);
+            const int i1 = FFMIN(i0 + 1, M - 1);
+            const double t = pos - i0;
+            const double db = magn[i0] * (1.0 - t) + magn[i1] * t;
+            double ph = phase[i0] * (1.0 - t) + phase[i1] * t;
+            const double mag = exp(db * (M_LN10 / 20.0));
+
+            if (!s->phase_has_delay)
+                ph -= 2.0 * M_PI * k / s->size * delay;   // centre the response
+
+            s->spec[k].re = mag * cos(ph);
+            s->spec[k].im = mag * sin(ph);
+        }
+
+        s->spec[0].im = 0.0;                    // DC and Nyquist bins of a real
+        s->spec[nb_bins - 1].im = 0.0;          // signal are purely real
+
+        s->tx_fn(s->tx, s->ir, s->spec, sizeof(*s->spec));
+
+        // Time-domain aliasing check: the response is centred at `delay`, so the
+        // point furthest away (circularly) is delay + size/2.
+        for (int n = 0; n < s->size; n++)
+            peak = FFMAX(peak, fabs(s->ir[n]));
+        {
+            const int centre = (int)lrint(delay + s->size / 2) % s->size;
+            const int half = FFMAX(1, s->size / 40);
+
+            for (int j = -half; j <= half; j++)
+                tail = FFMAX(tail, fabs(s->ir[((centre + j) % s->size + s->size) % s->size]));
+        }
+
+        if (peak <= 0.0) {
+            av_log(ctx, AV_LOG_WARNING, "Target response is all zero for %d channel.\n", ch);
+        } else {
+            const double alias_db = 20.0 * log10(FFMAX(tail, 1e-300) / peak);
+
+            av_log(ctx, AV_LOG_INFO, "channel %d, %d input samples, FFT size %d, %d taps, "
+                   "delay %.1f samples, far-end impulse level %.1f dB.\n",
+                   ch, M, s->size, s->taps, delay, alias_db);
+            if (alias_db > ALIAS_WARN_DB)
+                av_log(ctx, AV_LOG_WARNING, "Channel %d impulse response only decays to %.1f dB "
+                       "at the far end of the FFT: time-domain aliasing is likely. "
+                       "Increase 'size' or smooth sharp features in the inputs.\n",
+                       ch, alias_db);
+        }
+
+        double *ir = s->ir;
+        const double *win = s->win;
+        dst = (double *)out->extended_data[ch];
+        for (int n = 0; n < s->taps; n++)
+            dst[n] = ir[n] * win[n];
+    }
+
     out->pts = 0;
 
     return ff_filter_frame(outlink, out);
@@ -367,5 +359,5 @@ const FFFilter ff_af_afirgen = {
     .activate      = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
 };
