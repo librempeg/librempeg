@@ -372,6 +372,7 @@ static void lcevc_free(AVRefStructOpaque unused, void *obj)
     av_freep(&lcevc->frag);
     ff_cbs_close(&lcevc->cbc);
     av_refstruct_pool_uninit(&lcevc->frame_pool);
+    av_opt_free(lcevc);
     memset(lcevc, 0, sizeof(*lcevc));
 }
 
@@ -605,11 +606,12 @@ int ff_lcevc_alloc(FFLCEVCContext **plcevc, AVDictionary **options, int loglevel
 
     ret = av_opt_set_dict2(lcevc, options, 0);
     if (ret < 0)
-        return ret;
+        goto fail;
 
     if (t = av_dict_iterate(*options, NULL)) {
         av_log(NULL, AV_LOG_FATAL, "liblcevc-dec option %s not found.\n", t->key);
-        return AVERROR_OPTION_NOT_FOUND;
+        ret = AVERROR_OPTION_NOT_FOUND;
+        goto fail;
     }
 
     lcevc->frag = av_mallocz(sizeof(*lcevc->frag));

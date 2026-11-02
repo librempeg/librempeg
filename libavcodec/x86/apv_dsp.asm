@@ -22,62 +22,101 @@
 
 SECTION_RODATA 32
 
-; Full matrix for row transform.
-tmatrix_row:
-    dw  64,  89,  84,  75,  64,  50,  35,  18
-    dw  64, -18, -84,  50,  64, -75, -35,  89
-    dw  64,  75,  35, -18, -64, -89, -84, -50
-    dw  64, -50, -35,  89, -64, -18,  84, -75
-    dw  64,  50, -35, -89, -64,  18,  84,  75
-    dw  64, -75,  35,  18, -64,  89, -84,  50
-    dw  64,  18, -84, -50,  64,  75, -35, -89
-    dw  64, -89,  84, -75,  64, -50,  35, -18
+; Constant pairs for the 1-D transform butterfly, expanded so that they
+; can be used directly as memory operands.
+tmatrix_even_a: times 8 dw  64,  64
+tmatrix_even_b: times 8 dw  64, -64
+tmatrix_even_c: times 8 dw  84,  35
+tmatrix_even_d: times 8 dw  35, -84
+tmatrix_odd_0a: times 8 dw  89,  50
+tmatrix_odd_0b: times 8 dw  75,  18
+tmatrix_odd_1a: times 8 dw  75, -89
+tmatrix_odd_1b: times 8 dw -18, -50
+tmatrix_odd_2a: times 8 dw  50,  18
+tmatrix_odd_2b: times 8 dw -89,  75
+tmatrix_odd_3a: times 8 dw  18,  75
+tmatrix_odd_3b: times 8 dw -50, -89
 
-; Constant pairs for broadcast in column transform.
-tmatrix_col_even:
-    dw  64,  64,  64, -64
-    dw  84,  35,  35, -84
-tmatrix_col_odd:
-    dw  89,  75,  50,  18
-    dw  75, -18, -89, -50
-    dw  50, -89,  18,  75
-    dw  18, -50,  75, -89
-
-; Memory targets for vpbroadcastd (register version requires AVX512).
-cextern pd_1
 cextern pd_64
+
+; Offsets in the constants buffer.
+; This must match APVConstantsAVX2 in apv_dsp_init.c.
+%define CONST_QMATRIX        0
+%define CONST_DEQUANT_ROUND  256
+%define CONST_OUTPUT_ROUND   288
+%define CONST_QP_SHIFT       320
+%define CONST_BD_SHIFT       324
+%define CONST_OUTPUT_SHIFT   328
 
 SECTION .text
 
 ; void ff_apv_decode_transquant_avx2(void *output,
 ;                                    ptrdiff_t pitch,
 ;                                    const int16_t *input,
-;                                    const int16_t *qmatrix,
-;                                    int bit_depth,
-;                                    int qp_shift);
+;                                    const void *constants);
 
 INIT_YMM avx2
 
-cglobal apv_decode_transquant, 5, 7, 16, output, pitch, input, qmatrix, bit_depth, qp_shift, tmp
+; One pass of the 1-D DCT, as a butterfly.
+; 16-bit input rows in m12-m15 as pairs 04 26 15 37.
+; 32-bit output rows in m8-m15.
+; The rounding constant is already added to the output.
 
-    ; Load input and dequantise
+%macro TRANSFORM_PASS 1 ; (rounding constant)
+    ; Even part, from rows 0, 2, 4 and 6.
+    vpmaddwd  m8,  m12, [tmatrix_even_a]
+    vpmaddwd  m9,  m12, [tmatrix_even_b]
+    vpmaddwd  m10, m13, [tmatrix_even_c]
+    vpmaddwd  m11, m13, [tmatrix_even_d]
+    vpaddd    m8,  m8,  %1
+    vpaddd    m9,  m9,  %1
+    vpaddd    m0,  m8,  m10
+    vpaddd    m1,  m9,  m11
+    vpsubd    m2,  m9,  m11
+    vpsubd    m3,  m8,  m10
 
-    vpbroadcastd  m10, [pd_1]
-    lea       tmpd, [bit_depthd - 2]
-    movd      xm8, qp_shiftm
-    movd      xm9, tmpd
-    vpslld    m10, m10, xm9
-    vpsrld    m10, m10, 1
+    ; Odd part, from rows 1, 3, 5 and 7.
+    vpmaddwd  m8,  m14, [tmatrix_odd_0a]
+    vpmaddwd  m9,  m15, [tmatrix_odd_0b]
+    vpmaddwd  m10, m14, [tmatrix_odd_1a]
+    vpmaddwd  m11, m15, [tmatrix_odd_1b]
+    vpaddd    m4,  m8,  m9
+    vpaddd    m5,  m10, m11
+    vpmaddwd  m8,  m14, [tmatrix_odd_2a]
+    vpmaddwd  m9,  m15, [tmatrix_odd_2b]
+    vpmaddwd  m10, m14, [tmatrix_odd_3a]
+    vpmaddwd  m11, m15, [tmatrix_odd_3b]
+    vpaddd    m6,  m8,  m9
+    vpaddd    m7,  m10, m11
+
+    ; Combine.
+    vpaddd    m8,  m0,  m4
+    vpaddd    m9,  m1,  m5
+    vpaddd    m10, m2,  m6
+    vpaddd    m11, m3,  m7
+    vpsubd    m12, m3,  m7
+    vpsubd    m13, m2,  m6
+    vpsubd    m14, m1,  m5
+    vpsubd    m15, m0,  m4
+%endmacro
+
+cglobal apv_decode_transquant, 4, 5, 16, output, pitch, input, constants, tmp
+
+    ; Load input and dequantise.  The qmatrix values are zero-extended
+    ; in the constants, so vpmaddwd with the sign-extended input gives
+    ; the product directly.
+
+    mova      m10, [constantsq + CONST_DEQUANT_ROUND]
+    movd      xm8, [constantsq + CONST_QP_SHIFT]
+    movd      xm9, [constantsq + CONST_BD_SHIFT]
 
     ; m8  = scalar qp_shift
     ; m9  = scalar bd_shift
     ; m10 = vector 1 << (bd_shift - 1)
-    ; m11 = qmatrix load
 
-%macro LOAD_AND_DEQUANT 2 ; (xmm input, constant offset)
-    vpmovsxwd m%1, [inputq   + %2]
-    vpmovsxwd m11, [qmatrixq + %2]
-    vpmaddwd  m%1, m%1, m11
+%macro LOAD_AND_DEQUANT 2 ; (register, constant offset)
+    vpmovsxwd m%1, [inputq + %2]
+    vpmaddwd  m%1, m%1, [constantsq + CONST_QMATRIX + 2 * %2]
     vpslld    m%1, m%1, xm8
     vpaddd    m%1, m%1, m10
     vpsrad    m%1, m%1, xm9
@@ -94,164 +133,123 @@ cglobal apv_decode_transquant, 5, 7, 16, output, pitch, input, qmatrix, bit_dept
     LOAD_AND_DEQUANT 7, 0x70
 
     ; mN = row N words 0 1 2 3 0 1 2 3 4 5 6 7 4 5 6 7
+    ; Interleave pairs of rows for the butterfly input.
 
-    ; Transform columns
-    ; This applies a 1-D DCT butterfly
+    vpunpcklwd m12, m0,  m4
+    vpunpcklwd m13, m2,  m6
+    vpunpcklwd m14, m1,  m5
+    vpunpcklwd m15, m3,  m7
 
-    vpunpcklwd  m12, m0,  m4
-    vpunpcklwd  m13, m2,  m6
-    vpunpcklwd  m14, m1,  m3
-    vpunpcklwd  m15, m5,  m7
+    ; Transform columns.
 
-    ; m12 = rows 0 and 4 interleaved
-    ; m13 = rows 2 and 6 interleaved
-    ; m14 = rows 1 and 3 interleaved
-    ; m15 = rows 5 and 7 interleaved
+    TRANSFORM_PASS [pd_64]
 
-    lea         tmpq, [tmatrix_col_even]
-    vpbroadcastd   m0, [tmpq + 0x00]
-    vpbroadcastd   m1, [tmpq + 0x04]
-    vpbroadcastd   m2, [tmpq + 0x08]
-    vpbroadcastd   m3, [tmpq + 0x0c]
+    ; Mid-transform normalisation.  The rounding constant was already
+    ; added by the transform pass; outputs here are fitted to 16 bits.
 
-    vpmaddwd  m4,  m12, m0
-    vpmaddwd  m5,  m12, m1
-    vpmaddwd  m6,  m13, m2
-    vpmaddwd  m7,  m13, m3
-    vpaddd    m8,  m4,  m6
-    vpaddd    m9,  m5,  m7
-    vpsubd    m10, m5,  m7
-    vpsubd    m11, m4,  m6
+    vpsrad    m8,  m8,  7
+    vpsrad    m9,  m9,  7
+    vpsrad    m10, m10, 7
+    vpsrad    m11, m11, 7
+    vpsrad    m12, m12, 7
+    vpsrad    m13, m13, 7
+    vpsrad    m14, m14, 7
+    vpsrad    m15, m15, 7
 
-    lea         tmpq, [tmatrix_col_odd]
-    vpbroadcastd   m0, [tmpq + 0x00]
-    vpbroadcastd   m1, [tmpq + 0x04]
-    vpbroadcastd   m2, [tmpq + 0x08]
-    vpbroadcastd   m3, [tmpq + 0x0c]
+    ; Transpose, recombining into the paired rows for the butterfly.
 
-    vpmaddwd  m4,  m14, m0
-    vpmaddwd  m5,  m15, m1
-    vpmaddwd  m6,  m14, m2
-    vpmaddwd  m7,  m15, m3
-    vpaddd    m12, m4,  m5
-    vpaddd    m13, m6,  m7
+    vpackssdw m0,  m8,  m9
+    vpackssdw m1,  m10, m11
+    vpackssdw m2,  m12, m13
+    vpackssdw m3,  m14, m15
 
-    vpbroadcastd   m0, [tmpq + 0x10]
-    vpbroadcastd   m1, [tmpq + 0x14]
-    vpbroadcastd   m2, [tmpq + 0x18]
-    vpbroadcastd   m3, [tmpq + 0x1c]
+    vperm2i128 m4, m0, m2, 0x20
+    vperm2i128 m5, m1, m3, 0x20
+    vperm2i128 m6, m0, m2, 0x31
+    vperm2i128 m7, m1, m3, 0x31
 
-    vpmaddwd  m4,  m14, m0
-    vpmaddwd  m5,  m15, m1
-    vpmaddwd  m6,  m14, m2
-    vpmaddwd  m7,  m15, m3
-    vpaddd    m14, m4,  m5
-    vpaddd    m15, m6,  m7
+    vpslld    m8,  m6,  16
+    vpslld    m9,  m7,  16
+    vpsrld    m10, m4,  16
+    vpsrld    m11, m5,  16
+    vpblendw  m8,  m4,  m8,  0xaa
+    vpblendw  m9,  m5,  m9,  0xaa
+    vpblendw  m10, m10, m6,  0xaa
+    vpblendw  m11, m11, m7,  0xaa
 
-    vpaddd    m0,  m8,  m12
-    vpaddd    m1,  m9,  m13
-    vpaddd    m2,  m10, m14
-    vpaddd    m3,  m11, m15
-    vpsubd    m4,  m11, m15
-    vpsubd    m5,  m10, m14
-    vpsubd    m6,  m9,  m13
-    vpsubd    m7,  m8,  m12
+    vshufps   m12, m8,  m9,  q2020
+    vshufps   m13, m8,  m9,  q3131
+    vshufps   m14, m10, m11, q2020
+    vshufps   m15, m10, m11, q3131
 
-    ; Mid-transform normalisation
-    ; Note that outputs here are fitted to 16 bits
+    ; Transform rows.
 
-    vpbroadcastd  m8, [pd_64]
+    TRANSFORM_PASS [constantsq + CONST_OUTPUT_ROUND]
 
-%macro NORMALISE 1
-    vpaddd    m%1, m%1, m8
-    vpsrad    m%1, m%1, 7
-    vpackssdw m%1, m%1, m%1
-    vpermq    m%1, m%1, q3120
-%endmacro
+    ; Renormalise, clip and store output.  The rounding constant was
+    ; already added by the transform pass, and here we split the shift
+    ; on either side of the pack (20 - bit_depth -> 4 and 16 - bit_depth)
+    ; so that the saturation precisely captures the clip we want.
 
-    NORMALISE 0
-    NORMALISE 1
-    NORMALISE 2
-    NORMALISE 3
-    NORMALISE 4
-    NORMALISE 5
-    NORMALISE 6
-    NORMALISE 7
+    movd      xm0, [constantsq + CONST_OUTPUT_SHIFT]
 
-    ; mN = row N words 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+    vpsrad    m8,  m8,  4
+    vpsrad    m9,  m9,  4
+    vpsrad    m10, m10, 4
+    vpsrad    m11, m11, 4
+    vpsrad    m12, m12, 4
+    vpsrad    m13, m13, 4
+    vpsrad    m14, m14, 4
+    vpsrad    m15, m15, 4
 
-    ; Transform rows
-    ; This multiplies the rows directly by the transform matrix,
-    ; avoiding the need to transpose anything
+    vpackusdw m3,  m8,  m12
+    vpackusdw m4,  m9,  m13
+    vpackusdw m5,  m10, m14
+    vpackusdw m6,  m11, m15
 
-    lea       tmpq, [tmatrix_row]
-    mova      m12, [tmpq + 0x00]
-    mova      m13, [tmpq + 0x20]
-    mova      m14, [tmpq + 0x40]
-    mova      m15, [tmpq + 0x60]
+    vpsrlw    m3,  m3,  xm0
+    vpsrlw    m4,  m4,  xm0
+    vpsrlw    m5,  m5,  xm0
+    vpsrlw    m6,  m6,  xm0
 
-%macro TRANS_ROW_STEP 1
-    vpmaddwd  m8,  m%1, m12
-    vpmaddwd  m9,  m%1, m13
-    vpmaddwd  m10, m%1, m14
-    vpmaddwd  m11, m%1, m15
-    vphaddd   m8,  m8,  m9
-    vphaddd   m10, m10, m11
-    vphaddd   m%1, m8,  m10
-%endmacro
+    ; Transpose back for output.
 
-    TRANS_ROW_STEP 0
-    TRANS_ROW_STEP 1
-    TRANS_ROW_STEP 2
-    TRANS_ROW_STEP 3
-    TRANS_ROW_STEP 4
-    TRANS_ROW_STEP 5
-    TRANS_ROW_STEP 6
-    TRANS_ROW_STEP 7
+    vpunpcklwd m7,  m3, m4
+    vpunpckhwd m8,  m3, m4
+    vpunpcklwd m9,  m5, m6
+    vpunpckhwd m10, m5, m6
 
-    ; Renormalise, clip and store output
+    vpunpckldq m11, m7, m9
+    vpunpckhdq m12, m7, m9
+    vpunpckldq m13, m8, m10
+    vpunpckhdq m14, m8, m10
 
-    vpbroadcastd  m14, [pd_1]
-    mov       tmpd, 20
-    sub       tmpd, bit_depthd
-    movd      xm9, tmpd
-    dec       tmpd
-    movd      xm13, tmpd
-    movd      xm15, bit_depthd
-    vpslld    m8,  m14, xm13
-    vpslld    m12, m14, xm15
-    vpsrld    m10, m12, 1
-    vpsubd    m12, m12, m14
+    vpunpcklqdq m0, m11, m13
+    vpunpckhqdq m1, m11, m13
+    vpunpcklqdq m2, m12, m14
+    vpunpckhqdq m3, m12, m14
 
-    ; m8  = vector 1 << (bd_shift - 1)
-    ; m9  = scalar bd_shift
-    ; m10 = vector 1 << (bit_depth - 1)
-    ; m12 = vector (1 << bit_depth) - 1
+    ; mN = rows N and N+4
 
-%macro NORMALISE_AND_STORE_10 2
-    vpaddd    m%1, m%1, m8
-    vpaddd    m%2, m%2, m8
-    vpsrad    m%1, m%1, xm9
-    vpsrad    m%2, m%2, xm9
-    vpaddd    m%1, m%1, m10
-    vpaddd    m%2, m%2, m10
-    vpminsd   m%1, m%1, m12
-    vpminsd   m%2, m%2, m12
-    ; m%1 = A0-3 A4-7
-    ; m%2 = B0-3 B4-7
-    vpackusdw m%1, m%1, m%2
-    ; m%1 = A0-3 B0-3 A4-7 B4-7
-    vpermq    m%1, m%1, q3120
-    ; m%1 = A0-3 A4-7 B0-3 B4-7
-    mova      [outputq], xm%1
-    vextracti128  [outputq + pitchq], m%1, 1
-    lea       outputq, [outputq + 2*pitchq]
-%endmacro
+    ; Indexing from outputq reaches rows 0, 1, 2 and 4; indexing from a
+    ; second base at row 7 with the pitch negated reaches rows 7, 6, 5
+    ; and 3.  The negation means every store relative to outputq has to
+    ; come first.
 
-    NORMALISE_AND_STORE_10 0, 1
-    NORMALISE_AND_STORE_10 2, 3
-    NORMALISE_AND_STORE_10 4, 5
-    NORMALISE_AND_STORE_10 6, 7
+    lea       tmpq, [outputq + 8*pitchq]
+    sub       tmpq, pitchq
+
+    mova          [outputq],              xm0     ; row 0
+    mova          [outputq +   pitchq],   xm1     ; row 1
+    mova          [outputq + 2*pitchq],   xm2     ; row 2
+    vextracti128  [outputq + 4*pitchq],   m0, 1   ; row 4
+
+    neg       pitchq
+
+    mova          [tmpq    + 4*pitchq],   xm3     ; row 3
+    vextracti128  [tmpq    + 2*pitchq],   m1, 1   ; row 5
+    vextracti128  [tmpq    +   pitchq],   m2, 1   ; row 6
+    vextracti128  [tmpq],                 m3, 1   ; row 7
 
     RET
 

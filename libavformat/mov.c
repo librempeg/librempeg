@@ -11012,6 +11012,12 @@ static int read_tfra(MOVContext *mov, AVIOContext *f)
     if (avio_rb32(f) != MKBETAG('t', 'f', 'r', 'a')) {
         return 1;
     }
+    /* A tfra box can not be smaller than its 24-byte header. A size of 0
+     * would make mov_read_mfra() re-read the same box forever. */
+    if (size < 24) {
+        av_log(mov->fc, AV_LOG_ERROR, "Invalid tfra size %"PRIu32"\n", size);
+        return AVERROR_INVALIDDATA;
+    }
     av_log(mov->fc, AV_LOG_VERBOSE, "found tfra\n");
 
     version = avio_r8(f);
@@ -11655,7 +11661,7 @@ static int mov_parse_heif_layered_video_tmap(AVFormatContext *s, const HEIFGroup
 
     payload = av_malloc(tmap->item->extent_length);
     if (!payload) {
-        return AVERROR(ENOMEM);
+        err = AVERROR(ENOMEM);
         goto fail;
     }
 
