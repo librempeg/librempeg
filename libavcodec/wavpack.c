@@ -60,6 +60,8 @@
 #define MAX_HISTORY_BINS    (1 << MAX_HISTORY_BITS)
 #define MAX_BIN_BYTES       1280    // for value_lookup, per bin (2k - 512 - 256)
 
+#define LIMIT_ONES 16
+
 typedef enum {
     MODULATION_PCM,     // pulse code modulation
     MODULATION_DSD      // pulse density modulation (aka DSD)
@@ -349,13 +351,19 @@ static int wv_get_value_v2(WavpackFrameContext *frame1, WavpackFrameContext *fra
             }
         } else {
             t = get_unary_0_33(gb1);
+            if (t == 33)
+                return 0x80000000;
             if (t >= 2) {
-                if (t >= 32 || get_bits_left(gb1) < t - 1)
-                    goto error;
+                if (t >= 32 || get_bits_left(gb1) < t - 1) {
+                    gb1->index = 0;
+                    //goto error;
+                }
                 t = get_bits_long(gb1, t - 1) | (1 << (t - 1));
             } else {
-                if (get_bits_left(gb1) < 0)
-                    goto error;
+                if (get_bits_left(gb1) < 0) {
+                    gb1->index = 0;
+                    //goto error;
+                }
             }
             frame1->zeroes = t;
             if (frame1->zeroes) {
@@ -370,20 +378,31 @@ static int wv_get_value_v2(WavpackFrameContext *frame1, WavpackFrameContext *fra
     if (frame1->zero) {
         t = frame1->zero = 0;
     } else {
-        t = get_unary_0_33(gb1);
-        if (get_bits_left(gb1) < 0)
-            goto error;
-        if (t == 16) {
+        t = get_unary(gb1, 0, (LIMIT_ONES + 1));
+        if (get_bits_left(gb1) < 0) {
+            gb1->index = 0;
+            //goto error;
+        }
+        if (t >= LIMIT_ONES) {
+            if (t == (LIMIT_ONES + 1))
+                return 0x80000000;
             t2 = get_unary_0_33(gb1);
+            if (t2 == 33)
+                return 0x80000000;
             if (t2 < 2) {
-                if (get_bits_left(gb1) < 0)
-                    goto error;
-                t += t2;
+                if (get_bits_left(gb1) < 0) {
+                    gb1->index = 0;
+                    //goto error;
+                }
+                t = t2;
             } else {
-                if (t2 >= 32 || get_bits_left(gb1) < t2 - 1)
-                    goto error;
+                if (t2 >= 32 || get_bits_left(gb1) < t2 - 1) {
+                    gb1->index = 0;
+                    //goto error;
+                }
                 t += get_bits_long(gb1, t2 - 1) | (1 << (t2 - 1));
             }
+            t += LIMIT_ONES;
         }
 
         if (frame1->one) {
@@ -436,13 +455,17 @@ static int wv_get_value_v2(WavpackFrameContext *frame1, WavpackFrameContext *fra
 
     if (!c->error_limit) {
         mid = get_tail(gb1, high) + low;
-        if (get_bits_left(gb1) <= 0)
-            goto error;
+        if (get_bits_left(gb1) <= 0) {
+            gb1->index = 0;
+            //goto error;
+        }
     } else {
         mid = (low * 2U + high + 1) >> 1;
         while (high > c->error_limit) {
-            if (get_bits_left(gb1) <= 0)
+            if (get_bits_left(gb1) <= 0) {
+                gb1->index = 0;
                 goto error;
+            }
             if (get_bits1(gb1)) {
                 high -= (mid - (unsigned)low);
                 low = mid;
@@ -456,8 +479,10 @@ static int wv_get_value_v2(WavpackFrameContext *frame1, WavpackFrameContext *fra
     if (frame2 && frame2->gb.buffer && c->error_limit) {
         gb2 = &frame2->gb;
         if (gb2) {
-            if (get_bits_left(gb2) <= 0)
-                goto error;
+            if (get_bits_left(gb2) <= 0) {
+                gb1->index = 0;
+                //goto error;
+            }
             value = get_tail(gb2, high) + low;
 
             if (last)
@@ -987,7 +1012,7 @@ static inline int wv_unpack_stereo_v2(WavpackFrameContext *frame1, WavpackFrameC
 
     for (i = 0; i < frame1->samples; i++) {
         if ((L = wv_get_value_v2(frame1, frame2, 0, &last[0])) == 0x80000000 ||
-            (R = wv_get_value_v2(frame1, frame2, 0, &last[0])) == 0x80000000)
+            (R = wv_get_value_v2(frame1, frame2, 1, &last[0])) == 0x80000000)
             break;
 
         if (frame1->frame_flags & WV_CROSS_DECORR) {
