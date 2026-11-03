@@ -126,6 +126,7 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
     a->cur_lsn      = a->start_lsn;
 
     if (sr_code != 0x04) {
+        avpriv_request_sample(s, "sample_rate code 0x%02X", sr_code);
         ret = AVERROR_INVALIDDATA;
         goto end;
     }
