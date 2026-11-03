@@ -177,8 +177,14 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
                 uint8_t title[256] = { 0 };
 
                 if (ttxt_pos) {
+                    int entries;
+
                     avio_seek(pb, ttxt_pos + offsets[i], SEEK_SET);
-                    if (avio_r8(pb) == 0x01) {
+                    entries = avio_r8(pb);
+                    if (entries == 0x01) {
+                        avio_skip(pb, 5);
+                        avio_get_str(pb, UINT16_MAX, title, sizeof(title));
+                    } else if (entries == 0x02) {
                         avio_skip(pb, 5);
                         avio_get_str(pb, UINT16_MAX, title, sizeof(title));
                     }
@@ -253,8 +259,7 @@ static int parse_sector(SACDArea *a)
         a->pi[i].len = get_bits(gb, 11);
     }
 
-    for (int i = 0; i < fic && dst; i++)
-        skip_bits_long(gb, 4 * 8);
+    skip_bits_long(gb, (3 + dst) * 8 * fic);
 
     a->n_pkt = pic;
     a->cur_pkt = 0;
