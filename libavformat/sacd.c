@@ -253,8 +253,7 @@ static int parse_sector(SACDArea *a)
         a->pi[i].len = get_bits(gb, 11);
     }
 
-    for (int i = 0; i < fic && dst; i++)
-        skip_bits_long(gb, 4 * 8);
+    skip_bits_long(gb, (3 + dst) * 8 * fic);
 
     a->n_pkt = pic;
     a->cur_pkt = 0;
