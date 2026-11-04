@@ -1,5 +1,6 @@
 # subsystems
 OBJS-$(CONFIG_AC3DSP)                   += aarch64/ac3dsp_init_aarch64.o
+OBJS-$(CONFIG_AUDIODSP)                 += aarch64/audiodsp_init.o
 OBJS-$(CONFIG_FDCTDSP)                  += aarch64/fdctdsp_init_aarch64.o
 OBJS-$(CONFIG_H264CHROMA)               += aarch64/h264chroma_init_aarch64.o
 OBJS-$(CONFIG_H264DSP)                  += aarch64/h264dsp_init_aarch64.o
@@ -8,6 +9,7 @@ OBJS-$(CONFIG_H264PRED)                 += aarch64/h264pred_init.o
 OBJS-$(CONFIG_H264QPEL)                 += aarch64/h264qpel_init_aarch64.o
 OBJS-$(CONFIG_HPELDSP)                  += aarch64/hpeldsp_init_aarch64.o
 OBJS-$(CONFIG_IDCTDSP)                  += aarch64/idctdsp_init_aarch64.o
+OBJS-$(CONFIG_LLVIDDSP)                 += aarch64/lossless_videodsp_init.o
 OBJS-$(CONFIG_ME_CMP)                   += aarch64/me_cmp_init_aarch64.o
 OBJS-$(CONFIG_MPEGAUDIODSP)             += aarch64/mpegaudiodsp_init.o
 OBJS-$(CONFIG_MPEGVIDEOENCDSP)          += aarch64/mpegvideoencdsp_init.o
@@ -47,6 +49,7 @@ ARMV8-OBJS-$(CONFIG_VIDEODSP)           += aarch64/videodsp.o
 NEON-OBJS-$(CONFIG_AAC_DECODER)         += aarch64/sbrdsp_neon.o
 NEON-OBJS-$(CONFIG_AAC_ENCODER)         += aarch64/aacencdsp_neon.o
 NEON-OBJS-$(CONFIG_AC3DSP)              += aarch64/ac3dsp_neon.o
+NEON-OBJS-$(CONFIG_AUDIODSP)            += aarch64/audiodsp_neon.o
 NEON-OBJS-$(CONFIG_FDCTDSP)             += aarch64/fdctdsp_neon.o
 NEON-OBJS-$(CONFIG_H264CHROMA)          += aarch64/h264cmc_neon.o
 NEON-OBJS-$(CONFIG_H264DSP)             += aarch64/h264dsp_neon.o              \
@@ -58,6 +61,7 @@ NEON-OBJS-$(CONFIG_HPELDSP)             += aarch64/hpeldsp_neon.o
 NEON-OBJS-$(CONFIG_HUFFYUVDSP)          += aarch64/huffyuvdsp_neon.o
 NEON-OBJS-$(CONFIG_IDCTDSP)             += aarch64/idctdsp_neon.o              \
                                            aarch64/simple_idct_neon.o
+NEON-OBJS-$(CONFIG_LLVIDDSP)            += aarch64/lossless_videodsp_neon.o
 NEON-OBJS-$(CONFIG_ME_CMP)              += aarch64/me_cmp_neon.o
 NEON-OBJS-$(CONFIG_MPEGAUDIODSP)        += aarch64/mpegaudiodsp_neon.o
 NEON-OBJS-$(CONFIG_MPEGVIDEOENCDSP)     += aarch64/mpegvideoencdsp_neon.o
