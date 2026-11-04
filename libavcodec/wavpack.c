@@ -464,7 +464,7 @@ static int wv_get_value_v2(WavpackFrameContext *frame1, WavpackFrameContext *fra
         while (high > c->error_limit) {
             if (get_bits_left(gb1) <= 0) {
                 gb1->index = 0;
-                goto error;
+                // goto error;
             }
             if (get_bits1(gb1)) {
                 high -= (mid - (unsigned)low);
@@ -502,7 +502,8 @@ error:
     if (ret <= 0) {
         av_log(frame1->avctx, AV_LOG_ERROR, "Too few bits (%d) left\n", ret);
     }
-    *last = 1;
+    if (last)
+        *last = 1;
     return 0;
 }
 
@@ -1012,7 +1013,7 @@ static inline int wv_unpack_stereo_v2(WavpackFrameContext *frame1, WavpackFrameC
 
     for (i = 0; i < frame1->samples; i++) {
         if ((L = wv_get_value_v2(frame1, frame2, 0, &last[0])) == 0x80000000 ||
-            (R = wv_get_value_v2(frame1, frame2, 1, &last[0])) == 0x80000000)
+            (R = wv_get_value_v2(frame1, frame2, 1, &last[1])) == 0x80000000)
             break;
 
         if (frame1->frame_flags & WV_CROSS_DECORR) {
