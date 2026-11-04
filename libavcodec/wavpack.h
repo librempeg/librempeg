@@ -32,30 +32,45 @@
 
 #define WV_HEADER_SIZE    32
 
+/* WavPack header flags */
+#define WV_BYTES_STORED   0x00000003 /* 1-4 bytes/sample */
 #define WV_MONO           0x00000004
+#define WV_HYBRID_MODE    0x00000008
 #define WV_JOINT_STEREO   0x00000010
 #define WV_CROSS_DECORR   0x00000020
+#define WV_HYBRID_SHAPE   0x00000040
 #define WV_FLOAT_DATA     0x00000080
 #define WV_INT32_DATA     0x00000100
-#define WV_FALSE_STEREO   0x40000000
-#define WV_DSD_DATA       0x80000000
-
-#define WV_HYBRID_MODE    0x00000008
-#define WV_HYBRID_SHAPE   0x00000008
 #define WV_HYBRID_BITRATE 0x00000200
 #define WV_HYBRID_BALANCE 0x00000400
 #define WV_INITIAL_BLOCK  0x00000800
 #define WV_FINAL_BLOCK    0x00001000
 
+#define WV_SHIFT_LSB 13
+#define WV_SHIFT_MASK (0x1fL << WV_SHIFT_LSB)
+
+#define WV_MAG_LSB 18
+#define WV_MAG_MASK (0x1fL << WV_MAG_LSB)
+
+#define WV_SRATE_LSB 23
+#define WV_SRATE_MASK (0xfL << WV_SRATE_LSB)
+
+#define WV_HAS_CHECKSUM   0x10000000
+#define WV_NEW_SHAPING    0x20000000
+#define WV_FALSE_STEREO   0x40000000
+#define WV_DSD_DATA       0x80000000
+
 #define WV_MONO_DATA    (WV_MONO | WV_FALSE_STEREO)
 
 #define WV_SINGLE_BLOCK (WV_INITIAL_BLOCK | WV_FINAL_BLOCK)
 
+/* WavPack float flags */
 #define WV_FLT_SHIFT_ONES 0x01
 #define WV_FLT_SHIFT_SAME 0x02
 #define WV_FLT_SHIFT_SENT 0x04
 #define WV_FLT_ZERO_SENT  0x08
 #define WV_FLT_ZERO_SIGN  0x10
+#define WV_FLT_EXCEPTIONS 0x20
 
 #define WV_MAX_CHANNELS   (1 << 12)
 #define WV_MAX_SAMPLES    150000
@@ -69,13 +84,13 @@ enum WP_ID_Flags {
 
 enum WP_ID {
     WP_ID_DUMMY = 0,
-    WP_ID_ENCINFO,
-    WP_ID_DECTERMS,
-    WP_ID_DECWEIGHTS,
-    WP_ID_DECSAMPLES,
-    WP_ID_ENTROPY,
-    WP_ID_HYBRID,
-    WP_ID_SHAPING,
+    WP_ID_ENCODER_INFO,
+    WP_ID_DECORR_TERMS,
+    WP_ID_DECORR_WEIGHTS,
+    WP_ID_DECORR_SAMPLES,
+    WP_ID_ENTROPY_VARS,
+    WP_ID_HYBRID_PROFILE,
+    WP_ID_SHAPING_WEIGHTS,
     WP_ID_FLOATINFO,
     WP_ID_INT32INFO,
     WP_ID_DATA,
@@ -83,7 +98,15 @@ enum WP_ID {
     WP_ID_EXTRABITS,
     WP_ID_CHANINFO,
     WP_ID_DSD_DATA,
+    WP_ID_CFG = 0x25,
+    WP_ID_MD5 = 0x26,
     WP_ID_SAMPLE_RATE = 0x27,
+    WP_ID_ALT_EXTENSION = 0x28,
+    WP_ID_ALT_MD5 = 0x29,
+    WP_ID_NEWCFG = 0x2a,
+    WP_ID_CHANIDENT = 0x2b,
+    WP_ID_WVX_NEW_BITSTREAM = 0x2c,
+    WP_ID_BLOCK_CHECKSUM = 0x2f,
 };
 
 typedef struct Decorr {
@@ -96,6 +119,12 @@ typedef struct Decorr {
     int sumA;
     int sumB;
 } Decorr;
+
+typedef struct WvDc {
+    int shaping_acc[2];
+    int shaping_delta[2];
+    int error[2];
+} WvDc;
 
 typedef struct WvChannel {
     int median[3];
