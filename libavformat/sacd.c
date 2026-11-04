@@ -149,6 +149,24 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     st->id = idx;
+
+    if (idx == 0) {
+        uint8_t text[SACD_SECTOR + 1] = { 0 };
+
+        if ((ret = read_sectors(s, NULL, MTOC_LSN+1, 1, text)) < 0)
+            return ret;
+
+        if (!memcmp(text, "SACDText", 8)) {
+            int album_title_pos  = AV_RB16(text + 16);
+            int album_artist_pos = AV_RB16(text + 18);
+
+            if (album_title_pos > 0 && album_title_pos < SACD_SECTOR)
+                av_dict_set(&s->metadata, "title",  text + album_title_pos,  0);
+            if (album_artist_pos > 0 && album_artist_pos < SACD_SECTOR)
+                av_dict_set(&s->metadata, "artist", text + album_artist_pos, 0);
+        }
+    }
+
     av_dict_set(&st->metadata, "title", idx ? "Multichannel" : "Stereo", 0);
 
     /* Chapters: only from the first area that has a track list */
