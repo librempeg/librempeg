@@ -294,8 +294,8 @@ OBJS-$(CONFIG_FITS_DEMUXER)              += fitsdec.o
 OBJS-$(CONFIG_FITS_MUXER)                += fitsenc.o
 OBJS-$(CONFIG_FLAC_DEMUXER)              += flacdec.o rawdec.o \
                                             flac_picture.o   \
-                                            oggparsevorbis.o \
                                             replaygain.o     \
+                                            vorbis/comment/reader.o \
                                             vorbis/comment/writer.o
 OBJS-$(CONFIG_FLAC_MUXER)                += flacenc.o flacenc_header.o \
                                             vorbis/comment/writer.o
@@ -484,11 +484,11 @@ OBJS-$(CONFIG_MACBINARY_DEMUXER)         += mov.o mov_chan.o mov_esds.o \
                                             dvdclut.o
 OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o  \
                                             flac_picture.o rmsipr.o \
-                                            oggparsevorbis.o vorbis/comment/writer.o \
+                                            vorbis/comment/reader.o vorbis/comment/writer.o \
                                             qtpalette.o replaygain.o dovi_isom.o
 OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
-                                            flacenc_header.o \
-                                            vorbis/comment.o wv.o dovi_isom.o
+                                            flacenc_header.o vorbis/comment/writer.o \
+                                            wv.o dovi_isom.o
 OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o pcm.o
 OBJS-$(CONFIG_MCC_DEMUXER)               += mccdec.o subtitles.o
 OBJS-$(CONFIG_MCC_MUXER)                 += mccenc.o
@@ -607,7 +607,8 @@ OBJS-$(CONFIG_OGG_DEMUXER)               += oggdec.o         \
                                             oggparsevorbis.o \
                                             oggparsevp8.o    \
                                             replaygain.o     \
-                                            vorbis/comment.o  \
+                                            vorbis/comment/reader.o \
+                                            vorbis/comment/writer.o \
                                             flac_picture.o
 OBJS-$(CONFIG_OGA_MUXER)                 += oggenc.o \
                                             vorbis/comment.o
@@ -783,18 +784,8 @@ OBJS-$(CONFIG_SHADELPCM_DEMUXER)         += shadelpcm.o pcm.o
 OBJS-$(CONFIG_SHORTEN_DEMUXER)           += shortendec.o rawdec.o
 OBJS-$(CONFIG_SIFF_DEMUXER)              += siff.o
 OBJS-$(CONFIG_SIMBIOSIS_IMX_DEMUXER)     += imx.o
-OBJS-$(CONFIG_SK_DEMUXER)                += oggdec.o         \
-                                            oggparsedirac.o  \
-                                            oggparseflac.o   \
-                                            oggparseogm.o    \
-                                            oggparseopus.o   \
-                                            oggparseskeleton.o \
-                                            oggparsespeex.o  \
-                                            oggparsetheora.o \
-                                            oggparsevorbis.o \
-                                            oggparsevp8.o    \
-                                            replaygain.o     \
-                                            vorbis/comment.o  \
+OBJS-$(CONFIG_SK_DEMUXER)                += replaygain.o            \
+                                            vorbis/comment/reader.o \
                                             flac_picture.o
 OBJS-$(CONFIG_SL3_DEMUXER)               += sl3.o pcm.o
 OBJS-$(CONFIG_SLN_DEMUXER)               += pcmdec.o pcm.o
