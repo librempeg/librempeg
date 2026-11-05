@@ -823,6 +823,7 @@ OBJS-$(CONFIG_TTML_ENCODER)            += ttmlenc.o ass_split.o
 OBJS-$(CONFIG_TTVIDEO_DECODER)         += ttvideo.o
 OBJS-$(CONFIG_TWINVQ_DECODER)          += twinvqdec.o twinvq.o
 OBJS-$(CONFIG_TXD_DECODER)             += txd.o
+OBJS-$(CONFIG_ULC_DECODER)             += ulcdec.o
 OBJS-$(CONFIG_ULTI_DECODER)            += ulti.o
 OBJS-$(CONFIG_UTK_DECODER)             += utkdec.o
 OBJS-$(CONFIG_UTK_R3_DECODER)          += utkdec.o
