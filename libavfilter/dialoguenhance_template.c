@@ -211,7 +211,7 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
+    const int nb_samples = FFMIN(overlap, FFMAX(s->in->nb_samples - doffset, 0));
     ftype vad;
 
     // shift in/out buffers

@@ -189,8 +189,8 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = ((ftype *)out->extended_data[1]) + doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
+    const int nb_samples = FFMIN(overlap, FFMAX(s->in->nb_samples - doffset, 0));
     fn(ThreadData) td;
 
     // shift in/out buffers
@@ -250,15 +250,15 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = 0;
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples);
     fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
     memmove(right_in, &right_in[overlap], offset * sizeof(*right_in));
 
-    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
-    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
+    memset(&left_in[offset], 0, overlap * sizeof(*left_in));
+    memset(&right_in[offset], 0, overlap * sizeof(*right_in));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
@@ -283,11 +283,11 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     fn(apply_window)(s, windowed_right, right_out, 1);
 
     if (ff_filter_disabled(ctx)) {
-        memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_in, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out_nb_samples * sizeof(*right_osamples));
     } else {
-        memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
     }
 
     return 0;

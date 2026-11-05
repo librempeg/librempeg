@@ -201,7 +201,8 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
                      const ftype *in_samples, ftype *out_samples,
                      ftype *in_frame, ftype *out_dist_frame,
                      ftype *windowed_frame, ftype *wiener_frame,
-                     ctype *spectrum_buf, ctype *ss0, ctype *ss1, ftype *sbb)
+                     ctype *spectrum_buf, ctype *ss0, ctype *ss1, ftype *sbb,
+                     const int nb_samples)
 {
     AudioWienerContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
@@ -280,9 +281,9 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     fn(apply_window)(s, wiener_frame, out_dist_frame, 1);
 
     if (ff_filter_disabled(ctx) || bypass)
-        memcpy(out_samples, in_frame, sizeof(*out_samples) * overlap);
+        memcpy(out_samples, in_frame, sizeof(*out_samples) * nb_samples);
     else
-        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * overlap);
+        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * nb_samples);
 
     memcpy(ss0, ss1, sizeof(*ss0) * nb_coeffs);
 }
@@ -297,7 +298,8 @@ static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, i
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
-        const int nb_samples = FFMIN(out->nb_samples - offset, overlap);
+        const int nb_samples = FFMIN(in->nb_samples - offset, overlap);
+        const int out_nb_samples = FFMIN(out->nb_samples - offset, overlap);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         memcpy(in_buffer, src, sizeof(*in_buffer) * nb_samples);
@@ -309,9 +311,8 @@ static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, i
                  stc->windowed_frame,
                  stc->wiener_frame,
                  stc->spectrum_buf,
-                 stc->ss[0],
-                 stc->ss[1],
-                 stc->sbb);
+                 stc->ss[0], stc->ss[1],
+                 stc->sbb, out_nb_samples);
     }
 
     return 0;
@@ -326,6 +327,7 @@ static int fn(wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     ftype *in_buffer = stc->in_buffer;
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        const int out_nb_samples = FFMIN(out->nb_samples - offset, overlap);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         memset(in_buffer, 0, sizeof(*in_buffer) * overlap);
@@ -336,9 +338,8 @@ static int fn(wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
                  stc->windowed_frame,
                  stc->wiener_frame,
                  stc->spectrum_buf,
-                 stc->ss[0],
-                 stc->ss[1],
-                 stc->sbb);
+                 stc->ss[0], stc->ss[1],
+                 stc->sbb, out_nb_samples);
     }
 
     return 0;

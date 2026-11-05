@@ -138,8 +138,8 @@ static int fn(cc_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = ((ftype *)out->extended_data[1])+doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
+    const int nb_samples = FFMIN(overlap, FFMAX(s->in->nb_samples - doffset, 0));
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
     const ftype factor = s->factor;
 
     // shift in/out buffers
@@ -194,6 +194,7 @@ static int fn(cc_flush)(AVFilterContext *ctx, AVFrame *out)
     ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples);
     const ftype factor = s->factor;
 
     // shift in/out buffers
@@ -221,11 +222,11 @@ static int fn(cc_flush)(AVFilterContext *ctx, AVFrame *out)
     fn(apply_window)(s, windowed_right, right_out,  1);
 
     if (ff_filter_disabled(ctx)) {
-        memcpy(left_osamples, left_in, overlap * sizeof(*left_osamples));
-        memcpy(right_osamples, right_in, overlap * sizeof(*right_osamples));
+        memcpy(left_osamples, left_in, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out_nb_samples * sizeof(*right_osamples));
     } else {
-        memcpy(left_osamples, left_out, overlap * sizeof(*left_osamples));
-        memcpy(right_osamples, right_out, overlap * sizeof(*right_osamples));
+        memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
     }
 
     return 0;
