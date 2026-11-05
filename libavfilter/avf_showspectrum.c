@@ -1327,22 +1327,45 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-#define RE(y, ch) s->fft_data[ch][y].re
-#define IM(y, ch) s->fft_data[ch][y].im
-#define MAGNITUDE(y, ch) hypotf(RE(y, ch), IM(y, ch))
-#define PHASE(y, ch) atan2f(IM(y, ch), RE(y, ch))
+#define RE(y) fft_data[y].re
+#define IM(y) fft_data[y].im
+#define MAGNITUDE(y) hypotf(RE(y), IM(y))
+#define PHASE(y) atan2f(IM(y), RE(y))
 
 static int calc_channel_magnitudes(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ShowSpectrumContext *s = ctx->priv;
     const double w = s->win_scale * (s->scale == LOG ? s->win_scale : 1);
-    int y, h = s->orientation == VERTICAL ? s->h : s->w;
+    const int apodization = s->win_func == WFUNC_RECT;
+    int h = s->orientation == VERTICAL ? s->h : s->w;
     const float f = s->gain * w;
     const int ch = jobnr;
+    const AVComplexFloat *fft_data = s->fft_data[ch];
     float *magnitudes = s->magnitudes[ch];
 
-    for (y = 0; y < h; y++)
-        magnitudes[y] = MAGNITUDE(y, ch) * f;
+    if (apodization) {
+        AVComplexFloat num, den, ret;
+        float beta;
+
+        for (int y = 1; y < h-1; y++) {
+
+            num.re = 2.f * RE(y);
+            num.im = 2.f * IM(y);
+
+            den.re = RE(y-1) + RE(y+1);
+            den.im = IM(y-1) + IM(y+1);
+
+            beta = 0.5f * av_clipf((num.re * den.re + num.im * den.im) / (den.re * den.re + den.im * den.im + FLT_EPSILON), 0.f, 1.f);
+
+            ret.re = RE(y) - beta * den.re;
+            ret.im = IM(y) - beta * den.im;
+
+            magnitudes[y] = hypotf(ret.re, ret.im) * f;
+        }
+    } else {
+        for (int y = 0; y < h; y++)
+            magnitudes[y] = MAGNITUDE(y) * f;
+    }
 
     return 0;
 }
@@ -1352,11 +1375,12 @@ static int calc_channel_phases(AVFilterContext *ctx, void *arg, int jobnr, int n
     ShowSpectrumContext *s = ctx->priv;
     const int h = s->orientation == VERTICAL ? s->h : s->w;
     const int ch = jobnr;
+    const AVComplexFloat *fft_data = s->fft_data[ch];
     float *phases = s->phases[ch];
     int y;
 
     for (y = 0; y < h; y++)
-        phases[y] = (PHASE(y, ch) / M_PI + 1) / 2;
+        phases[y] = (PHASE(y) / M_PI + 1) / 2;
 
     return 0;
 }
@@ -1387,12 +1411,13 @@ static int calc_channel_uphases(AVFilterContext *ctx, void *arg, int jobnr, int 
     ShowSpectrumContext *s = ctx->priv;
     const int h = s->orientation == VERTICAL ? s->h : s->w;
     const int ch = jobnr;
+    const AVComplexFloat *fft_data = s->fft_data[ch];
     float *phases = s->phases[ch];
     float min, max, scale;
     int y;
 
     for (y = 0; y < h; y++)
-        phases[y] = PHASE(y, ch);
+        phases[y] = PHASE(y);
     unwrap(phases, h, M_PI, &min, &max);
     scale = 1.f / (max - min + FLT_MIN);
     for (y = 0; y < h; y++)
@@ -1408,10 +1433,11 @@ static void acalc_magnitudes(ShowSpectrumContext *s)
     const float f = s->gain * w;
 
     for (ch = 0; ch < s->nb_display_channels; ch++) {
+        const AVComplexFloat *fft_data = s->fft_data[ch];
         float *magnitudes = s->magnitudes[ch];
 
         for (y = 0; y < h; y++)
-            magnitudes[y] += MAGNITUDE(y, ch) * f;
+            magnitudes[y] += MAGNITUDE(y) * f;
     }
 }
 
