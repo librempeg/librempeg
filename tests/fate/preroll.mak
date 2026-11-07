@@ -72,7 +72,7 @@ fate-preroll-aac-concat-inpoint: CMD = printf "ffconcat version 1.0\nfile file:%
 
 # A seek close to the start of a stream whose start time is unknown.
 FATE_PREROLL_SEEK-$(call DEMDEC, AAC, AAC) += fate-preroll-aac-adts-seek-start
-fate-preroll-aac-adts-seek-start: CMD = run libavformat/tests/seek$(EXESUF) $(TARGET_SAMPLES)/aac/id3v2.aac -seekback 10000 -frames 2 -duration 3
+fate-preroll-aac-adts-seek-start: CMD = run libavformat/tests/seek$(EXESUF) $(TARGET_SAMPLES)/aac/id3v2.aac -seekback 10000 -frames 2 -duration 3 $(PREROLL_OPT)
 
 $(FATE_PREROLL_SEEK-yes): libavformat/tests/seek$(EXESUF)
 
