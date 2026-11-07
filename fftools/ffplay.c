@@ -1121,6 +1121,26 @@ static inline int compute_mod(int a, int b)
     return a < 0 ? a%b + b : a%b;
 }
 
+static inline AVComplexFloat get_bin(const AVComplexFloat *data, const int y)
+{
+    AVComplexFloat num, den, ret;
+    float beta;
+
+    num.re = 2.f * data[y].re;
+    num.im = 2.f * data[y].im;
+
+    den.re = data[y-1].re + data[y+1].re;
+    den.im = data[y-1].im + data[y+1].im;
+
+    beta = 0.5f * av_clipf((num.re * den.re + num.im * den.im) /
+                           (den.re * den.re + den.im * den.im + FLT_EPSILON), 0.f, 1.f);
+
+    ret.re = data[y].re - beta * den.re;
+    ret.im = data[y].im - beta * den.im;
+
+    return ret;
+}
+
 static void video_audio_display(VideoState *s)
 {
     int i, i_start, x, y1, y, ys, delay, n, nb_display_channels;
@@ -1237,9 +1257,9 @@ static void video_audio_display(VideoState *s)
                 data_in[ch] = s->real_data + 2 * nb_freq * ch;
                 data[ch] = s->rdft_data + nb_freq * ch;
                 i = i_start + ch;
+                int16_t *sample_array = s->sample_array;
                 for (x = 0; x < 2 * nb_freq; x++) {
-                    double w = (x-nb_freq) * (1.0 / nb_freq);
-                    data_in[ch][x] = s->sample_array[i] * (1.0 - w * w);
+                    data_in[ch][x] = sample_array[i];
                     i += channels;
                     if (i >= SAMPLE_ARRAY_SIZE)
                         i -= SAMPLE_ARRAY_SIZE;
@@ -1249,22 +1269,24 @@ static void video_audio_display(VideoState *s)
             /* Least efficient way to do this, we should of course
              * directly access it but it is more than fast enough. */
             if (!SDL_LockTexture(s->vis_texture, &rect, (void **)&pixels, &pitch)) {
-                double w = 1 / sqrt(nb_freq);
                 int show_phase = s->show_mode == SHOW_MODE_PHASE && nb_display_channels == 2;
                 pitch >>= 2;
                 pixels += pitch * s->height;
-                for (y = 0; y < s->height; y++) {
-                    int a = sqrt(w * sqrt(data[0][y].re * data[0][y].re + data[0][y].im * data[0][y].im));
-                    int b = (nb_display_channels == 2 ) ? sqrt(w * hypot(data[1][y].re, data[1][y].im))
-                                                        : a;
+                for (y = 1; y < s->height-1; y++) {
+                    AVComplexFloat aa = get_bin(data[0], y);
+                    AVComplexFloat bb = (nb_display_channels == 2) ? get_bin(data[1], y) : aa;
+
+                    int a = 0.2f*sqrtf(hypotf(aa.re, aa.im));
+                    int b = 0.2f*sqrtf(hypotf(bb.re, bb.im));
+
                     a = FFMIN(a, 255);
                     b = FFMIN(b, 255);
                     int blue = (a+b) >> 1;
                     if (show_phase) {
                         /* phase(left) - phase(right) in units of pi */
-                        double phase = atan2(data[0][y].im * data[1][y].re - data[0][y].re * data[1][y].im,
-                                             data[0][y].re * data[1][y].re + data[0][y].im * data[1][y].im) / M_PI;
-                        int phase_shift = lrint(phase * FFMIN(a, b));
+                        float phase = atan2f(aa.im * bb.re - aa.re * bb.im,
+                                             aa.re * bb.re + aa.im * bb.im) / M_PIf;
+                        int phase_shift = lrintf(phase * FFMIN(a, b));
                         a    = FFMIN(a    - phase_shift / 2, 255);
                         b    = FFMIN(b    - phase_shift / 2, 255);
                         blue = FFMIN(blue + phase_shift,     255);
