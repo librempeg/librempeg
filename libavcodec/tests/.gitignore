@@ -19,6 +19,8 @@
 /mathops
 /mjpegenc_huffman
 /mpeg12framerate
+/mpegaudiodecheader
 /packet_side_data_handle
+/qpfile_parser
 /rangecoder
 /snowenc
