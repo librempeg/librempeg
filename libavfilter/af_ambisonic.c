@@ -1628,6 +1628,8 @@ static void near_field_init(AmbisonicContext *s, int out,
         int n, m;
 
         acn_to_level_order(ch, &n, &m);
+        if (n <= 0)
+            continue;
 
         if (!s->nf_init[n - 1])
             break;
