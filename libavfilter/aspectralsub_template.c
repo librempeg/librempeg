@@ -200,7 +200,8 @@ static ftype fn(sqr)(const ftype x)
 
 static void fn(feed)(AVFilterContext *ctx, int ch,
                      const ftype *src, ftype *dst,
-                     const int nb_samples)
+                     const int nb_samples,
+                     const int out_nb_samples)
 {
     AudioSpectralSubtractionContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
@@ -223,7 +224,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     memmove(st->output, st->output + overlap, offset * sizeof(*st->output));
 
     if (src)
-        memcpy(st->input + offset, src, sizeof(*st->input) * overlap);
+        memcpy(st->input + offset, src, sizeof(*st->input) * nb_samples);
     else
         memset(st->input + offset, 0, sizeof(*st->input) * overlap);
 
@@ -264,11 +265,11 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
     if (ff_filter_disabled(ctx) || bypass)
         if (src)
-            memcpy(dst, src, sizeof(*dst) * overlap);
+            memcpy(dst, src, sizeof(*dst) * FFMIN(out_nb_samples, nb_samples));
         else
-            memset(dst, 0, sizeof(*dst) * overlap);
+            memset(dst, 0, sizeof(*dst) * out_nb_samples);
     else
-        memcpy(dst, st->output, sizeof(*dst) * overlap);
+        memcpy(dst, st->output, sizeof(*dst) * out_nb_samples);
 
     st->idx++;
     if (st->idx >= stride)
@@ -284,7 +285,7 @@ static int fn(spectral_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
-        fn(feed)(ctx, ch, src, dst, FFMIN(in->nb_samples - offset, overlap));
+        fn(feed)(ctx, ch, src, dst, FFMIN(in->nb_samples - offset, overlap), FFMIN(out->nb_samples - offset, overlap));
     }
 
     return 0;
@@ -298,7 +299,7 @@ static int fn(spectral_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
-        fn(feed)(ctx, ch, NULL, dst, FFMIN(out->nb_samples - offset, overlap));
+        fn(feed)(ctx, ch, NULL, dst, 0, FFMIN(out->nb_samples - offset, overlap));
     }
 
     return 0;
