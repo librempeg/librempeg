@@ -138,7 +138,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
     tx_fn(tx_ctx, fft_out, fft_in, sizeof(*fft_in));
 
-    for (int i = 0; i < fft_size/2+1; i++) {
+    for (int i = 0; i < fft_mid+1; i++) {
         const ftype re = fft_out[i].re;
         const ftype im = fft_out[i].im;
         ctype v;
