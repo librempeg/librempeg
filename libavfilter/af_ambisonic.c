@@ -1579,6 +1579,8 @@ static void near_field(AmbisonicContext *s, AVFrame *frame,
         int n, m;
 
         acn_to_level_order(ch, &n, &m);
+        if (n <= 0)
+            continue;
 
         if (!s->nf_process[n - 1])
             break;
