@@ -111,7 +111,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         goto fail;
     }
 
-    fft_out = av_calloc(fft_size/2+1, sizeof(*fft_out));
+    fft_out = av_calloc(fft_mid+1, sizeof(*fft_out));
     if (!fft_out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -122,7 +122,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
     tx_fn(tx_ctx, fft_out, fft_in, sizeof(*fft_in));
 
-    for (int i = 0; i < fft_size/2+1; i++) {
+    for (int i = 0; i < fft_mid+1; i++) {
         const ftype mag = HYPOT(fft_out[i].re, fft_out[i].im);
 
         fft_out[i].re = mag < threshold ? logt : FLOG(mag);
