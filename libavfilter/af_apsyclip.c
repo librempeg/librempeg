@@ -255,7 +255,6 @@ static int flush_frame(AVFilterLink *outlink)
         ff_filter_execute(ctx, psy_flush_channels, out, NULL,
                           FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-
         out->pts = s->last_pts;
         out->duration = av_rescale_q(out->nb_samples,
                                      (AVRational){1, outlink->sample_rate},

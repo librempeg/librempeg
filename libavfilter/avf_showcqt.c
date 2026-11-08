@@ -1434,7 +1434,6 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-
 static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;

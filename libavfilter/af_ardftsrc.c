@@ -401,7 +401,6 @@ static int filter_frame(AVFilterLink *inlink)
     } else if (inlink->sample_rate == outlink->sample_rate) {
         SF2SFThreadData sf2sf_td;
 
-
         out->nb_samples = in->nb_samples;
         ret = ff_filter_get_buffer(ctx, s->out);
         if (ret < 0) {

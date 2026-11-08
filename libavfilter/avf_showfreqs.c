@@ -1056,7 +1056,6 @@ static int activate(AVFilterContext *ctx)
             return ret;
     }
 
-
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
         if (status == AVERROR_EOF) {
             ff_filter_set_ready(ctx, 10);

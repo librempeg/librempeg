@@ -188,12 +188,12 @@ static int append_frame(AVFilterContext *ctx, int idx, const AVFrame *frame)
 
 static int design_and_send(AVFilterContext *ctx)
 {
-    AFIRGenContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    const int nb_bins = s->size / 2 + 1;
-    const int M = s->nb_in[0];
+    AFIRGenContext *s = ctx->priv;
     const double delay = (s->taps - 1) * 0.5;
+    const int nb_bins = s->size / 2 + 1;
     double peak = 0.0, tail = 0.0;
+    const int M = s->nb_in[0];
     AVFrame *out;
     double *dst;
 
@@ -278,8 +278,8 @@ static int design_and_send(AVFilterContext *ctx)
 
 static int activate(AVFilterContext *ctx)
 {
-    AFIRGenContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    AFIRGenContext *s = ctx->priv;
     int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);

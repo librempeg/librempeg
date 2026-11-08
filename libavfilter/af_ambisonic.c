@@ -1217,7 +1217,6 @@ static void calc_mirror_mat(AmbisonicContext *s)
                 gain *= -1.;
         }
 
-
         if (((order < 0) && (order & 1)) || ((order >= 0) && !(order & 1)) ) {
             gain *= s->gain[EVEN][D_X];
 
