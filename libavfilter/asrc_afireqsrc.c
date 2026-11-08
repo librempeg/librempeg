@@ -57,6 +57,7 @@ typedef struct AudioFIRSourceContext {
     int64_t pts;
 
     void *taps;
+    void *realf;
     void *complexf;
     void *freq;
     void *magnitude;
@@ -231,6 +232,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->taps);
     av_freep(&s->freq);
     av_freep(&s->magnitude);
+    av_freep(&s->realf);
     av_freep(&s->complexf);
 
     av_tx_uninit(&s->tx_ctx);

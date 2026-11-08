@@ -38,7 +38,7 @@
 #define SAMPLE_FORMAT flt
 #define ftype float
 #define ctype AVComplexFloat
-#define TX_TYPE AV_TX_FLOAT_FFT
+#define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define FABS fabs
 #define FSIN sin
@@ -50,7 +50,7 @@
 #define SAMPLE_FORMAT dbl
 #define ftype double
 #define ctype AVComplexDouble
-#define TX_TYPE AV_TX_DOUBLE_FFT
+#define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -135,8 +135,6 @@ static void fn(eq_interp)(ctype *complexf,
 
                 complexf[i].re = g;
                 complexf[i].im = 0;
-                complexf[minterp * 2 - i - 1].re = g;
-                complexf[minterp * 2 - i - 1].im = 0;
 
                 break;
             }
@@ -148,10 +146,11 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioFIRSourceContext *s = ctx->priv;
-    int fft_size, middle, asize, ret;
+    int fft_size, fft_mid, ret;
     ftype scale, factor;
     ftype *magnitude;
     ctype *complexf;
+    ftype *realf;
     ftype *freq;
     ftype *taps;
 
@@ -192,14 +191,18 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
     freq[s->nb_freq] = outlink->sample_rate * F(0.5);
     magnitude[s->nb_freq] = magnitude[s->nb_freq-1];
 
-    fft_size = s->nb_taps * 2;
+    fft_size = 1 << av_ceil_log2(s->nb_taps+1);
+    fft_mid = fft_size/2;
     factor = FFMIN(outlink->sample_rate * F(0.5), freq[s->nb_freq - 1]) / (ftype)s->nb_taps;
-    asize = FFALIGN(fft_size, av_cpu_max_align());
-    s->complexf = complexf = av_calloc(asize * 2, sizeof(ctype));
+    s->realf = realf = av_calloc(fft_size, sizeof(*realf));
+    if (!s->realf)
+        return AVERROR(ENOMEM);
+
+    s->complexf = complexf = av_calloc(fft_mid+1, sizeof(*complexf));
     if (!s->complexf)
         return AVERROR(ENOMEM);
 
-    scale = F(1.0);
+    scale = F(1.0) / fft_size;
     ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, fft_size, &scale, 0);
     if (ret < 0)
         return ret;
@@ -210,7 +213,7 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
 
     fn(eq_interp)(complexf, freq, magnitude, s->nb_freq, s->interp, s->nb_taps, factor);
 
-    for (int i = 0; i < fft_size; i++)
+    for (int i = 0; i < fft_mid+1; i++)
         complexf[i].re = FEXP10(complexf[i].re / F(20.0));
 
     if (s->phaset) {
@@ -222,42 +225,36 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
         if (ret < 0)
             return ret;
 
-        for (int i = 0; i < fft_size; i++)
+        for (int i = 0; i < fft_mid+1; i++)
             complexf[i].re = complexf[i].re < threshold ? logt : logf(complexf[i].re);
 
-        s->itx_fn(s->itx_ctx, complexf + asize, complexf, sizeof(ctype));
-        for (int i = 0; i < fft_size; i++) {
-            complexf[i + asize].re /= fft_size;
-            complexf[i + asize].im /= fft_size;
-        }
+        s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
-        for (int i = 1; i < fft_size/2; i++) {
-            complexf[asize + i].re += complexf[asize + fft_size - i].re;
-            complexf[asize + i].im -= complexf[asize + fft_size - i].im;
-            complexf[asize + fft_size - i].re = F(0.0);
-            complexf[asize + fft_size - i].im = F(0.0);
-        }
+        for (int i = 1; i < fft_mid; i++)
+            realf[i] *= F(2.0);
+        for (int i = fft_mid+1; i < fft_size; i++)
+            realf[i] = F(0.0);
 
-        s->tx_fn(s->tx_ctx, complexf, complexf + asize, sizeof(ctype));
+        s->tx_fn(s->tx_ctx, complexf, realf, sizeof(ftype));
 
-        for (int i = 0; i < fft_size; i++) {
+        for (int i = 0; i < fft_mid+1; i++) {
             ftype eR = FEXP(complexf[i].re);
 
             complexf[i].re = eR * FCOS(complexf[i].im);
             complexf[i].im = eR * FSIN(complexf[i].im);
         }
 
-        s->itx_fn(s->itx_ctx, complexf + asize, complexf, sizeof(ctype));
+        s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
         for (int i = 0; i < s->nb_taps; i++)
-            taps[i] = complexf[i + asize].re / fft_size;
+            taps[i] = realf[i];
     } else {
-        s->itx_fn(s->itx_ctx, complexf + asize, complexf, sizeof(ctype));
+        s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
-        middle = s->nb_taps / 2;
+        int middle = s->nb_taps / 2;
         for (int i = 0; i < middle; i++) {
-            taps[middle - i] = complexf[i + asize].re / fft_size;
-            taps[middle + i] = complexf[i + asize].re / fft_size;
+            taps[middle - i] = realf[i];
+            taps[middle + i] = realf[i];
         }
     }
 
