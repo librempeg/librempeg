@@ -362,6 +362,9 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     SACDContext *c = s->priv_data;
     int best = -1;
 
+    if (avio_feof(s->pb))
+        return AVERROR_EOF;
+
     for (int i = 0; i < 2; i++) {
         if (!c->area[i].present || c->area[i].eof)
             continue;
