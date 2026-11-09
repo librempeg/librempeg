@@ -365,9 +365,9 @@ static const AVOption buffersink_options[] = {
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
     { "color_ranges", "array of supported color ranges",  OFFSET(color_ranges),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
-    { "chromalocations", "array of supported chroma locations", OFFSET(chromalocations),
+    { "chroma_locations", "array of supported chroma locations", OFFSET(chromalocations),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
-    { "alphamodes",     "array of supported alpha modes",  OFFSET(alphamodes),
+    { "alpha_modes",     "array of supported alpha modes",  OFFSET(alphamodes),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
 
     { NULL },
