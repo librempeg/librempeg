@@ -155,7 +155,7 @@ static int query_formats(const AVFilterContext *ctx,
         AV_PIX_FMT_RGBA,
         AV_PIX_FMT_NONE
     };
-    AVFilterFormats *formats = ff_make_format_list(pix_fmts);
+    AVFilterFormats *formats = ff_make_pixel_format_list(pix_fmts);
 
     return ff_formats_ref(formats, &cfg_out[0]->formats);
 }

@@ -1159,7 +1159,7 @@ static int query_formats(const AVFilterContext *ctx,
 
     /* set optional output video format */
     if (ebur128->do_video) {
-        formats = ff_make_format_list(pix_fmts);
+        formats = ff_make_pixel_format_list(pix_fmts);
         if ((ret = ff_formats_ref(formats, &cfg_out[1]->formats)) < 0)
             return ret;
     }
@@ -1167,7 +1167,7 @@ static int query_formats(const AVFilterContext *ctx,
     /* set input and output audio formats
      * Note: ff_set_common_* functions are not used because they affect all the
      * links, and thus break the video format negotiation */
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0 ||
         (ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;

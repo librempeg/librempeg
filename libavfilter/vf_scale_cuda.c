@@ -1448,11 +1448,11 @@ static int cudascale_query_formats(const AVFilterContext *ctx,
         return ret;
 
     if (out_rgb)
-        formats = ff_make_format_list(rgb_ranges);
+        formats = ff_make_pixel_format_list(rgb_ranges);
     else if (s->out_range != AVCOL_RANGE_UNSPECIFIED)
         formats = ff_make_formats_list_singleton(s->out_range);
     else if (out_desc)
-        formats = ff_make_format_list(yuv_ranges);
+        formats = ff_make_pixel_format_list(yuv_ranges);
     else
         formats = ff_all_color_ranges();
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->color_ranges)) < 0)

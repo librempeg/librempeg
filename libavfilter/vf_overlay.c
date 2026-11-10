@@ -278,12 +278,12 @@ static int query_formats(const AVFilterContext *ctx,
         av_assert0(0);
     }
 
-    formats = ff_make_format_list(main_formats);
+    formats = ff_make_pixel_format_list(main_formats);
     if ((ret = ff_formats_ref(formats, &cfg_in[MAIN]->formats)) < 0 ||
         (ret = ff_formats_ref(formats, &cfg_out[MAIN]->formats)) < 0)
         return ret;
 
-    return ff_formats_ref(ff_make_format_list(overlay_formats),
+    return ff_formats_ref(ff_make_pixel_format_list(overlay_formats),
                           &cfg_in[OVERLAY]->formats);
 }
 
