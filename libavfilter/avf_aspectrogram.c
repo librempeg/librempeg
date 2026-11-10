@@ -22,7 +22,7 @@
 
 /**
  * @file
- * audio to spectrum (video) transmedia filter, based on ffplay rdft showmode
+ * audio to spectrogram (video) transmedia filter, based on ffplay rdft showmode
  * (by Michael Niedermayer) and lavfi/avf_showwaves (by Stefano Sabatini).
  */
 
@@ -57,7 +57,7 @@ enum Orientation  { VERTICAL, HORIZONTAL, NB_ORIENTATIONS };
 
 #define DEFAULT_LENGTH 300
 
-typedef struct ShowSpectrumContext {
+typedef struct ASpectrogramContext {
     const AVClass *class;
     int w, h;
     char *rate_str;
@@ -120,12 +120,12 @@ typedef struct ShowSpectrumContext {
     AVFrame **frames;
     unsigned int nb_frames;
     unsigned int frames_size;
-} ShowSpectrumContext;
+} ASpectrogramContext;
 
-#define OFFSET(x) offsetof(ShowSpectrumContext, x)
+#define OFFSET(x) offsetof(ASpectrogramContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 
-static const AVOption showspectrum_options[] = {
+static const AVOption aspectrogram_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
     { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_SLIDES-1, FLAGS, .unit = "slide" },
@@ -185,7 +185,7 @@ static const AVOption showspectrum_options[] = {
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS(showspectrum);
+AVFILTER_DEFINE_CLASS(aspectrogram);
 
 static const struct ColorTable {
     float a, y, u, v;
@@ -305,7 +305,7 @@ static const struct ColorTable {
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     int i;
 
     av_freep(&s->combine_buffer);
@@ -395,7 +395,7 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     const float *window_func_lut = s->window_func_lut;
     AVFrame *fin = arg;
@@ -554,7 +554,7 @@ static void drawtext(AVFrame *pic, int x, int y, const char *txt, int o)
     }
 }
 
-static void color_range(ShowSpectrumContext *s, int ch,
+static void color_range(ASpectrogramContext *s, int ch,
                         float *yf, float *uf, float *vf)
 {
     switch (s->mode) {
@@ -616,7 +616,7 @@ static void color_range(ShowSpectrumContext *s, int ch,
     *vf *= s->saturation;
 }
 
-static void pick_color(ShowSpectrumContext *s,
+static void pick_color(ASpectrogramContext *s,
                        float yf, float uf, float vf,
                        float a, float *out)
 {
@@ -714,7 +714,7 @@ static float bin_pos(const int bin, const int num_bins, const float min, const f
 
 static float get_scale(AVFilterContext *ctx, int scale, float a)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const float dmin = s->dmin;
     const float dmax = s->dmax;
 
@@ -749,7 +749,7 @@ static float get_scale(AVFilterContext *ctx, int scale, float a)
 
 static float get_iscale(AVFilterContext *ctx, int scale, float a)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const float dmin = s->dmin;
     const float dmax = s->dmax;
 
@@ -783,7 +783,7 @@ static float get_iscale(AVFilterContext *ctx, int scale, float a)
 
 static int draw_legend(AVFilterContext *ctx, uint64_t samples)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     int ch, y, x = 0, sz = s->orientation == VERTICAL ? s->w : s->h;
@@ -984,7 +984,7 @@ static int draw_legend(AVFilterContext *ctx, uint64_t samples)
 
 static float get_value(AVFilterContext *ctx, int ch, int y)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     float *magnitudes = s->magnitudes[ch];
     float *phases = s->phases[ch];
     float a;
@@ -1008,7 +1008,7 @@ static float get_value(AVFilterContext *ctx, int ch, int y)
 
 static int plot_channel_lin(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const int h = s->orientation == VERTICAL ? s->channel_height : s->channel_width;
     const int ch = jobnr;
     float yf, uf, vf;
@@ -1031,7 +1031,7 @@ static int plot_channel_lin(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 
 static int plot_channel_log(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     const int h = s->orientation == VERTICAL ? s->channel_height : s->channel_width;
     const int ch = jobnr;
@@ -1065,7 +1065,7 @@ static int config_output(AVFilterLink *outlink)
     FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     int i, fft_size, h, w, ret;
     float overlap;
 
@@ -1085,7 +1085,7 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(EINVAL);
     }
 
-    if (!strcmp(ctx->filter->name, "showspectrumpic"))
+    if (!strcmp(ctx->filter->name, "aspectrogrampic"))
         s->single_pic = 1;
 
     outlink->w = s->w;
@@ -1334,7 +1334,7 @@ static int config_output(AVFilterLink *outlink)
 
 static int calc_channel_magnitudes(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const double w = s->win_scale * (s->scale == LOG ? s->win_scale : 1);
     const int apodization = s->win_func == WFUNC_RECT;
     int h = s->orientation == VERTICAL ? s->h : s->w;
@@ -1372,7 +1372,7 @@ static int calc_channel_magnitudes(AVFilterContext *ctx, void *arg, int jobnr, i
 
 static int calc_channel_phases(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const int h = s->orientation == VERTICAL ? s->h : s->w;
     const int ch = jobnr;
     const AVComplexFloat *fft_data = s->fft_data[ch];
@@ -1408,7 +1408,7 @@ static void unwrap(float *x, int N, float tol, float *mi, float *ma)
 
 static int calc_channel_uphases(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     const int h = s->orientation == VERTICAL ? s->h : s->w;
     const int ch = jobnr;
     const AVComplexFloat *fft_data = s->fft_data[ch];
@@ -1426,7 +1426,7 @@ static int calc_channel_uphases(AVFilterContext *ctx, void *arg, int jobnr, int 
     return 0;
 }
 
-static void acalc_magnitudes(ShowSpectrumContext *s)
+static void acalc_magnitudes(ASpectrogramContext *s)
 {
     const double w = s->win_scale * (s->scale == LOG ? s->win_scale : 1);
     int ch, y, h = s->orientation == VERTICAL ? s->h : s->w;
@@ -1441,7 +1441,7 @@ static void acalc_magnitudes(ShowSpectrumContext *s)
     }
 }
 
-static void scale_magnitudes(ShowSpectrumContext *s, float scale)
+static void scale_magnitudes(ASpectrogramContext *s, float scale)
 {
     int ch, y, h = s->orientation == VERTICAL ? s->h : s->w;
 
@@ -1453,7 +1453,7 @@ static void scale_magnitudes(ShowSpectrumContext *s, float scale)
     }
 }
 
-static void clear_combine_buffer(ShowSpectrumContext *s, int size)
+static void clear_combine_buffer(ASpectrogramContext *s, int size)
 {
     int y;
 
@@ -1465,16 +1465,16 @@ static void clear_combine_buffer(ShowSpectrumContext *s, int size)
     }
 }
 
-static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
+static int plot_spectrogram_column(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     AVFrame *outpicref = s->outpicref;
     int ret, plane, x, y, z = s->orientation == VERTICAL ? s->h : s->w;
     const int alpha = outpicref->data[3] != NULL;
 
-    /* fill a new spectrum column */
+    /* fill a new spectrogram column */
     /* initialize buffer for combining to black */
     clear_combine_buffer(s, z);
 
@@ -1630,13 +1630,13 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
     return 1;
 }
 
-#if CONFIG_SHOWSPECTRUM_FILTER
+#if CONFIG_ASPECTROGRAM_FILTER
 
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     int ret, status;
     int64_t pts;
 
@@ -1662,7 +1662,7 @@ static int activate(AVFilterContext *ctx)
 
             if (s->sliding != FULLFRAME || s->xpos == 0)
                 s->in_pts = fin->pts;
-            ret = plot_spectrum_column(inlink, fin);
+            ret = plot_spectrogram_column(inlink, fin);
             ff_graph_frame_free(ctx, &fin);
             if (ret <= 0)
                 return ret;
@@ -1721,7 +1721,7 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static const AVFilterPad showspectrum_outputs[] = {
+static const AVFilterPad aspectrogram_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -1729,23 +1729,23 @@ static const AVFilterPad showspectrum_outputs[] = {
     },
 };
 
-const FFFilter ff_avf_showspectrum = {
-    .p.name        = "showspectrum",
-    .p.description = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrum video output."),
-    .p.priv_class  = &showspectrum_class,
+const FFFilter ff_avf_aspectrogram = {
+    .p.name        = "aspectrogram",
+    .p.description = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrogram video output."),
+    .p.priv_class  = &aspectrogram_class,
     .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .uninit        = uninit,
-    .priv_size     = sizeof(ShowSpectrumContext),
+    .priv_size     = sizeof(ASpectrogramContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
-    FILTER_OUTPUTS(showspectrum_outputs),
+    FILTER_OUTPUTS(aspectrogram_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
 };
-#endif // CONFIG_SHOWSPECTRUM_FILTER
+#endif // CONFIG_ASPECTROGRAM_FILTER
 
-#if CONFIG_SHOWSPECTRUMPIC_FILTER
+#if CONFIG_ASPECTROGRAMPIC_FILTER
 
-static const AVOption showspectrumpic_options[] = {
+static const AVOption aspectrogrampic_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "4096x2048"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "4096x2048"}, 0, 0, FLAGS },
     { "mode", "set channel display mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=COMBINED}, 0, NB_MODES-1, FLAGS, .unit = "mode" },
@@ -1793,12 +1793,12 @@ static const AVOption showspectrumpic_options[] = {
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS(showspectrumpic);
+AVFILTER_DEFINE_CLASS(aspectrogrampic);
 
-static int showspectrumpic_request_frame(AVFilterLink *outlink)
+static int aspectrogrampic_request_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     int ret;
 
@@ -1861,7 +1861,7 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
                 int h = s->orientation == VERTICAL ? s->h : s->w;
 
                 scale_magnitudes(s, 1.f / (consumed / spf));
-                plot_spectrum_column(inlink, fin);
+                plot_spectrogram_column(inlink, fin);
                 consumed = 0;
                 x++;
                 for (ch = 0; ch < s->nb_display_channels; ch++)
@@ -1882,10 +1882,10 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static int showspectrumpic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
+static int aspectrogrampic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
-    ShowSpectrumContext *s = ctx->priv;
+    ASpectrogramContext *s = ctx->priv;
     void *ptr;
 
     if (s->nb_frames + 1ULL > s->frames_size / sizeof(*(s->frames))) {
@@ -1902,33 +1902,33 @@ static int showspectrumpic_filter_frame(AVFilterLink *inlink, AVFrame *insamples
     return 0;
 }
 
-static const AVFilterPad showspectrumpic_inputs[] = {
+static const AVFilterPad aspectrogrampic_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = showspectrumpic_filter_frame,
+        .filter_frame = aspectrogrampic_filter_frame,
     },
 };
 
-static const AVFilterPad showspectrumpic_outputs[] = {
+static const AVFilterPad aspectrogrampic_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_output,
-        .request_frame = showspectrumpic_request_frame,
+        .request_frame = aspectrogrampic_request_frame,
     },
 };
 
-const FFFilter ff_avf_showspectrumpic = {
-    .p.name        = "showspectrumpic",
-    .p.description = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrum video output single picture."),
-    .p.priv_class  = &showspectrumpic_class,
+const FFFilter ff_avf_aspectrogrampic = {
+    .p.name        = "aspectrogrampic",
+    .p.description = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrogram video output single picture."),
+    .p.priv_class  = &aspectrogrampic_class,
     .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .uninit        = uninit,
-    .priv_size     = sizeof(ShowSpectrumContext),
-    FILTER_INPUTS(showspectrumpic_inputs),
-    FILTER_OUTPUTS(showspectrumpic_outputs),
+    .priv_size     = sizeof(ASpectrogramContext),
+    FILTER_INPUTS(aspectrogrampic_inputs),
+    FILTER_OUTPUTS(aspectrogrampic_outputs),
     FILTER_QUERY_FUNC2(query_formats),
 };
 
-#endif // CONFIG_SHOWSPECTRUMPIC_FILTER
+#endif // CONFIG_ASPECTROGRAMPIC_FILTER
