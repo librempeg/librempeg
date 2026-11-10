@@ -375,18 +375,16 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
-    AVFilterFormats *formats = NULL;
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
+    AVFilterFormats *formats;
     int ret;
 
-    /* set input audio formats */
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    /* set output video format */
-    formats = ff_make_format_list(pix_fmts);
+    formats = ff_make_pixel_format_list(pix_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
