@@ -221,6 +221,7 @@ extern const FFFilter ff_asrc_aevalsrc;
 extern const FFFilter ff_asrc_afdelaysrc;
 extern const FFFilter ff_asrc_afireqsrc;
 extern const FFFilter ff_asrc_afirsrc;
+extern const FFFilter ff_asrc_afirwsrc;
 extern const FFFilter ff_asrc_alsfirsrc;
 extern const FFFilter ff_asrc_anoisesrc;
 extern const FFFilter ff_asrc_anullsrc;
