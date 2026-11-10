@@ -196,7 +196,7 @@ static int query_formats(const AVFilterContext *ctx,
     default: return AVERROR_BUG;
     }
 
-    return ff_formats_ref(ff_make_format_list(pix_fmts), &cfg_out[0]->formats);
+    return ff_formats_ref(ff_make_pixel_format_list(pix_fmts), &cfg_out[0]->formats);
 }
 
 static int config_inputx(AVFilterLink *inlink)

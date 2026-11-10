@@ -940,7 +940,7 @@ static int query_formats(const AVFilterContext *ctx,
     };
     int ret;
 
-    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    AVFilterFormats *fmts_list = ff_make_pixel_format_list(pix_fmts);
     if (!fmts_list)
         return AVERROR(ENOMEM);
     if (!fm->ppsrc) {
