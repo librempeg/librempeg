@@ -80,8 +80,8 @@ static const WPreset w_curve[] = {
 };
 
 static const AVOption afirwsrc_options[] = {
-    { "curve","set the weighting curve", OFFSET(curve), AV_OPT_TYPE_INT, {.i64=0}, -1, FF_ARRAY_ELEMS(w_curve)-1, FLAGS, .unit = "curve" },
-    { "c",    "set the weighting curve", OFFSET(curve), AV_OPT_TYPE_INT, {.i64=0}, -1, FF_ARRAY_ELEMS(w_curve)-1, FLAGS, .unit = "curve" },
+    { "curve","set the weighting curve", OFFSET(curve), AV_OPT_TYPE_INT, {.i64=0}, 0, FF_ARRAY_ELEMS(w_curve)-1, FLAGS, .unit = "curve" },
+    { "c",    "set the weighting curve", OFFSET(curve), AV_OPT_TYPE_INT, {.i64=0}, 0, FF_ARRAY_ELEMS(w_curve)-1, FLAGS, .unit = "curve" },
     { w_curve[ 0].name, w_curve[ 0].description, 0, AV_OPT_TYPE_CONST, {.i64= 0}, 0, 0, FLAGS, .unit = "curve" },
     { w_curve[ 1].name, w_curve[ 1].description, 0, AV_OPT_TYPE_CONST, {.i64= 1}, 0, 0, FLAGS, .unit = "curve" },
     { w_curve[ 2].name, w_curve[ 2].description, 0, AV_OPT_TYPE_CONST, {.i64= 2}, 0, 0, FLAGS, .unit = "curve" },
