@@ -157,13 +157,26 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
             return ret;
 
         if (!memcmp(text, "SACDText", 8)) {
-            int album_title_pos  = AV_RB16(text + 16);
-            int album_artist_pos = AV_RB16(text + 18);
+            static const struct {
+                int offset;
+                const char *key;
+            } texts[] = {
+                { 0x10, "album"        },
+                { 0x12, "album_artist" },
+                { 0x14, "publisher"    },
+                { 0x16, "copyright"    },
+                { 0x20, "title"        },
+                { 0x22, "artist"       },
+                { 0x24, "publisher"    },
+                { 0x26, "copyright"    },
+            };
 
-            if (album_title_pos > 0 && album_title_pos < SACD_SECTOR)
-                av_dict_set(&s->metadata, "title",  text + album_title_pos,  0);
-            if (album_artist_pos > 0 && album_artist_pos < SACD_SECTOR)
-                av_dict_set(&s->metadata, "artist", text + album_artist_pos, 0);
+            for (int i = 0; i < FF_ARRAY_ELEMS(texts); i++) {
+                int offset = AV_RB16(text + texts[i].offset);
+
+                if (offset > 0 && offset < SACD_SECTOR)
+                    av_dict_set(&s->metadata, texts[i].key, text + offset, 0);
+            }
         }
     }
 
