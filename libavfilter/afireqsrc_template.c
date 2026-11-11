@@ -19,6 +19,7 @@
 #undef ctype
 #undef ftype
 #undef FABS
+#undef FMAX
 #undef FSIN
 #undef FCOS
 #undef FEXP
@@ -30,6 +31,7 @@
 #undef TX_TYPE
 #if DEPTH == 32
 #define FABS fabsf
+#define FMAX fmaxf
 #define FSIN sinf
 #define FCOS cosf
 #define FEXP expf
@@ -43,6 +45,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define FABS fabs
+#define FMAX fmax
 #define FSIN sin
 #define FCOS cos
 #define FEXP exp
@@ -77,7 +80,7 @@ static void fn(eq_interp)(ctype *complexf,
 
                 if (interp == INTERP_LINEAR) {
                     const ftype d  = freq[j+1] - freq[j];
-                    const ftype d0 = x - freq[j];
+                    const ftype d0 = FMAX(x - freq[j], F(0.0));
                     const ftype d1 = freq[j+1] - x;
                     const ftype g0 = magnitude[j];
                     const ftype g1 = magnitude[j+1];
