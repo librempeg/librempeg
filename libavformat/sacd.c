@@ -251,6 +251,26 @@ static int read_header(AVFormatContext *s)
     if (memcmp(mtoc, "SACDMTOC", 8))
         return AVERROR_INVALIDDATA;
 
+    {
+        uint8_t value[17] = { 0 };
+
+        if (mtoc[0x18]) {
+            memcpy(value, mtoc + 0x18, 16);
+            av_dict_set(&s->metadata, "album_catalog_number", value, 0);
+        }
+
+        if (mtoc[0x58]) {
+            memcpy(value, mtoc + 0x58, 16);
+            av_dict_set(&s->metadata, "catalog_number", value, 0);
+        }
+
+        if (AV_RB16(mtoc + 0x78) && mtoc[0x7a] && mtoc[0x7b]) {
+            snprintf(value, sizeof(value), "%04d-%02d-%02d", AV_RB16(mtoc + 0x78),
+                     mtoc[0x7a], mtoc[0x7b]);
+            av_dict_set(&s->metadata, "date", value, 0);
+        }
+    }
+
     c->area[0].toc_lsn = AV_RB32(mtoc + 64);
     c->area[1].toc_lsn = AV_RB32(mtoc + 72);
 
