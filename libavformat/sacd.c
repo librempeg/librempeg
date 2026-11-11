@@ -181,6 +181,18 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
     }
 
     av_dict_set(&st->metadata, "title", idx ? "Multichannel" : "Stereo", 0);
+    if (AV_RB16(toc + 0x90)) {
+        int offset = AV_RB16(toc + 0x90);
+
+        if (offset > 0 && offset < SACD_SECTOR)
+            av_dict_set(&st->metadata, "description", toc + offset, 0);
+    }
+    if (AV_RB16(toc + 0x92)) {
+        int offset = AV_RB16(toc + 0x92);
+
+        if (offset > 0 && offset < SACD_SECTOR)
+            av_dict_set(&st->metadata, "copyright", toc + offset, 0);
+    }
 
     /* Chapters: only from the first area that has a track list */
     if (!s->nb_chapters && a->track_count > 0) {
@@ -206,26 +218,41 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
             for (int i = 0; i < a->track_count && i < MAX_TRACKS; i++) {
                 int64_t start = tc2ts(trl2 + 8 + i * 4);
                 int64_t duration = tc2ts(trl2 + 8 + MAX_TRACKS * 4 + i * 4);
-                uint8_t title[256] = { 0 };
+                AVChapter *chapter;
+
+                chapter = avpriv_new_chapter(s, i + 1, AV_TIME_BASE_Q,
+                                             start, start + duration, NULL);
+                if (!chapter) {
+                    ret = AVERROR(ENOMEM);
+                    goto end;
+                }
 
                 if (ttxt_pos) {
+                    uint8_t value[256] = { 0 };
+                    static const char *const keys[] = {
+                        [1] = "title",
+                        [2] = "artist",
+                        [3] = "songwriter",
+                        [4] = "composer",
+                        [5] = "arranger",
+                        [6] = "comment",
+                    };
                     int entries;
+                    int idx;
 
                     avio_seek(pb, ttxt_pos + offsets[i], SEEK_SET);
                     entries = avio_r8(pb);
-                    if (entries == 0x01) {
-                        avio_skip(pb, 5);
-                        avio_get_str(pb, UINT16_MAX, title, sizeof(title));
-                    } else if (entries == 0x02) {
-                        avio_skip(pb, 5);
-                        avio_get_str(pb, UINT16_MAX, title, sizeof(title));
-                    }
-                }
+                    avio_skip(pb, 3);
+                    for (int j = 0; j < entries; j++) {
+                        idx = avio_r8(pb);
+                        avio_skip(pb, 1);
 
-                if (!avpriv_new_chapter(s, i + 1, AV_TIME_BASE_Q,
-                                        start, start + duration, title[0] ? title : NULL)) {
-                    ret = AVERROR(ENOMEM);
-                    goto end;
+                        avio_get_str(pb, UINT16_MAX, value, sizeof(value));
+                        if (value[0] && idx < FF_ARRAY_ELEMS(keys) && keys[idx])
+                            av_dict_set(&chapter->metadata, keys[idx], value, 0);
+                        if (avio_tell(pb) & 3)
+                            avio_skip(pb, 4 - (avio_tell(pb) & 3));
+                    }
                 }
             }
         }
