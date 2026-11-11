@@ -52,7 +52,7 @@ typedef struct AudioFIRSourceContext {
     int nb_samples;
     int preset;
     int interp;
-    int phaset;
+    float phase;
 
     int64_t pts;
 
@@ -140,10 +140,8 @@ static const AVOption afireqsrc_options[] = {
     { "cubic",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_CUBIC},  0, 0, FLAGS, .unit = "interp" },
     { "cosine", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_COSINE}, 0, 0, FLAGS, .unit = "interp" },
     { "smooth", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SMOOTH}, 0, 0, FLAGS, .unit = "interp" },
-    { "phase","set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
-    { "h",    "set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
-    { "linear", "linear phase",  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "phase" },
-    { "min",    "minimum phase", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, .unit = "phase" },
+    { "phase","set the phase", OFFSET(phase), AV_OPT_TYPE_FLOAT, {.dbl=-1}, -1, 1, FLAGS, .unit = "phase" },
+    { "h",    "set the phase", OFFSET(phase), AV_OPT_TYPE_FLOAT, {.dbl=-1}, -1, 1, FLAGS, .unit = "phase" },
     {NULL}
 };
 

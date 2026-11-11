@@ -25,6 +25,7 @@
 #undef FEXP10
 #undef FLOG
 #undef FMINV
+#undef LRINT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #if DEPTH == 32
@@ -35,6 +36,7 @@
 #define FEXP10 ff_exp10f
 #define FLOG logf
 #define FMINV FLT_MIN
+#define LRINT lrintf
 #define SAMPLE_FORMAT flt
 #define ftype float
 #define ctype AVComplexFloat
@@ -47,6 +49,7 @@
 #define FEXP10 ff_exp10
 #define FLOG log
 #define FMINV DBL_MIN
+#define LRINT lrint
 #define SAMPLE_FORMAT dbl
 #define ftype double
 #define ctype AVComplexDouble
@@ -216,7 +219,8 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
     for (int i = 0; i < fft_mid+1; i++)
         complexf[i].re = FEXP10(complexf[i].re / F(20.0));
 
-    if (s->phaset) {
+    if (s->phase != F(0.0)) {
+        const ftype a = F(1.0) - (F(1.0) + s->phase) * F(0.5);
         const ftype threshold = FMINV;
         const ftype logt = FLOG(threshold);
 
@@ -231,9 +235,9 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
         s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
         for (int i = 1; i < fft_mid; i++)
-            realf[i] *= F(2.0);
+            realf[i] *= F(2.0) * a;
         for (int i = fft_mid+1; i < fft_size; i++)
-            realf[i] = F(0.0);
+            realf[i] *= F(2.0) * (F(1.0) - a);
 
         s->tx_fn(s->tx_ctx, complexf, realf, sizeof(ftype));
 
@@ -246,8 +250,12 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
 
         s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
-        for (int i = 0; i < s->nb_taps; i++)
-            taps[i] = realf[i];
+        int shift = LRINT((F(1.0) - a) * (s->nb_taps - 1));
+        for (int i = 0; i < s->nb_taps; i++) {
+            const int idx = (i - shift) % fft_size;
+
+            taps[i] = realf[(idx < 0) ? idx + fft_size : idx];
+        }
     } else {
         s->itx_fn(s->itx_ctx, realf, complexf, sizeof(ctype));
 
