@@ -92,7 +92,7 @@ static int read_header(AVFormatContext *s)
 
             ast->start_time = 0;
             ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-            ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_SSI;
+            ast->codecpar->codec_id = (channels == 1) ? AV_CODEC_ID_ADPCM_IMA : AV_CODEC_ID_ADPCM_IMA_SSI;
             ast->codecpar->sample_rate = rate;
             ast->codecpar->ch_layout.nb_channels = channels;
 
