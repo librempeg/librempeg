@@ -891,6 +891,7 @@ OBJS-$(CONFIG_WADY_DPCM_DECODER)       += dpcm.o
 OBJS-$(CONFIG_WAVARC_DECODER)          += wavarc.o
 OBJS-$(CONFIG_WAVPACK_DECODER)         += wavpack.o wavpackdata.o dsd.o
 OBJS-$(CONFIG_WAVPACK_ENCODER)         += wavpackdata.o wavpackenc.o
+OBJS-$(CONFIG_WAVPACK_OLD_DECODER)     += wavpack_old.o
 OBJS-$(CONFIG_WBMP_DECODER)            += wbmpdec.o
 OBJS-$(CONFIG_WBMP_ENCODER)            += wbmpenc.o
 OBJS-$(CONFIG_WCMV_DECODER)            += wcmv.o

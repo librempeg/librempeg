@@ -4164,6 +4164,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ULC (Ultra-Low Complexity Codec)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_WAVPACK_OLD,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "wavpack_old",
+        .long_name = NULL_IF_CONFIG_SMALL("WavPack (monolithic stream)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY |
+                     AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* subtitle codecs */
     {

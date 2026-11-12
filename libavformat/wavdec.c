@@ -48,6 +48,7 @@
 #include "w64.h"
 #include "spdif.h"
 #include "wv.h"
+#include "wav_wavpack_extradata.h"
 
 typedef struct WAVDemuxContext {
     const AVClass *class;
@@ -757,6 +758,21 @@ break_loop:
             if ((hdr->is_v4) || ((hdr->version < 1) && (hdr->version > 4)))
                 return AVERROR_INVALIDDATA;
             avio_skip(pb, hdr->lapsed);
+            st->codecpar->codec_id = AV_CODEC_ID_WAVPACK_OLD;
+            if ((hdr->version >= 1) && (hdr->version <= 3)) {
+                if ((ret = ff_alloc_extradata(st->codecpar, sizeof(WavPackV2Header))) < 0) {
+                    av_log(s, AV_LOG_ERROR, "Could not allocate extradata for RIFF WavPack.\n");
+                    return ret;
+                }
+                /* (todo) undefined reference errors everywhere */
+                upload_to_wavpack_old_extradata_version(st->codecpar, hdr->version);
+                if (hdr->version >= 2) {
+                    upload_to_wavpack_old_extradata_minbits(st->codecpar, hdr->bits);
+                    if (hdr->version >= 3) {
+                        upload_to_wavpack_old_extradata_v3_flags(st->codecpar, hdr->v3_flags);
+                    }
+                }
+            }
         }
     }
 
