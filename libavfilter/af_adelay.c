@@ -30,7 +30,6 @@ typedef struct ChanDelay {
     int64_t delay;
     size_t delay_index;
     size_t index;
-    unsigned int samples_size;
     uint8_t *samples;
 } ChanDelay;
 
@@ -107,6 +106,10 @@ DELAY(dbl, double,  0)
 #define CHANGE_DELAY(name, type, fill)                                                                  \
 static int resize_samples_## name ##p(ChanDelay *d, int64_t new_delay)                                  \
 {                                                                                                       \
+    const size_t nb_stored = FFMIN(d->delay_index, d->delay);                                           \
+    const size_t nb_kept = FFMIN(nb_stored, new_delay);                                                 \
+    const size_t first_kept = d->index + nb_stored - nb_kept;                                           \
+    const type *old_samples = (const type *)d->samples;                                                 \
     type *samples;                                                                                      \
                                                                                                         \
     if (new_delay == d->delay) {                                                                        \
@@ -115,41 +118,28 @@ static int resize_samples_## name ##p(ChanDelay *d, int64_t new_delay)          
                                                                                                         \
     if (new_delay == 0) {                                                                               \
         av_freep(&d->samples);                                                                          \
-        d->samples_size = 0;                                                                            \
         d->delay = 0;                                                                                   \
         d->index = 0;                                                                                   \
         d->delay_index = 0;                                                                             \
         return 0;                                                                                       \
     }                                                                                                   \
                                                                                                         \
-    samples = av_fast_realloc(d->samples, &d->samples_size, new_delay * sizeof(type));                  \
+    if (new_delay > SIZE_MAX)                                                                           \
+        return AVERROR(ENOMEM);                                                                         \
+                                                                                                        \
+    samples = av_malloc_array(new_delay, sizeof(type));                                                 \
     if (!samples)                                                                                       \
         return AVERROR(ENOMEM);                                                                         \
                                                                                                         \
-    if (new_delay < d->delay) {                                                                         \
-        if (d->index > new_delay) {                                                                     \
-            d->index -= new_delay;                                                                      \
-            memmove(samples, &samples[new_delay], d->index * sizeof(type));                             \
-            d->delay_index = new_delay;                                                                 \
-        } else if (d->delay_index > d->index) {                                                         \
-            memmove(&samples[d->index], &samples[d->index+(d->delay-new_delay)],                        \
-                    (new_delay - d->index) * sizeof(type));                                             \
-            d->delay_index -= d->delay - new_delay;                                                     \
-        }                                                                                               \
-    } else {                                                                                            \
-        size_t block_size;                                                                              \
-        if (d->delay_index >= d->delay) {                                                               \
-            block_size = (d->delay - d->index) * sizeof(type);                                          \
-            memmove(&samples[d->index+(new_delay - d->delay)], &samples[d->index], block_size);         \
-            d->delay_index = new_delay;                                                                 \
-        } else {                                                                                        \
-            d->delay_index += new_delay - d->delay;                                                     \
-        }                                                                                               \
-        block_size = (new_delay - d->delay) * sizeof(type);                                             \
-        memset(&samples[d->index], fill, block_size);                                                   \
-    }                                                                                                   \
-    d->delay = new_delay;                                                                               \
+    memset(samples, fill, (new_delay - nb_kept) * sizeof(type));                                        \
+    for (size_t i = 0; i < nb_kept; i++)                                                                \
+        samples[new_delay - nb_kept + i] = old_samples[(first_kept + i) % nb_stored];                   \
+                                                                                                        \
+    av_free(d->samples);                                                                                \
     d->samples = (void *) samples;                                                                      \
+    d->delay = new_delay;                                                                               \
+    d->delay_index = new_delay;                                                                         \
+    d->index = 0;                                                                                       \
     return 0;                                                                                           \
 }
 
@@ -242,7 +232,6 @@ static int config_input(AVFilterLink *inlink)
         d->samples = av_malloc_array(d->delay, s->block_align);
         if (!d->samples)
             return AVERROR(ENOMEM);
-        d->samples_size = d->delay * s->block_align;
 
         s->max_delay = FFMAX(s->max_delay, d->delay);
     }
