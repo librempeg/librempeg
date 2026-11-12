@@ -46,8 +46,10 @@ static int read_header(AVFormatContext *s)
 {
     int rate, fps, flags, version, ret, channels = 0, audio_streams = 0;
     AVIOContext *pb = s->pb;
-    AVStream *vst = avformat_new_stream(s, NULL);
     int64_t start_offset;
+    AVStream *vst;
+
+    vst = avformat_new_stream(s, NULL);
     if (!vst)
         return AVERROR(ENOMEM);
 
