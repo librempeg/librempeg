@@ -254,6 +254,7 @@ static int config_input(AVFilterLink *inlink)
     int i, depth;
 
     uninit(inlink->dst);
+    s->width = 0;
 
     s->hsub  = desc->log2_chroma_w;
     s->vsub  = desc->log2_chroma_h;
@@ -415,4 +416,5 @@ const FFFilter ff_vf_hqdn3d = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .process_command = process_command,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };

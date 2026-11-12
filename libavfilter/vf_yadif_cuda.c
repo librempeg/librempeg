@@ -53,23 +53,23 @@ typedef struct DeintCUDAContext {
 
 #define CHECK_CU(x) FF_CUDA_CHECK_DL(ctx, s->hwctx->internal->cuda_dl, x)
 
-static CUresult call_kernel(AVFilterContext *ctx, CUfunction func,
-                            CUdeviceptr prev, CUdeviceptr cur, CUdeviceptr next,
-                            CUarray_format format, int channels,
-                            int src_width,  // Width is pixels per channel
-                            int src_height, // Height is pixels per channel
-                            int src_pitch,  // Pitch is bytes
-                            CUdeviceptr dst,
-                            int dst_width,  // Width is pixels per channel
-                            int dst_height, // Height is pixels per channel
-                            int dst_pitch,  // Pitch is pixels per channel
-                            int parity, int tff)
+static int call_kernel(AVFilterContext *ctx, CUfunction func,
+                       CUdeviceptr prev, CUdeviceptr cur, CUdeviceptr next,
+                       CUarray_format format, int channels,
+                       int src_width,  // Width is pixels per channel
+                       int src_height, // Height is pixels per channel
+                       int src_pitch,  // Pitch is bytes
+                       CUdeviceptr dst,
+                       int dst_width,  // Width is pixels per channel
+                       int dst_height, // Height is pixels per channel
+                       int dst_pitch,  // Pitch is pixels per channel
+                       int parity, int tff)
 {
     DeintCUDAContext *s = ctx->priv;
     CudaFunctions *cu = s->hwctx->internal->cuda_dl;
     CUtexObject tex_prev = 0, tex_cur = 0, tex_next = 0;
     int ret;
-    int skip_spatial_check = s->yadif.mode&2;
+    int skip_spatial_check = !!(s->yadif.mode&2);
 
     void *args[] = { &dst, &tex_prev, &tex_cur, &tex_next,
                      &dst_width, &dst_height, &dst_pitch,
@@ -121,8 +121,8 @@ exit:
     return ret;
 }
 
-static void filter(AVFilterContext *ctx, AVFrame *dst,
-                   int parity, int tff)
+static int filter(AVFilterContext *ctx, AVFrame *dst,
+                  int parity, int tff)
 {
     DeintCUDAContext *s = ctx->priv;
     YADIFContext *y = &s->yadif;
@@ -132,7 +132,7 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
 
     ret = CHECK_CU(cu->cuCtxPushCurrent(s->hwctx->cuda_ctx));
     if (ret < 0)
-        return;
+        return ret;
 
     for (i = 0; i < y->csp->nb_components; i++) {
         CUfunction func;
@@ -150,6 +150,7 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
         channels = comp->step / pixel_size;
         if (pixel_size > 2 || channels > 2) {
             av_log(ctx, AV_LOG_ERROR, "Unsupported pixel format: %s\n", y->csp->name);
+            ret = AVERROR(EINVAL);
             goto exit;
         }
         switch (pixel_size) {
@@ -163,29 +164,32 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
             break;
         default:
             av_log(ctx, AV_LOG_ERROR, "Unsupported pixel format: %s\n", y->csp->name);
+            ret = AVERROR(EINVAL);
             goto exit;
         }
         av_log(ctx, AV_LOG_TRACE,
                "Deinterlacing plane %d: pixel_size: %d channels: %d\n",
                comp->plane, pixel_size, channels);
-        call_kernel(ctx, func,
-                    (CUdeviceptr)y->prev->data[i],
-                    (CUdeviceptr)y->cur->data[i],
-                    (CUdeviceptr)y->next->data[i],
-                    format, channels,
-                    AV_CEIL_RSHIFT(y->cur->width, i ? y->csp->log2_chroma_w : 0),
-                    AV_CEIL_RSHIFT(y->cur->height, i ? y->csp->log2_chroma_h : 0),
-                    y->cur->linesize[i],
-                    (CUdeviceptr)dst->data[i],
-                    AV_CEIL_RSHIFT(dst->width, i ? y->csp->log2_chroma_w : 0),
-                    AV_CEIL_RSHIFT(dst->height, i ? y->csp->log2_chroma_h : 0),
-                    dst->linesize[i] / comp->step,
-                    parity, tff);
+        ret = call_kernel(ctx, func,
+                          (CUdeviceptr)y->prev->data[i],
+                          (CUdeviceptr)y->cur->data[i],
+                          (CUdeviceptr)y->next->data[i],
+                          format, channels,
+                          AV_CEIL_RSHIFT(y->cur->width, i ? y->csp->log2_chroma_w : 0),
+                          AV_CEIL_RSHIFT(y->cur->height, i ? y->csp->log2_chroma_h : 0),
+                          y->cur->linesize[i],
+                          (CUdeviceptr)dst->data[i],
+                          AV_CEIL_RSHIFT(dst->width, i ? y->csp->log2_chroma_w : 0),
+                          AV_CEIL_RSHIFT(dst->height, i ? y->csp->log2_chroma_h : 0),
+                          dst->linesize[i] / comp->step,
+                          parity, tff);
+        if (ret < 0)
+            goto exit;
     }
 
 exit:
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
-    return;
+    return ret;
 }
 
 static av_cold void deint_cuda_uninit(AVFilterContext *ctx)

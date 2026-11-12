@@ -8,6 +8,7 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-audiodsp                                  \
                 fate-checkasm-av_tx                                     \
                 fate-checkasm-base64                                    \
+                fate-checkasm-bitpackeddec                              \
                 fate-checkasm-blockdsp                                  \
                 fate-checkasm-bswapdsp                                  \
                 fate-checkasm-cavsdsp                                   \
@@ -85,6 +86,7 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-vf_gblur                                  \
                 fate-checkasm-vf_hflip                                  \
                 fate-checkasm-vf_idet                                   \
+				fate-checkasm-vf_limiter                                \
                 fate-checkasm-vf_nlmeans                                \
                 fate-checkasm-vf_pp7                                    \
                 fate-checkasm-vf_threshold                              \
@@ -97,6 +99,7 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-vp9dsp                                    \
                 fate-checkasm-vvc_alf                                   \
                 fate-checkasm-vvc_mc                                    \
+                fate-checkasm-vvc_pred                                  \
                 fate-checkasm-vvc_sao                                   \
 
 $(FATE_CHECKASM): tests/checkasm/checkasm$(EXESUF)

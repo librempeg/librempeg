@@ -150,15 +150,15 @@ static void fn(uninit)(AVFilterContext *ctx)
     for (int ch = 0; ch < s->channels && st; ch++) {
         fn(StateContext) *stc = &st[ch];
 
-        av_freep(&st->r2c_in);
-        av_freep(&st->r2c_out);
-        av_freep(&st->c2r_in);
-        av_freep(&st->c2r_out);
-        av_freep(&st->input);
-        av_freep(&st->output);
-        av_freep(&st->p_n);
-        av_freep(&st->p_sn);
-        av_freep(&st->history);
+        av_freep(&stc->r2c_in);
+        av_freep(&stc->r2c_out);
+        av_freep(&stc->c2r_in);
+        av_freep(&stc->c2r_out);
+        av_freep(&stc->input);
+        av_freep(&stc->output);
+        av_freep(&stc->p_n);
+        av_freep(&stc->p_sn);
+        av_freep(&stc->history);
 
         av_tx_uninit(&stc->tx_ctx);
         av_tx_uninit(&stc->itx_ctx);
@@ -200,12 +200,13 @@ static ftype fn(sqr)(const ftype x)
 
 static void fn(feed)(AVFilterContext *ctx, int ch,
                      const ftype *src, ftype *dst,
-                     const int nb_samples)
+                     const int nb_samples,
+                     const int out_nb_samples)
 {
     AudioSpectralSubtractionContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
     fn(StateContext) *st = &stc[ch];
-    const ftype gmin = s->reduction;
+    const ftype gmin = F(1.0) - s->reduction * F(0.01);
     const ftype beta = s->beta;
     const int rdft_size = s->rdft_size;
     const int nb_coeffs = rdft_size/2 + 1;
@@ -223,7 +224,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     memmove(st->output, st->output + overlap, offset * sizeof(*st->output));
 
     if (src)
-        memcpy(st->input + offset, src, sizeof(*st->input) * overlap);
+        memcpy(st->input + offset, src, sizeof(*st->input) * nb_samples);
     else
         memset(st->input + offset, 0, sizeof(*st->input) * overlap);
 
@@ -264,11 +265,11 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
     if (ff_filter_disabled(ctx) || bypass)
         if (src)
-            memcpy(dst, src, sizeof(*dst) * overlap);
+            memcpy(dst, src, sizeof(*dst) * FFMIN(out_nb_samples, nb_samples));
         else
-            memset(dst, 0, sizeof(*dst) * overlap);
+            memset(dst, 0, sizeof(*dst) * out_nb_samples);
     else
-        memcpy(dst, st->output, sizeof(*dst) * overlap);
+        memcpy(dst, st->output, sizeof(*dst) * out_nb_samples);
 
     st->idx++;
     if (st->idx >= stride)
@@ -284,7 +285,7 @@ static int fn(spectral_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
-        fn(feed)(ctx, ch, src, dst, FFMIN(in->nb_samples - offset, overlap));
+        fn(feed)(ctx, ch, src, dst, FFMIN(in->nb_samples - offset, overlap), FFMIN(out->nb_samples - offset, overlap));
     }
 
     return 0;
@@ -298,7 +299,7 @@ static int fn(spectral_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
-        fn(feed)(ctx, ch, NULL, dst, FFMIN(out->nb_samples - offset, overlap));
+        fn(feed)(ctx, ch, NULL, dst, 0, FFMIN(out->nb_samples - offset, overlap));
     }
 
     return 0;

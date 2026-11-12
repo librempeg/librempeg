@@ -930,6 +930,9 @@ static int FUNC(vps) (CodedBitstreamContext *ctx, RWContext *rw,
             return AVERROR_INVALIDDATA;
     }
 
+    allocate(current->vps_profile_tier_level,
+             (current->vps_num_ptls_minus1 + 1) *
+             sizeof(*current->vps_profile_tier_level));
     for (i = 0; i <= current->vps_num_ptls_minus1; i++) {
         CHECK(FUNC(profile_tier_level) (ctx, rw,
                                         current->vps_profile_tier_level + i,
@@ -1113,12 +1116,12 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
 
     flag(sps_conformance_window_flag);
     if (current->sps_conformance_window_flag) {
-        uint16_t width = current->sps_pic_width_max_in_luma_samples / sub_width_c;
-        uint16_t height = current->sps_pic_height_max_in_luma_samples / sub_height_c;
-        ue(sps_conf_win_left_offset, 0, width);
-        ue(sps_conf_win_right_offset, 0, width - current->sps_conf_win_left_offset);
-        ue(sps_conf_win_top_offset, 0, height);
-        ue(sps_conf_win_bottom_offset, 0, height - current->sps_conf_win_top_offset);
+        uint16_t max_offsets_x = (current->sps_pic_width_max_in_luma_samples - 1) / sub_width_c;
+        uint16_t max_offsets_y = (current->sps_pic_height_max_in_luma_samples - 1) / sub_height_c;
+        ue(sps_conf_win_left_offset, 0, max_offsets_x);
+        ue(sps_conf_win_right_offset, 0, max_offsets_x - current->sps_conf_win_left_offset);
+        ue(sps_conf_win_top_offset, 0, max_offsets_y);
+        ue(sps_conf_win_bottom_offset, 0, max_offsets_y - current->sps_conf_win_top_offset);
     } else {
         infer(sps_conf_win_left_offset, 0);
         infer(sps_conf_win_right_offset, 0);
@@ -1584,7 +1587,7 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
 
     flag(sps_virtual_boundaries_enabled_flag);
     if (current->sps_virtual_boundaries_enabled_flag) {
-        flag(sps_virtual_boundaries_present_flag);
+        u(1, sps_virtual_boundaries_present_flag, 0, !current->sps_res_change_in_clvs_allowed_flag);
         if (current->sps_virtual_boundaries_present_flag) {
             ue(sps_num_ver_virtual_boundaries,
                0, current->sps_pic_width_max_in_luma_samples <= 8 ? 0 : VVC_MAX_VBS);
@@ -2021,12 +2024,13 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
 
                         for (j = 0; j < current->pps_num_exp_slices_in_tile[i];
                              j++) {
-                            ues(pps_exp_slice_height_in_ctus_minus1[i][j], 0,
+                            xue(pps_exp_slice_height_in_ctus_minus1[i][j],
+                                current->pps_exp_slice_height_in_ctus_minus1[i + j], 0,
                                 remaining_height_in_ctbs_y - (current->pps_num_exp_slices_in_tile[i] - j), 2,
                                 i, j);
                             slice_height_in_ctus =
                                 current->
-                                pps_exp_slice_height_in_ctus_minus1[i][j] + 1;
+                                pps_exp_slice_height_in_ctus_minus1[i + j] + 1;
 
                             current->slice_height_in_ctus[i + j] =
                                 slice_height_in_ctus;
@@ -2038,7 +2042,7 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
                         }
                         uniform_slice_height = 1 +
                             (j == 0 ? current->row_height_val[tile_y] - 1:
-                            current->pps_exp_slice_height_in_ctus_minus1[i][j-1]);
+                            current->pps_exp_slice_height_in_ctus_minus1[i + j - 1]);
 
                         num_uniform_slices = (remaining_height_in_ctbs_y + uniform_slice_height - 1)
                                            / uniform_slice_height;
@@ -2162,6 +2166,8 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
                         current->num_slices_in_subpic[i]++;
                     }
                 }
+                if (!current->num_slices_in_subpic[i])
+                    return AVERROR_INVALIDDATA;
                 num_slices += current->num_slices_in_subpic[i];
             }
             if (current->pps_num_slices_in_pic_minus1 + 1 != num_slices)
@@ -3461,6 +3467,10 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
             int slice_idx = current->sh_slice_address;
             for (i = 0; i < current->curr_subpic_idx; i++) {
                 slice_idx += pps->num_slices_in_subpic[i];
+            }
+            if (slice_idx > pps->pps_num_slices_in_pic_minus1) {
+                av_log(ctx->log_ctx, AV_LOG_ERROR, "Invalid slice address %d\n", slice_idx);
+                return AVERROR_INVALIDDATA;
             }
 
             if (pps->pps_single_slice_per_subpic_flag) {

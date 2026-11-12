@@ -82,6 +82,9 @@ typedef struct TestSourceContext {
     float value;
     float center;
 
+    /* only used by triangle */
+    float factor;
+
     /* only used by color */
     FFDrawContext draw;
     FFDrawColor color;
@@ -2544,3 +2547,66 @@ const FFFilter ff_vsrc_colorwheel = {
 };
 
 #endif /* CONFIG_COLORWHEEL_FILTER */
+
+#if CONFIG_TRIANGLE_FILTER
+
+static const AVOption triangle_options[] = {
+    COMMON_OPTIONS
+    { "factor", "set the triangle factor", OFFSET(factor), AV_OPT_TYPE_FLOAT, {.dbl=1.6}, 0, 10, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(triangle);
+
+static void triangle_fill_picture(AVFilterContext *ctx, AVFrame *frame)
+{
+    TestSourceContext *test = ctx->priv;
+    const int height = frame->height;
+    const int width = frame->width;
+    const float h = frame->height - 1.f;
+    const float w = frame->width - 1.f;
+    const float f = test->factor;
+
+    for (int y = 0; y < height; y++) {
+        float *r = (float *)(frame->data[2] + y * frame->linesize[2]);
+        float *g = (float *)(frame->data[0] + y * frame->linesize[0]);
+        float *b = (float *)(frame->data[1] + y * frame->linesize[1]);
+        float cy = y / h;
+
+        for (int x = 0; x < width; x++) {
+            float cx = x / w;
+            float rgb[3];
+
+            rgb[0] = sqrtf((cx - 0.f) * (cx - 0.f) + (cy - 0.f) * (cy - 0.f));
+            rgb[1] = sqrtf((cx - 1.f) * (cx - 1.f) + (cy - 0.f) * (cy - 0.f));
+            rgb[2] = sqrtf((cx - .5f) * (cx - .5f) + (cy - 1.f) * (cy - 1.f));
+
+            r[x] = expf(-rgb[0] * f);
+            g[x] = expf(-rgb[1] * f);
+            b[x] = expf(-rgb[2] * f);
+        }
+    }
+}
+
+static av_cold int triangle_init(AVFilterContext *ctx)
+{
+    TestSourceContext *test = ctx->priv;
+
+    test->draw_once = 1;
+    test->fill_picture_fn = triangle_fill_picture;
+    return init(ctx);
+}
+
+const FFFilter ff_vsrc_triangle = {
+    .p.name        = "triangle",
+    .p.description = NULL_IF_CONFIG_SMALL("Generate RGB triangle."),
+    .p.priv_class  = &triangle_class,
+    .priv_size     = sizeof(TestSourceContext),
+    .init          = triangle_init,
+    .uninit        = uninit,
+    .activate      = activate,
+    FILTER_OUTPUTS(outputs),
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_GBRPF32),
+};
+
+#endif /* CONFIG_TRIANGLE_FILTER */

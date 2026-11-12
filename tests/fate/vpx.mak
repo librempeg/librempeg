@@ -28,6 +28,17 @@ fate-theora-coeff-level64: CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/
 FATE_VP3-$(call FRAMECRC, OGG, THEORA) += fate-theora-offset
 fate-theora-offset: CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/vp3/offset_test.ogv
 
+# Remux a sample that uses three quantizers per frame (31, 20, 41) and set the
+# first quantizer of the first frame to 20. With frame threading, the matrix
+# for the first quantizer must then be updated for the following frames.
+FATE_VP3-$(call FRAMECRC, OGG MATROSKA, THEORA, MATROSKA_MUXER) += fate-theora-frame-threads-qps
+fate-theora-frame-threads-qps: CMD = run_with_patched_temp \
+    "$(FFMPEG) -nostdin -v error -i $(TARGET_SAMPLES)/ogg/empty_theora_packets.ogv \
+    -map 0:v -c copy -fflags +bitexact -write_crc32 0 -y" \
+    "$(FFMPEG) -nostdin -v error -bitexact -f framecrc - \
+    -flags +bitexact -threads 4 -thread_type frame -i" \
+    mkv 3751 "\0024"
+
 FATE_VP3-$(call FRAMECRC, AVI, VP3) += fate-vp31
 fate-vp31: CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/vp3/vp31.avi
 
@@ -140,6 +151,9 @@ $(eval $(call FATE_VP9_SUITE,trac4359))
 FATE_VP9-$(call FRAMEMD5, IVF, VP9, SCALE_FILTER) += fate-vp9-05-resize
 fate-vp9-05-resize: CMD = framemd5 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-05-resize.ivf -s 352x288 -sws_flags bitexact+bilinear
 fate-vp9-05-resize: REF = $(SRC_PATH)/tests/ref/fate/vp9-05-resize
+
+FATE_VP9-$(call FRAMEMD5, MATROSKA, VP9, TRIM_BSF) += fate-vp9-trim-preroll
+fate-vp9-trim-preroll: CMD = framemd5 -bsf:v trim=start=133:preroll=1 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-10-show-existing-frame.webm
 
 fate-vp9-encparams: CMD = venc_data $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-segmentation-aq-akiyo.webm 0 5
 FATE_SAMPLES_DUMP_DATA-$(call DEMDEC, MATROSKA, VP9) += fate-vp9-encparams

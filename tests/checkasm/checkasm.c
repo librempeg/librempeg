@@ -78,6 +78,9 @@ static const CheckasmTest tests[] = {
     #if CONFIG_AUDIODSP
         { "audiodsp", checkasm_check_audiodsp },
     #endif
+    #if CONFIG_BITPACKED_DECODER
+        { "bitpackeddec", checkasm_check_bitpackeddec },
+    #endif
     #if CONFIG_BLOCKDSP
         { "blockdsp", checkasm_check_blockdsp },
     #endif
@@ -241,6 +244,7 @@ static const CheckasmTest tests[] = {
     #if CONFIG_VVC_DECODER
         { "vvc_alf", checkasm_check_vvc_alf },
         { "vvc_mc",  checkasm_check_vvc_mc  },
+        { "vvc_pred", checkasm_check_vvc_pred },
         { "vvc_sao", checkasm_check_vvc_sao },
     #endif
 #endif
@@ -283,6 +287,9 @@ static const CheckasmTest tests[] = {
     #endif
     #if CONFIG_NLMEANS_FILTER
         { "vf_nlmeans", checkasm_check_nlmeans },
+    #endif
+    #if CONFIG_LIMITER_FILTER
+        { "vf_limiter", checkasm_check_vf_limiter },
     #endif
     #if CONFIG_PP7_FILTER
         { "vf_pp7", checkasm_check_vf_pp7 },
@@ -374,7 +381,7 @@ static const CheckasmCpuInfo cpuflags[] = {
     { "SSE4.2",     "sse42",     AV_CPU_FLAG_SSE42 },
     { "AES-NI",     "aesni",     AV_CPU_FLAG_AESNI },
     { "CLMUL",      "clmul",     AV_CPU_FLAG_CLMUL },
-    { "AVX",        "avx",       AV_CPU_FLAG_AVX },
+    { "AVX",        "avx",       AV_CPU_FLAG_AVX|AV_CPU_FLAG_AVXSLOW },
     { "XOP",        "xop",       AV_CPU_FLAG_XOP },
     { "FMA3",       "fma3",      AV_CPU_FLAG_FMA3 },
     { "FMA4",       "fma4",      AV_CPU_FLAG_FMA4 },
@@ -390,18 +397,31 @@ static const CheckasmCpuInfo cpuflags[] = {
     { NULL }
 };
 
+static int host_cpu_flags;
+
 static void set_cpu_flags(uint64_t flags)
 {
-    av_force_cpu_flags((int) flags);
+    av_force_cpu_flags((int) flags & host_cpu_flags);
 }
 
 int main(int argc, const char *argv[])
 {
+    /* Include optional hints for reporting; set_cpu_flags() masks out hints
+     * absent from the host before DSP dispatch. AV_CPU_FLAG_AVXSLOW may alias
+     * a flag on another architecture, so keep it x86-only. */
+#if ARCH_X86
+    const int extra_flags = AV_CPU_FLAG_AVXSLOW;
+#else
+    const int extra_flags = 0;
+#endif
+
+    host_cpu_flags = av_get_cpu_flags();
+
     CheckasmConfig cfg = {
         .cpu_flags      = cpuflags,
         .tests          = tests,
         .set_cpu_flags  = set_cpu_flags,
-        .cpu            = av_get_cpu_flags(),
+        .cpu            = host_cpu_flags | extra_flags,
     };
 
     return checkasm_main(&cfg, argc, argv);

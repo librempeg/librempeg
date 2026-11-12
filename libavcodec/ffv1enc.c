@@ -250,7 +250,7 @@ static inline void put_vlc_symbol(PutBitContext *pb, VlcState *const state,
         i += i;
     }
 
-    av_assert2(k <= 16);
+    av_assert2(k <= 19);
 
     code = v ^ ((2 * state->drift + state->count) >> 31);
 
@@ -1053,6 +1053,18 @@ static av_cold int encode_init_internal(AVCodecContext *avctx)
         if ((ret = ff_ffv1_encode_determine_slices(avctx)) < 0)
             return ret;
 
+        /* The Golomb-Rice escape code is 12 + bits long and put_bits()
+         * writes at most 31 bits, so bits must stay below 20. The RCT
+         * planes of remapped 32bit floats need log2 of the summed remap
+         * counts of two planes, which a slice of at most 1<<18 pixels
+         * keeps within 19 bits. */
+        if (s->ac == AC_GOLOMB_RICE && s->bits_per_raw_sample == 32 &&
+            ((avctx->width  + s->num_h_slices - 1) / s->num_h_slices) *
+            (int64_t)((avctx->height + s->num_v_slices - 1) / s->num_v_slices) > 1 << 18) {
+            av_log(avctx, AV_LOG_ERROR, "Slices larger than 262144 pixels are not supported with 32bit floats and the Golomb-Rice coder\n");
+            return AVERROR(EINVAL);
+        }
+
         if ((ret = ff_ffv1_write_extradata(avctx)) < 0)
             return ret;
     }
@@ -1149,10 +1161,22 @@ static void encode_slice_header(FFV1Context *f, FFV1SliceContext *sc)
     }
 }
 
+#define NB_Y_COEFF 15
+
+/* Each contribution to the partial sums is at most 98303,
+ * so up to 4096 of them fit in an int. */
+static av_always_inline void accumulate_rct_stats(int64_t stat[NB_Y_COEFF],
+                                                 int partial[NB_Y_COEFF])
+{
+    for (int i = 0; i < NB_Y_COEFF; i++) {
+        stat[i] += partial[i];
+        partial[i] = 0;
+    }
+}
+
 static void choose_rct_params(const FFV1Context *f, FFV1SliceContext *sc,
                               const uint8_t *src[3], const int stride[3], int w, int h)
 {
-#define NB_Y_COEFF 15
     static const int rct_y_coeff[15][2] = {
         {0, 0}, //      4G
         {1, 1}, //  R + 2G + B
@@ -1172,7 +1196,8 @@ static void choose_rct_params(const FFV1Context *f, FFV1SliceContext *sc,
         {1, 0}, //  R + 3G
     };
 
-    int stat[NB_Y_COEFF] = {0};
+    int64_t stat[NB_Y_COEFF] = {0};
+    int partial[NB_Y_COEFF] = {0};
     int x, y, i, p, best;
     int16_t *sample[3];
     int lbd = f->bits_per_raw_sample <= 8;
@@ -1220,7 +1245,7 @@ static void choose_rct_params(const FFV1Context *f, FFV1SliceContext *sc,
                 bb -= bg;
 
                 for (i = 0; i<NB_Y_COEFF; i++) {
-                    stat[i] += FFABS(bg + ((br*rct_y_coeff[i][0] + bb*rct_y_coeff[i][1])>>2));
+                    partial[i] += FFABS(bg + ((br*rct_y_coeff[i][0] + bb*rct_y_coeff[i][1])>>2));
                 }
 
             }
@@ -1231,7 +1256,10 @@ static void choose_rct_params(const FFV1Context *f, FFV1SliceContext *sc,
             lastr = r;
             lastg = g;
             lastb = b;
+            if ((x & 4095) == 4095)
+                accumulate_rct_stats(stat, partial);
         }
+        accumulate_rct_stats(stat, partial);
     }
 
     best = 0;
@@ -1252,7 +1280,8 @@ static void choose_rct_params_bayer(const FFV1Context *f, FFV1SliceContext *sc,
         { 0, 0 }, { 1, 1 }, { 2, 2 }, { 0, 2 }, { 2, 0 }, { 4, 0 }, { 0, 4 }, { 0, 3 },
         { 3, 0 }, { 3, 1 }, { 1, 3 }, { 1, 2 }, { 2, 1 }, { 0, 1 }, { 1, 0 },
     };
-    int stat[NB_Y_COEFF] = {0};
+    int64_t stat[NB_Y_COEFF] = {0};
+    int partial[NB_Y_COEFF] = {0};
     int16_t *sample[3];
     int i, best;
 
@@ -1286,7 +1315,7 @@ static void choose_rct_params_bayer(const FFV1Context *f, FFV1SliceContext *sc,
                 bb -= bgm;
 
                 for (i = 0; i < NB_Y_COEFF; i++)
-                    stat[i] += FFABS(bgm + ((br*rct_y_coeff[i][0] + bb*rct_y_coeff[i][1]) >> 2));
+                    partial[i] += FFABS(bgm + ((br*rct_y_coeff[i][0] + bb*rct_y_coeff[i][1]) >> 2));
             }
             sample[0][x] = agm;
             sample[1][x] = ab;
@@ -1295,7 +1324,10 @@ static void choose_rct_params_bayer(const FFV1Context *f, FFV1SliceContext *sc,
             last_gm = gm;
             last_b  = b;
             last_r  = r;
+            if ((x & 4095) == 4095)
+                accumulate_rct_stats(stat, partial);
         }
+        accumulate_rct_stats(stat, partial);
     }
 
     best = 0;

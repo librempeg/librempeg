@@ -337,6 +337,13 @@ static int vulkan_encode_issue(AVCodecContext *avctx,
         }
     }
 
+    /* Flush the headers written above if needed */
+    if (encode_info.dstBufferOffset)
+        RET(ff_vk_flush_buffer(&ctx->s, sd_buf, 0,
+                               FFALIGN(encode_info.dstBufferOffset,
+                                       ctx->s.props.properties.limits.nonCoherentAtomSize),
+                               1));
+
     vp->slices_offset = encode_info.dstBufferOffset;
 
     /* Align buffer size to the nearest lower alignment requirement. */
@@ -454,6 +461,19 @@ static int vulkan_encode_issue(AVCodecContext *avctx,
     /* End encoding */
     vk->CmdEndVideoCodingKHR(cmd_buf, &encode_end);
 
+    /* For the host to read the output */
+    vk->CmdPipelineBarrier2(cmd_buf, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pMemoryBarriers = &(VkMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR,
+            .srcAccessMask = VK_ACCESS_2_VIDEO_ENCODE_WRITE_BIT_KHR,
+            .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+            .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT,
+        },
+        .memoryBarrierCount = 1,
+    });
+
     /* End recording and submit for execution */
     err = ff_vk_exec_submit(&ctx->s, vp->exec);
     if (err < 0)
@@ -492,6 +512,7 @@ static int vulkan_encode_output(AVCodecContext *avctx,
                                 FFHWBaseEncodePicture *base_pic, AVPacket *pkt)
 {
     VkResult ret;
+    int err, offs;
     FFVulkanEncodePicture *vp = base_pic->priv;
     FFVulkanEncodeContext *ctx = avctx->priv_data;
     FFHWBaseEncodeContext *base_ctx = &ctx->base;
@@ -520,31 +541,25 @@ static int vulkan_encode_output(AVCodecContext *avctx,
         return AVERROR_EXTERNAL;
     }
 
-    /* Invalidate buffer if needed */
-    if (!(sd_buf->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-        FFVulkanFunctions *vk = &ctx->s.vkfn;
-        VkMappedMemoryRange invalidate_buf;
-
-        int offs = vp->slices_offset;
-        /* If the non-coherent alignment is greater than the bitstream buffer
-         * offset's alignment, and the offs value is not aligned already,
-         * align it to the previous alignment point. */
-        if (ctx->s.props.properties.limits.nonCoherentAtomSize >
-            ctx->caps.minBitstreamBufferOffsetAlignment && offs &&
-            (FFALIGN(offs, ctx->s.props.properties.limits.nonCoherentAtomSize) != offs)) {
-            offs -= ctx->s.props.properties.limits.nonCoherentAtomSize;
-            offs = FFALIGN(FFMAX(offs, 0), ctx->s.props.properties.limits.nonCoherentAtomSize);
-        }
-
-        invalidate_buf = (VkMappedMemoryRange) {
-            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-            .memory = sd_buf->mem,
-            .offset = offs,
-            .size = VK_WHOLE_SIZE,
-        };
-
-        vk->FlushMappedMemoryRanges(ctx->s.hwctx->act_dev, 1, &invalidate_buf);
+    /* If the non-coherent alignment is greater than the bitstream buffer
+     * offset's alignment, and the offs value is not aligned already,
+     * align it to the previous alignment point. */
+    offs = vp->slices_offset;
+    if (ctx->s.props.properties.limits.nonCoherentAtomSize >
+        ctx->caps.minBitstreamBufferOffsetAlignment && offs &&
+        (FFALIGN(offs, ctx->s.props.properties.limits.nonCoherentAtomSize) != offs)) {
+        offs -= ctx->s.props.properties.limits.nonCoherentAtomSize;
+        offs = FFALIGN(FFMAX(offs, 0), ctx->s.props.properties.limits.nonCoherentAtomSize);
     }
+
+    /* Invalidate buffer if needed */
+    err = ff_vk_flush_buffer(&ctx->s, sd_buf, offs,
+                             FFALIGN(vp->slices_offset + query_data[0] +
+                                     query_data[1] - offs,
+                                     ctx->s.props.properties.limits.nonCoherentAtomSize),
+                             0);
+    if (err < 0)
+        return err;
 
     if (vp->non_independent_frame) {
         av_assert0(!ctx->prev_buf_ref);
@@ -884,7 +899,7 @@ av_cold int ff_vulkan_encode_init(AVCodecContext *avctx, FFVulkanEncodeContext *
     if (!ctx->qf_enc) {
         av_log(avctx, AV_LOG_ERROR, "Encoding of %s is not supported by this device\n",
                avcodec_get_name(avctx->codec_id));
-        return err;
+        return AVERROR(ENOSYS);
     }
 
     /* Load all properties */

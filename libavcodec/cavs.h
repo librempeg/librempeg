@@ -1,5 +1,5 @@
 /*
- * Chinese AVS video (AVS1-P2, JiZhun profile) decoder.
+ * Chinese AVS video (AVS1-P2/P16, JiZhun and Broadcasting profiles) decoder.
  * Copyright (c) 2006  Stefan Gehrer <stefan.gehrer@gmx.de>
  *
  * This file is part of Librempeg
@@ -24,12 +24,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "libavutil/attributes.h"
 #include "libavutil/frame.h"
 #include "libavutil/mem_internal.h"
 
 #include "avcodec.h"
+#include "cavs_aec.h"
 #include "cavsdsp.h"
 #include "blockdsp.h"
 #include "h264chroma.h"
@@ -152,6 +154,11 @@ typedef struct cavs_vector {
     int16_t y;
     int16_t dist;
     int16_t ref;
+    /**
+     * mb_reference_index of the block, 0 when it codes none (clause 9.4.5);
+     * ref above is where the reference list puts it
+     */
+    int16_t ref_idx;
 } cavs_vector;
 
 struct dec_2dvlc {
@@ -176,8 +183,18 @@ typedef struct AVSContext {
     GetBitContext gb;
     AVSFrame cur;     ///< currently decoded frame
     AVSFrame DPB[2];  ///< reference frames
-    int dist[2];     ///< temporal distances from current frame to ref frames
+    /**
+     * The reference of every reference index, clause 9.4.5: a frame, or the
+     * field of one starting at parity; both lists share the array.
+     */
+    struct {
+        AVFrame *f;   ///< frame the reference belongs to
+        int parity;   ///< first line of the reference field inside it
+    } ref[4];
+    int ref_base[2]; ///< first entry of the forward and the backward list
+    int dist[4];     ///< BlockDistance of every reference, clause 9.4.6.1
     int low_delay;
+    int progressive_seq;
     int profile, level;
     int aspect_ratio;
     int mb_width, mb_height;
@@ -185,13 +202,28 @@ typedef struct AVSContext {
     int stream_revision; ///<0 for samples from 2006, 1 for rm52j encoder
     int progressive;
     int pic_structure;
-    int skip_mode_flag; ///< select between skip_count or one skip_flag per MB
+    int top_field_first;  ///< first coded field is the top one, clause 7.2.3
+    int b_field_enhanced; ///< BFieldEnhanced of the picture, clause 9.9.1 b)
+    int field;            ///< field of the current MB, 0 or 1, clause 3.24
+    int field_mby;        ///< macroblock row of the current macroblock in it
+    int skip_mode_flag;   ///< select between skip_count or one skip_flag per MB
+    int aec_enable;       ///< the macroblock layer uses AEC (AVS1-P16)
+    int aec_start;        ///< byte offset of the current AEC slice's payload
+    CAVSAECContext aec;   ///< AEC decoder state and contexts, clause 8.4
+    int prev_delta_qp;    ///< PreviousDeltaQP of clause 9.4.8, an AEC context
+    int left_cbp;         ///< MbCBP of the macroblock to the left
+    uint8_t *top_cbp;     ///< MbCBP of the macroblock above, one per column
+    int left_mb_type;          ///< MbType to the left, clause 8.4.4.2 b)
+    uint8_t *top_mb_type;      ///< MbType above, one per column
+    int left_c_pred_mode;      ///< IntraChromaPredMode to the left, 8.4.4.2 e)
+    uint8_t *top_c_pred_mode;  ///< IntraChromaPredMode above, per column
     int loop_filter_disable;
     int alpha_offset, beta_offset;
     int ref_flag;
     int mbx, mby, mbidx; ///< macroblock coordinates
     int flags;         ///< availability flags of neighbouring macroblocks
     int stc;           ///< last start code
+    int pic_data_end;  ///< a unit that is not a slice ended the picture's data
     uint8_t *cy, *cu, *cv; ///< current MB sample pointers
     int left_qp;
     uint8_t *top_qp;
@@ -209,6 +241,8 @@ typedef struct AVSContext {
 
        the same is repeated for backward motion vectors */
     DECLARE_ALIGNED(8, cavs_vector, mv)[2*4*3];
+    /** mv_diff of the same blocks, for the ctxIdxInc of clause 8.4.4.2 g) */
+    int16_t mvd[2*4*3][2];
     cavs_vector *top_mv[2];
     cavs_vector *col_mv;
 
@@ -226,6 +260,10 @@ typedef struct AVSContext {
     int cbp;
     DECLARE_ALIGNED(32, int16_t, block)[64];
     uint8_t permutated_scantable[64];
+    /** inverse block scan method 2 of clause 9.5.3 c), for field pictures */
+    uint8_t permutated_scantable_field[64];
+    /** the one of the two the current picture uses, selected in decode_pic() */
+    const uint8_t *scantable;
 
     /** intra prediction is done with un-deblocked samples
      they are saved here before deblocking the MB  */
@@ -238,12 +276,30 @@ typedef struct AVSContext {
     void (*intra_pred_c[7])(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride);
     uint8_t *col_type_base;
 
-    /* scaling factors for MV prediction */
-    int sym_factor;    ///< for scaling in symmetrical B block
-    int direct_den[2]; ///< for scaling in direct B block
-    int scale_den[2];  ///< for scaling neighbouring MVs
+    /** 512 / dist[], for scaling neighbouring MVs (clause 9.4.6.2 step 3) */
+    int scale_den[4];
+
+    /**
+     * 16384 / BlockDistanceRef of clause 9.9.1 b) 3), indexed by the
+     * co-located block's own distance, which is 9 bits (clause 9.4.6.1)
+     */
+    uint16_t direct_den[512];
 
     uint8_t *edge_emu_buffer;
+
+    /**
+     * picture payload with the annex A pseudo start codes removed,
+     * allocated only for the pictures that carry one
+     */
+    uint8_t *deemulated_buf;
+    unsigned int deemulated_buf_size;
+    /**
+     * byte offsets in deemulated_buf at which a start code prefix of the
+     * original payload begins
+     */
+    uint32_t *stc_offset;
+    unsigned int stc_offset_size;
+    int nb_stc_offset;
 
     int got_keyframe;
 } AVSContext;
@@ -252,10 +308,10 @@ extern const uint8_t     ff_cavs_chroma_qp[64];
 extern const uint8_t     ff_cavs_partition_flags[30];
 
 /** mark block as using intra prediction */
-#define CAVS_DIR_MV   (cavs_vector){ 0, 0, 1, REF_DIR }
+#define CAVS_DIR_MV   (cavs_vector){ 0, 0, 1, REF_DIR, 0 }
 /** mark block as "no prediction from this direction"
     e.g. forward motion vector in BWD partition */
-#define CAVS_INTRA_MV (cavs_vector){ 0, 0, 1, REF_INTRA }
+#define CAVS_INTRA_MV (cavs_vector){ 0, 0, 1, REF_INTRA, 0 }
 
 static inline void set_mvs(cavs_vector *mv, enum cavs_block size) {
     switch(size) {
@@ -272,6 +328,23 @@ static inline void set_mvs(cavs_vector *mv, enum cavs_block size) {
     }
 }
 
+/** replicate one partition's mv_diff over the 8x8 blocks it covers */
+static inline void set_mvds(int16_t (*mvd)[2], enum cavs_block size)
+{
+    switch (size) {
+    case BLK_16X16:
+        memcpy(mvd[MV_STRIDE  ], mvd[0], sizeof(*mvd));
+        memcpy(mvd[MV_STRIDE+1], mvd[0], sizeof(*mvd));
+        av_fallthrough;
+    case BLK_16X8:
+        memcpy(mvd[1], mvd[0], sizeof(*mvd));
+        break;
+    case BLK_8X16:
+        memcpy(mvd[MV_STRIDE], mvd[0], sizeof(*mvd));
+        break;
+    }
+}
+
 void ff_cavs_filter(AVSContext *h, enum cavs_mb mb_type);
 void ff_cavs_load_intra_pred_luma(AVSContext *h, uint8_t *top, uint8_t **left,
                                   int block);
@@ -281,6 +354,7 @@ void ff_cavs_inter(AVSContext *h, enum cavs_mb mb_type);
 void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
                 enum cavs_mv_pred mode, enum cavs_block size, int ref);
 void ff_cavs_init_mb(AVSContext *h);
+void ff_cavs_set_mb_row(AVSContext *h);
 int  ff_cavs_next_mb(AVSContext *h);
 int ff_cavs_init_pic(AVSContext *h);
 int ff_cavs_init_top_lines(AVSContext *h);

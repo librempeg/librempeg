@@ -120,7 +120,7 @@ static void check_idct(VP8DSPContext *d, bool is_vp7)
     LOCAL_ALIGNED_16(int16_t, subcoef0, [4 * 4]);
     LOCAL_ALIGNED_16(int16_t, subcoef1, [4 * 4]);
     int dc;
-    declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *dst, int16_t *block, ptrdiff_t stride);
+    declare_func(void, uint8_t *dst, int16_t *block, ptrdiff_t stride);
 
     randomize_buffers(src, dst, 4, coef);
 
@@ -262,7 +262,7 @@ static void check_mc(VP8DSPContext *d)
     BUF_RECT(uint8_t, dst0, 16, 16);
     BUF_RECT(uint8_t, dst1, 16, 16);
     int type, k, dx, dy;
-    declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, ptrdiff_t,
+    declare_func(void, uint8_t *, ptrdiff_t,
                       const uint8_t *, ptrdiff_t, int, int, int);
 
     for (type = 0; type < 2; type++) {

@@ -172,12 +172,9 @@ static void compute_histogram16(const uint16_t *src, ptrdiff_t linesize,
 static void compute_contrast_change(float *histogram1, float *histogram2,
                                     unsigned *cchange, size_t hsize)
 {
-    int i;
-
-    for (i = 0; i < hsize; i++) {
-        int j;
-
-        for (j = 0; j < hsize && histogram2[j] < histogram1[i]; j++);
+    // both histograms are cumulative, so j never has to move back
+    for (int i = 0, j = 0; i < hsize; i++) {
+        for (; j < hsize && histogram2[j] < histogram1[i]; j++);
 
         cchange[i] = (i + j) / 2;
     }

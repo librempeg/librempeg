@@ -512,9 +512,10 @@ static int ftp_set_dir(FTPContext *s)
 static int ftp_list_mlsd(FTPContext *s)
 {
     static const char *command = "MLSD\r\n";
-    static const int mlsd_codes[] = {150, 500, 0}; /* 500 is incorrect code */
+    static const int mlsd_codes[] = {150, 125, 500, 0}; /* 500 is incorrect code */
+    int resp_code = ftp_send_command(s, command, mlsd_codes, NULL);
 
-    if (ftp_send_command(s, command, mlsd_codes, NULL) != 150)
+    if (resp_code != 150 && resp_code != 125)
         return AVERROR(ENOSYS);
     s->listing_method = MLSD;
     return 0;
@@ -993,7 +994,7 @@ static int64_t ftp_parse_date(const char *date)
 static int ftp_parse_entry_nlst(char *line, AVIODirEntry *next)
 {
     next->name = av_strdup(line);
-    return 0;
+    return next->name ? 0 : AVERROR(ENOMEM);
 }
 
 static int ftp_parse_entry_mlsd(char *mlsd, AVIODirEntry *next)
@@ -1004,7 +1005,8 @@ static int ftp_parse_entry_mlsd(char *mlsd, AVIODirEntry *next)
     while(fact = av_strtok(p, ";", &saveptr)) {
         p = NULL;
         if (fact[0] == ' ') {
-            next->name = av_strdup(&fact[1]);
+            if (!(next->name = av_strdup(&fact[1])))
+                return AVERROR(ENOMEM);
             continue;
         }
         fact = av_strtok(fact, "=", &value);
@@ -1068,9 +1070,9 @@ static int ftp_read_dir(URLContext *h, AVIODirEntry **next)
             if (s->dir_buffer_size)
                 memmove(s->dir_buffer, start, s->dir_buffer_size);
             ret = ffurl_read(s->conn_data, s->dir_buffer + s->dir_buffer_size, DIR_BUFFER_SIZE - (s->dir_buffer_size + 1));
-            if (ret < 0)
+            if (ret < 0 && ret != AVERROR_EOF)
                 return ret;
-            if (!ret) {
+            if (ret <= 0) {
                 *next = NULL;
                 return 0;
             }

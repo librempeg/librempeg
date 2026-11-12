@@ -681,8 +681,17 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
                 rt->transport = RTSP_TRANSPORT_RDT;
         } else if (av_strstart(p, "SampleRate:integer;", &p) &&
                    s->nb_streams > 0) {
-            st = s->streams[s->nb_streams - 1];
-            st->codecpar->sample_rate = atoi(p);
+            long sample_rate;
+
+            errno = 0;
+            sample_rate = strtol(p, NULL, 10);
+            if (errno == ERANGE || sample_rate <= 0 || sample_rate > INT_MAX) {
+                av_log(s, AV_LOG_WARNING,
+                       "Invalid SampleRate %ld in SDP, ignoring\n", sample_rate);
+            } else {
+                st = s->streams[s->nb_streams - 1];
+                st->codecpar->sample_rate = sample_rate;
+            }
         } else if (av_strstart(p, "crypto:", &p) && s->nb_streams > 0) {
             // RFC 4568
             rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
@@ -734,7 +743,7 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
             if (s->nb_streams > 0) {
                 rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
 
-                if (rt->server_type == RTSP_SERVER_REAL)
+                if (rt->server_type == RTSP_SERVER_REAL && rtsp_st->stream_index >= 0)
                     ff_real_parse_sdp_a_line(s, rtsp_st->stream_index, p);
 
                 if (rtsp_st->dynamic_handler &&
@@ -1935,6 +1944,7 @@ int ff_rtsp_connect(AVFormatContext *s)
     int port, err, tcp_fd;
     RTSPMessageHeader reply1, *reply = &reply1;
     int lower_transport_mask = 0;
+    int redirects = 0;
     int default_port = RTSP_DEFAULT_PORT;
     int https_tunnel = 0;
     char real_challenge[64] = "";
@@ -2243,6 +2253,11 @@ redirect:
     if (reply->status_code >=300 && reply->status_code < 400 && s->iformat) {
         int ret;
 
+        if (redirects++ >= 8 /* MAX_RTSP_REDIRECTS */) {
+            av_log(s, AV_LOG_ERROR, "Too many RTSP redirects\n");
+            err = AVERROR(EIO);
+            goto fail2;
+        }
         if (!rtsp_url_same_origin(s->url, reply->location)) {
             memset(rt->auth, 0, sizeof(rt->auth));
             memset(&rt->auth_state, 0, sizeof(rt->auth_state));

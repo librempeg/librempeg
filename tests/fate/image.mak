@@ -394,6 +394,21 @@ FATE_JPEGLS-$(call DEMDEC, IMAGE2, JPEGLS) += $(FATE_JPEGLS)
 FATE_IMAGE_FRAMECRC += $(FATE_JPEGLS-yes)
 fate-jpegls: $(FATE_JPEGLS-yes)
 
+# Exercise tolerance of a nonconforming single-component scan with ILV=1:
+# decode its ILV=0 payload using the correct sample width.
+# Encode a 16-bit gray image and set the ILV byte of the SOS header (offset 23)
+# to 1; the output must match the source.
+JPEGLS_ILV1_GEN = $(FFMPEG) -nostdin -v error -f lavfi -i testsrc2=s=64x64,format=gray16le \
+    -frames:v 1 -c:v jpegls -flags +bitexact -fflags +bitexact -f image2 -y
+JPEGLS_ILV1_DEC = $(FFMPEG) -nostdin -v error -flags +bitexact -fflags +bitexact \
+    -pix_fmt gray16le -vf scale -f framecrc - -i
+FATE_JPEGLS_ILV1-$(call ENCDEC, JPEGLS, IMAGE2, LAVFI_INDEV TESTSRC2_FILTER FORMAT_FILTER \
+                    WRAPPED_AVFRAME_DECODER RAWVIDEO_ENCODER SCALE_FILTER \
+                    FRAMECRC_MUXER PIPE_PROTOCOL) += fate-jpegls-ilv1-16bit
+fate-jpegls-ilv1-16bit: CMD = run_with_patched_temp "$(JPEGLS_ILV1_GEN)" "$(JPEGLS_ILV1_DEC)" jls 23 "\\0001"
+FATE_FFMPEG += $(FATE_JPEGLS_ILV1-yes)
+fate-jpegls: $(FATE_JPEGLS_ILV1-yes)
+
 FATE_IMAGE_FRAMECRC-$(call DEMDEC, IMAGE2, QDRAW) += fate-pict
 fate-pict: CMD = framecrc -i $(TARGET_SAMPLES)/quickdraw/TRU256.PCT -pix_fmt rgb24
 
@@ -626,16 +641,19 @@ FATE_IMAGE += $(FATE_IMAGE-yes)
 FATE_IMAGE_PROBE += $(FATE_IMAGE_PROBE-yes)
 FATE_IMAGE_TRANSCODE += $(FATE_IMAGE_TRANSCODE-yes)
 
-FATE_JPEG_MPF-$(call ALLYES, LAVFI_INDEV TESTSRC2_FILTER SCALE_FILTER FORMAT_FILTER \
+FATE_JPEG_MPF-$(call ALLYES, LAVFI_INDEV WRAPPED_AVFRAME_DECODER TESTSRC2_FILTER SCALE_FILTER FORMAT_FILTER \
     SPLIT_FILTER SETPARAMS_FILTER GAINMAP_FILTER MJPEG_ENCODER JPEG_MPF_MUXER \
-    FILE_PROTOCOL) += fate-jpeg-mpf-gainmap
+    JPEG_MPF_DEMUXER MJPEG_DECODER RAWVIDEO_ENCODER FRAMECRC_MUXER PIPE_PROTOCOL \
+    FILE_PROTOCOL FFPROBE) += fate-jpeg-mpf-gainmap
 fate-jpeg-mpf-gainmap: tests/data/filtergraphs/jpeg_mpf_gainmap
-fate-jpeg-mpf-gainmap: CMD = md5 -bitexact -sws_flags +accurate_rnd+bitexact \
-    -/filter_complex $(TARGET_PATH)/tests/data/filtergraphs/jpeg_mpf_gainmap \
-    -map "[base]" -map "[gain]" -stream_group "type=gain_map:st=0:st=1:el_index=1" \
-    -pix_fmt yuvj444p -c:v mjpeg -dct int -f jpeg_mpf
+fate-jpeg-mpf-gainmap: CMD = transcode lavfi testsrc2=s=64x48:r=1:d=1 jpeg_mpf \
+    "-sws_flags +accurate_rnd+bitexact \
+     -/filter_complex $(TARGET_PATH)/tests/data/filtergraphs/jpeg_mpf_gainmap \
+     -map [base] -map [gain] -stream_group type=gain_map:st=0:st=1:el_index=1 \
+     -pix_fmt yuvj444p -c:v mjpeg -dct int" "-map 0" \
+    "-show_entries stream_group=index,type,nb_streams:stream_group_stream=index:frame=stream_index:frame_side_data_list -of compact"
 
-FATE_FFMPEG += $(FATE_JPEG_MPF-yes)
+FATE_FFMPEG_FFPROBE += $(FATE_JPEG_MPF-yes)
 fate-jpeg-mpf: $(FATE_JPEG_MPF-yes)
 
 FATE_IMG2_MUXER-$(call ALLYES, LAVFI_INDEV COLOR_FILTER FORMAT_FILTER \

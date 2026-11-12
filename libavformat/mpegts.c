@@ -2705,7 +2705,7 @@ static void create_stream_groups(MpegTSContext *ts, struct Program *prg)
             switch (grp->type) {
             case AV_STREAM_GROUP_PARAMS_LCEVC:
                 if (grp->streams[j]->codecpar->codec_id == AV_CODEC_ID_LCEVC)
-                    stg->params.layered_video->el_index = stg->nb_streams - 1;
+                    stg->params.layered_video->el_index = stg->nb_entries - 1;
                 break;
             case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
                 if (j == 0) {
@@ -2713,7 +2713,7 @@ static void create_stream_groups(MpegTSContext *ts, struct Program *prg)
                     stg->params.layered_video->height = grp->streams[j]->codecpar->height;
                 }
                 if (j == grp->nb_streams - 1)
-                    stg->params.layered_video->el_index = stg->nb_streams - 1;
+                    stg->params.layered_video->el_index = stg->nb_entries - 1;
                 break;
             default:
                 av_unreachable("Invalid group type!");
@@ -3482,8 +3482,6 @@ static int mpegts_probe(const AVProbeData *p)
 
     if        (check_count > CHECK_COUNT && sumscore > 6) {
         return AVPROBE_SCORE_MAX   + sumscore - CHECK_COUNT;
-    } else if (check_count >= CHECK_COUNT && sumscore >= CHECK_COUNT) {
-        return AVPROBE_SCORE_MAX   + sumscore - CHECK_COUNT;
     } else if (check_count >= CHECK_COUNT && sumscore > 6) {
         return AVPROBE_SCORE_MAX/2 + sumscore - CHECK_COUNT;
     } else if (check_count >= CHECK_COUNT && maxscore > 6) {
@@ -3658,8 +3656,9 @@ static int mpegts_raw_read_packet(AVFormatContext *s, AVPacket *pkt)
             /* we read the next PCR (XXX: optimize it by using a bigger buffer */
             pos = avio_tell(s->pb);
             for (i = 0; i < MAX_PACKET_READAHEAD; i++) {
-                avio_seek(s->pb, pos + i * ts->raw_packet_size, SEEK_SET);
-                avio_read(s->pb, pcr_buf, 12);
+                if (avio_seek(s->pb, pos + i * ts->raw_packet_size, SEEK_SET) < 0 ||
+                    avio_read(s->pb, pcr_buf, sizeof(pcr_buf)) != sizeof(pcr_buf))
+                    break;
                 if (parse_pcr(&next_pcr_h, &next_pcr_l, pcr_buf) == 0) {
                     /* XXX: not precise enough */
                     ts->pcr_incr =

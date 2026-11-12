@@ -33,6 +33,7 @@ typedef struct HuffYUVDSPContext {
 } HuffYUVDSPContext;
 
 void ff_huffyuvdsp_init(HuffYUVDSPContext *c);
+void ff_huffyuvdsp_init_aarch64(HuffYUVDSPContext *c);
 void ff_huffyuvdsp_init_riscv(HuffYUVDSPContext *c);
 void ff_huffyuvdsp_init_x86(HuffYUVDSPContext *c);
 

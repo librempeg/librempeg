@@ -51,17 +51,12 @@ typedef struct DecoderPriv {
 
     // a combination of DECODER_FLAG_*, provided to dec_open()
     int                 flags;
+    int                 apply_cropping;
 
     enum AVPixelFormat  hwaccel_pix_fmt;
     enum HWAccelID      hwaccel_id;
     enum AVHWDeviceType hwaccel_device_type;
     enum AVPixelFormat  hwaccel_output_format;
-
-    enum CroppingType   apply_cropping;
-    unsigned            container_crop_top;
-    unsigned            container_crop_bottom;
-    unsigned            container_crop_left;
-    unsigned            container_crop_right;
 
     // pts/estimated duration of the last decoded frame
     // * in decoder timebase for video,
@@ -391,8 +386,6 @@ fail:
 static int video_frame_process(DecoderPriv *dp, AVFrame *frame,
                                unsigned *outputs_mask)
 {
-    int ret = 0;
-
     if (frame->format == dp->hwaccel_pix_fmt) {
         int err = hwaccel_retrieve_data(dp->dec_ctx, frame);
         if (err < 0)
@@ -437,38 +430,13 @@ static int video_frame_process(DecoderPriv *dp, AVFrame *frame,
     if (dp->sar_override.num)
         frame->sample_aspect_ratio = dp->sar_override;
 
-    // apply codec and/or container cropping, as per -apply_cropping;
-    // note that lavfi does not require aligned frame data
-    if (dp->apply_cropping == CROP_CODEC || dp->apply_cropping == CROP_ALL) {
-        ret = av_frame_apply_cropping(frame, AV_FRAME_CROP_UNALIGNED);
+    if (dp->apply_cropping) {
+        // lavfi does not require aligned frame data
+        int ret = av_frame_apply_cropping(frame, AV_FRAME_CROP_UNALIGNED);
         if (ret < 0) {
             av_log(dp, AV_LOG_ERROR, "Error applying decoder cropping\n");
             return ret;
         }
-    }
-    if (dp->apply_cropping == CROP_CONTAINER || dp->apply_cropping == CROP_ALL) {
-        // preserve existing values, in case we have
-        // not applied codec cropping above
-        unsigned crop_top     = frame->crop_top;
-        unsigned crop_bottom  = frame->crop_bottom;
-        unsigned crop_left    = frame->crop_left;
-        unsigned crop_right   = frame->crop_right;
-
-        frame->crop_top    = dp->container_crop_top;
-        frame->crop_bottom = dp->container_crop_bottom;
-        frame->crop_left   = dp->container_crop_left;
-        frame->crop_right  = dp->container_crop_right;
-
-        ret = av_frame_apply_cropping(frame, AV_FRAME_CROP_UNALIGNED);
-        if (ret < 0) {
-            av_log(dp, AV_LOG_ERROR, "Error applying container cropping\n");
-            return ret;
-        }
-
-        frame->crop_top    = crop_top;
-        frame->crop_bottom = crop_bottom;
-        frame->crop_left   = crop_left;
-        frame->crop_right  = crop_right;
     }
 
     if (frame->opaque)
@@ -1588,12 +1556,6 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
     dp->hwaccel_device_type     = o->hwaccel_device_type;
     dp->hwaccel_output_format   = o->hwaccel_output_format;
 
-    dp->apply_cropping          = o->apply_cropping;
-    dp->container_crop_top      = o->crop_top;
-    dp->container_crop_bottom   = o->crop_bottom;
-    dp->container_crop_left     = o->crop_left;
-    dp->container_crop_right    = o->crop_right;
-
     snprintf(dp->log_name, sizeof(dp->log_name), "dec:%s", codec->name);
 
     dp->parent_name = av_strdup(o->name ? o->name : "");
@@ -1632,10 +1594,6 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
     if (!av_dict_get(*dec_opts, "threads", NULL, 0))
         av_dict_set(dec_opts, "threads", "auto", 0);
 
-    // -apply_cropping is handled in the CLI itself
-    av_assert0(!av_dict_get(*dec_opts, "apply_cropping", NULL, 0) &&
-               "should be impossible to set this directly");
-
     ret = hw_device_setup_for_decode(dp, codec, o->hwaccel_device);
     if (ret < 0) {
         av_log(dp, AV_LOG_ERROR,
@@ -1659,6 +1617,7 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
         dp->dec_ctx->flags |= AV_CODEC_FLAG_BITEXACT;
 
     // we apply cropping ourselves
+    dp->apply_cropping          = dp->dec_ctx->apply_cropping;
     dp->dec_ctx->apply_cropping = 0;
 
     if ((ret = avcodec_open2(dp->dec_ctx, codec, NULL)) < 0) {

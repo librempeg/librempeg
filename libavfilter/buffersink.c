@@ -365,9 +365,9 @@ static const AVOption buffersink_options[] = {
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
     { "color_ranges", "array of supported color ranges",  OFFSET(color_ranges),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
-    { "chromalocations", "array of supported chroma locations", OFFSET(chromalocations),
-        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
-    { "alphamodes",     "array of supported alpha modes",  OFFSET(alphamodes),
+    { "chroma_locations", "array of supported chroma locations", OFFSET(chromalocations),
+        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
+    { "alpha_modes",     "array of supported alpha modes",  OFFSET(alphamodes),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
 
     { NULL },
@@ -399,6 +399,7 @@ const FFFilter ff_vsink_buffer = {
     .activate      = activate,
     FILTER_INPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC2(vsink_query_formats),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 
 static const AVFilterPad inputs_audio[] = {

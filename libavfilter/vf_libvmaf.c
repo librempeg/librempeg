@@ -24,6 +24,7 @@
  * Calculate the VMAF between two input videos.
  */
 
+#include "config.h"
 #include "config_components.h"
 
 #include <libvmaf.h>
@@ -105,6 +106,77 @@ static enum VmafPixelFormat pix_fmt_map(enum AVPixelFormat av_pix_fmt)
     }
 }
 
+#if HAVE_LIBVMAF_PICTURE_CONVERT
+static VmafColor color_map(const AVFrame *f)
+{
+    VmafColor c = { 0 };
+
+    switch (f->color_range) {
+    case AVCOL_RANGE_MPEG: c.range = VMAF_COLOR_RANGE_LIMITED; break;
+    case AVCOL_RANGE_JPEG: c.range = VMAF_COLOR_RANGE_FULL;    break;
+    default:               c.range = VMAF_COLOR_RANGE_UNKNOWN; break;
+    }
+
+    switch (f->color_primaries) {
+    case AVCOL_PRI_BT709:    c.primaries = VMAF_COLOR_PRIMARIES_BT709;    break;
+    case AVCOL_PRI_BT2020:   c.primaries = VMAF_COLOR_PRIMARIES_BT2020;   break;
+    case AVCOL_PRI_SMPTE432: c.primaries = VMAF_COLOR_PRIMARIES_SMPTE432; break;
+    default:                 c.primaries = VMAF_COLOR_PRIMARIES_UNKNOWN;  break;
+    }
+
+    switch (f->color_trc) {
+    case AVCOL_TRC_SMPTE170M:
+    case AVCOL_TRC_BT2020_10:
+    case AVCOL_TRC_BT2020_12:
+    case AVCOL_TRC_BT709:     c.trc = VMAF_COLOR_TRC_BT709;     break;
+    case AVCOL_TRC_SMPTE2084: c.trc = VMAF_COLOR_TRC_SMPTE2084; break;
+    default:                  c.trc = VMAF_COLOR_TRC_UNKNOWN;   break;
+    }
+
+    switch (f->colorspace) {
+    case AVCOL_SPC_BT709:      c.matrix = VMAF_COLOR_MATRIX_BT709;      break;
+    case AVCOL_SPC_BT2020_NCL: c.matrix = VMAF_COLOR_MATRIX_BT2020_NCL; break;
+    case AVCOL_SPC_ICTCP:      c.matrix = VMAF_COLOR_MATRIX_ICTCP;      break;
+    default:                   c.matrix = VMAF_COLOR_MATRIX_UNKNOWN;    break;
+    }
+
+    return c;
+}
+#endif
+
+#if HAVE_LIBVMAF_PICTURE_WRAP
+static int release_frame(VmafPicture *pic, void *cookie)
+{
+    AVFrame *frame = cookie;
+    av_frame_free(&frame);
+    return 0;
+}
+
+static int wrap_picture_data(AVFrame *src, VmafPicture *dst, unsigned bpc)
+{
+    AVFrame *ref = av_frame_clone(src);
+    if (!ref)
+        return AVERROR(ENOMEM);
+
+    VmafPictureWrapped pic_wrapped = {
+        .pix_fmt = pix_fmt_map(src->format),
+        .bpc = bpc,
+        .w = src->width,
+        .h = src->height,
+        .data = { src->data[0], src->data[1], src->data[2] },
+        .stride = { src->linesize[0], src->linesize[1], src->linesize[2] },
+        .cookie = ref,
+        .release_picture = release_frame,
+    };
+
+    if (vmaf_picture_wrap(dst, pic_wrapped)) {
+        av_frame_free(&ref);
+        return AVERROR(ENOMEM);
+    }
+
+    return 0;
+}
+#else
 static int copy_picture_data(AVFrame *src, VmafPicture *dst, unsigned bpc)
 {
     const int bytes_per_value = bpc > 8 ? 2 : 1;
@@ -124,6 +196,21 @@ static int copy_picture_data(AVFrame *src, VmafPicture *dst, unsigned bpc)
     }
 
     return 0;
+}
+#endif
+
+static int get_picture(AVFrame *src, VmafPicture *dst, unsigned bpc)
+{
+#if HAVE_LIBVMAF_PICTURE_WRAP
+    int err = wrap_picture_data(src, dst, bpc);
+#else
+    int err = copy_picture_data(src, dst, bpc);
+#endif
+#if HAVE_LIBVMAF_PICTURE_CONVERT
+    if (!err)
+        dst->color = color_map(src);
+#endif
+    return err;
 }
 
 static int do_vmaf(FFFrameSync *fs)
@@ -147,13 +234,13 @@ static int do_vmaf(FFFrameSync *fs)
                av_color_range_name(ref->color_range));
     }
 
-    err = copy_picture_data(ref, &pic_ref, s->bpc);
+    err = get_picture(ref, &pic_ref, s->bpc);
     if (err) {
         av_log(ctx, AV_LOG_ERROR, "problem during vmaf_picture_alloc.\n");
         return AVERROR(ENOMEM);
     }
 
-    err = copy_picture_data(dist, &pic_dist, s->bpc);
+    err = get_picture(dist, &pic_dist, s->bpc);
     if (err) {
         av_log(ctx, AV_LOG_ERROR, "problem during vmaf_picture_alloc.\n");
         vmaf_picture_unref(&pic_ref);
@@ -239,30 +326,36 @@ static int parse_features(AVFilterContext *ctx)
     }
 
     for (unsigned i = 0; i < dict_cnt; i++) {
-        char *feature_name = NULL;
+        const AVDictionaryEntry *name = av_dict_get(dict[i], "name", NULL,
+                                                    AV_DICT_MATCH_CASE);
         VmafFeatureDictionary *feature_opts_dict = NULL;
         const AVDictionaryEntry *e = NULL;
 
+        if (!name) {
+            av_log(ctx, AV_LOG_ERROR, "feature without a name: %s\n",
+                   s->feature_cfg);
+            err = AVERROR(EINVAL);
+            goto exit;
+        }
+
         while (e = av_dict_iterate(dict[i], e)) {
-            if (!strcmp(e->key, "name")) {
-                feature_name = e->value;
+            if (!strcmp(e->key, "name"))
                 continue;
-            }
 
             err = vmaf_feature_dictionary_set(&feature_opts_dict, e->key,
                                               e->value);
             if (err) {
                 av_log(ctx, AV_LOG_ERROR,
                        "could not set feature option: %s.%s=%s\n",
-                       feature_name, e->key, e->value);
+                       name->value, e->key, e->value);
                 goto exit;
             }
         }
 
-        err = vmaf_use_feature(s->vmaf, feature_name, feature_opts_dict);
+        err = vmaf_use_feature(s->vmaf, name->value, feature_opts_dict);
         if (err) {
             av_log(ctx, AV_LOG_ERROR,
-                   "problem during vmaf_use_feature: %s\n", feature_name);
+                   "problem during vmaf_use_feature: %s\n", name->value);
             goto exit;
         }
     }
@@ -468,16 +561,6 @@ static int config_input_ref(AVFilterLink *inlink)
     const AVPixFmtDescriptor *desc;
     int err = 0;
 
-    if (ctx->inputs[0]->w != ctx->inputs[1]->w) {
-        av_log(ctx, AV_LOG_ERROR, "input width must match.\n");
-        err |= AVERROR(EINVAL);
-    }
-
-    if (ctx->inputs[0]->h != ctx->inputs[1]->h) {
-        av_log(ctx, AV_LOG_ERROR, "input height must match.\n");
-        err |= AVERROR(EINVAL);
-    }
-
     if (ctx->inputs[0]->format != ctx->inputs[1]->format) {
         av_log(ctx, AV_LOG_ERROR, "input pix_fmt must match.\n");
         err |= AVERROR(EINVAL);
@@ -682,6 +765,11 @@ static int config_props_cuda(AVFilterLink *outlink)
     if (!format_is_supported(frames_ctx->sw_format)) {
         av_log(ctx, AV_LOG_ERROR,
                "Unsupported input format: %s\n", desc->name);
+        return AVERROR(EINVAL);
+    }
+
+    if (ctx->inputs[1]->w != inlink->w || ctx->inputs[1]->h != inlink->h) {
+        av_log(ctx, AV_LOG_ERROR, "CUDA input dimensions must match.\n");
         return AVERROR(EINVAL);
     }
 

@@ -48,6 +48,10 @@ typedef struct ConcatContext {
         int64_t nb_frames;
         unsigned eof;
     } *in;
+    struct concat_silence {
+        int64_t end_pts;
+        int64_t nb_samples;
+    } *silence;
 } ConcatContext;
 
 #define OFFSET(x) offsetof(ConcatContext, x)
@@ -244,16 +248,22 @@ static void find_next_delta_ts(AVFilterContext *ctx, int64_t *seg_delta)
     *seg_delta = pts;
 }
 
-static int send_silence(AVFilterContext *ctx, unsigned in_no, unsigned out_no,
-                        int64_t seg_delta)
+static int silence_pending(AVFilterContext *ctx, unsigned out_no)
+{
+    ConcatContext *cat = ctx->priv;
+
+    return cat->silence[out_no].nb_samples &&
+           !ff_outlink_get_status(ctx->outputs[out_no]);
+}
+
+static int queue_silence(AVFilterContext *ctx, unsigned in_no, unsigned out_no,
+                         int64_t seg_delta)
 {
     ConcatContext *cat = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[out_no];
-    int64_t base_pts = cat->in[in_no].pts + cat->delta_ts - seg_delta;
-    int64_t nb_samples, sent = 0;
-    int frame_nb_samples, ret;
+    struct concat_silence *silence = &cat->silence[out_no];
+    int64_t nb_samples;
     AVRational rate_tb = { 1, ctx->inputs[in_no]->sample_rate };
-    AVFrame *buf;
 
     if (!rate_tb.den)
         return AVERROR_BUG;
@@ -263,22 +273,31 @@ static int send_silence(AVFilterContext *ctx, unsigned in_no, unsigned out_no,
         return AVERROR_INVALIDDATA;
     nb_samples = av_rescale_q(seg_delta - cat->in[in_no].pts,
                               outlink->time_base, rate_tb);
-    frame_nb_samples = FFMAX(9600, rate_tb.den / 5); /* arbitrary */
-    while (nb_samples) {
-        frame_nb_samples = FFMIN(frame_nb_samples, nb_samples);
-        buf = ff_get_audio_buffer(outlink, frame_nb_samples);
-        if (!buf)
-            return AVERROR(ENOMEM);
-        av_samples_set_silence(buf->extended_data, 0, frame_nb_samples,
-                               outlink->ch_layout.nb_channels, outlink->format);
-        buf->pts = base_pts + av_rescale_q(sent, rate_tb, outlink->time_base);
-        ret = ff_filter_frame(outlink, buf);
-        if (ret < 0)
-            return ret;
-        sent       += frame_nb_samples;
-        nb_samples -= frame_nb_samples;
-    }
+    if (nb_samples < 0 || nb_samples > INT64_MAX - silence->nb_samples)
+        return AVERROR_INVALIDDATA;
+    silence->nb_samples += nb_samples;
+    silence->end_pts     = cat->delta_ts;
     return 0;
+}
+
+static int send_silence(AVFilterContext *ctx, unsigned out_no)
+{
+    ConcatContext *cat = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[out_no];
+    struct concat_silence *silence = &cat->silence[out_no];
+    AVRational rate_tb = { 1, outlink->sample_rate };
+    int frame_nb_samples = FFMIN(FFMAX(9600, rate_tb.den / 5), /* arbitrary */
+                                 silence->nb_samples);
+    AVFrame *buf = ff_get_audio_buffer(outlink, frame_nb_samples);
+
+    if (!buf)
+        return AVERROR(ENOMEM);
+    av_samples_set_silence(buf->extended_data, 0, frame_nb_samples,
+                           outlink->ch_layout.nb_channels, outlink->format);
+    buf->pts = silence->end_pts -
+               av_rescale_q(silence->nb_samples, rate_tb, outlink->time_base);
+    silence->nb_samples -= frame_nb_samples;
+    return ff_filter_frame(outlink, buf);
 }
 
 static int flush_segment(AVFilterContext *ctx)
@@ -299,8 +318,8 @@ static int flush_segment(AVFilterContext *ctx)
         str = cat->nb_streams[AVMEDIA_TYPE_VIDEO];
         str_max = str + cat->nb_streams[AVMEDIA_TYPE_AUDIO];
         for (; str < str_max; str++) {
-            ret = send_silence(ctx, cat->cur_idx - ctx->nb_outputs + str, str,
-                               seg_delta);
+            ret = queue_silence(ctx, cat->cur_idx - ctx->nb_outputs + str, str,
+                                seg_delta);
             if (ret < 0)
                 return ret;
         }
@@ -345,7 +364,8 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     cat->in = av_calloc(ctx->nb_inputs, sizeof(*cat->in));
-    if (!cat->in)
+    cat->silence = av_calloc(ctx->nb_outputs, sizeof(*cat->silence));
+    if (!cat->in || !cat->silence)
         return AVERROR(ENOMEM);
     cat->nb_in_active = ctx->nb_outputs;
     return 0;
@@ -356,6 +376,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     ConcatContext *cat = ctx->priv;
 
     av_freep(&cat->in);
+    av_freep(&cat->silence);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -384,6 +405,8 @@ static int activate(AVFilterContext *ctx)
     /* Forward available frames */
     if (cat->cur_idx < ctx->nb_inputs) {
         for (i = 0; i < ctx->nb_outputs; i++) {
+            if (silence_pending(ctx, i))
+                continue;
             ret = ff_inlink_consume_frame(ctx->inputs[cat->cur_idx + i], &frame);
             if (ret < 0)
                 return ret;
@@ -399,6 +422,8 @@ static int activate(AVFilterContext *ctx)
         for (i = 0; i < ctx->nb_outputs; i++) {
             AVFilterLink *inlink = ctx->inputs[cat->cur_idx + i];
 
+            if (silence_pending(ctx, i))
+                continue;
             ret = ff_inlink_acknowledge_status(inlink, &status, &pts);
             /* TODO use pts */
             if (ret > 0) {
@@ -423,10 +448,15 @@ static int activate(AVFilterContext *ctx)
     ret = FFERROR_NOT_READY;
     for (i = 0; i < ctx->nb_outputs; i++) {
         if (ff_outlink_frame_wanted(ctx->outputs[i])) {
+            if (silence_pending(ctx, i))
+                return send_silence(ctx, i);
             if (cat->in[cat->cur_idx + i].eof) {
-                for (j = 0; j < ctx->nb_outputs; j++)
+                for (j = 0; j < ctx->nb_outputs; j++) {
+                    if (silence_pending(ctx, j))
+                        return send_silence(ctx, j);
                     if (!cat->in[cat->cur_idx + j].eof)
                         ff_inlink_request_frame(ctx->inputs[cat->cur_idx + j]);
+                }
                 return 0;
             } else {
                 ff_inlink_request_frame(ctx->inputs[cat->cur_idx + i]);
@@ -443,7 +473,13 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     int ret = AVERROR(ENOSYS);
 
     if (!strcmp(cmd, "next")) {
+        ConcatContext *cat = ctx->priv;
+
         av_log(ctx, AV_LOG_VERBOSE, "Command received: next\n");
+        if (cat->cur_idx + ctx->nb_outputs >= ctx->nb_inputs) {
+            av_log(ctx, AV_LOG_WARNING, "There is no next segment\n");
+            return AVERROR(EINVAL);
+        }
         return flush_segment(ctx);
     }
 

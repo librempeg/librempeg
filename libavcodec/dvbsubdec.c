@@ -673,6 +673,7 @@ static void compute_default_clut(DVBSubContext *ctx, uint8_t *clut, AVSubtitleRe
     uint8_t list[256] = {0};
     uint8_t list_inv[256];
     int counttab[256] = {0};
+    int scoretab[256];
     int (*counttab2)[256] = ctx->clut_count2;
     int count, i, x, y;
     ptrdiff_t stride = rect->linesize[0];
@@ -699,18 +700,15 @@ static void compute_default_clut(DVBSubContext *ctx, uint8_t *clut, AVSubtitleRe
     for (i = 0; i<256; i++) {
         counttab2[i+1][i] = 0;
     }
+    memcpy(scoretab, counttab2[0], sizeof(scoretab));
     for (i = 0; i<256; i++) {
         int bestscore = 0;
         int bestv = 0;
 
         for (x = 0; x < 256; x++) {
-            int scorev = 0;
+            int scorev = scoretab[x];
             if (list[x])
                 continue;
-            scorev += counttab2[0][x];
-            for (y = 0; y < 256; y++) {
-                scorev += list[y] * counttab2[y+1][x];
-            }
 
             if (scorev) {
                 int score = 1024LL*scorev / counttab[x];
@@ -724,6 +722,8 @@ static void compute_default_clut(DVBSubContext *ctx, uint8_t *clut, AVSubtitleRe
             break;
         list    [ bestv ] = 1;
         list_inv[     i ] = bestv;
+        for (x = 0; x < 256; x++)
+            scoretab[x] += counttab2[bestv+1][x];
     }
 
     count = FFMAX(i - 1, 1);
@@ -999,6 +999,9 @@ static int dvbsub_parse_object_segment(AVCodecContext *avctx,
 
     int coding_method, non_modifying_color;
 
+    if (buf_size < 3)
+        return AVERROR_INVALIDDATA;
+
     object_id = AV_RB16(buf);
     buf += 2;
 
@@ -1011,6 +1014,8 @@ static int dvbsub_parse_object_segment(AVCodecContext *avctx,
     non_modifying_color = ((*buf++) >> 1) & 1;
 
     if (coding_method == 0) {
+        if (buf_end - buf < 4)
+            return AVERROR_INVALIDDATA;
         top_field_len = AV_RB16(buf);
         buf += 2;
         bottom_field_len = AV_RB16(buf);
@@ -1189,7 +1194,7 @@ static int dvbsub_parse_region_segment(AVCodecContext *avctx,
     buf += 2;
 
     ret = av_image_check_size2(region->width, region->height, avctx->max_pixels, AV_PIX_FMT_PAL8, 0, avctx);
-    if (ret >= 0 && region->width * region->height * 2 > 320 * 1024 * 8) {
+    if (ret >= 0 && region->width * region->height > 320 * 1024 * 8 / 2) {
         ret = AVERROR_INVALIDDATA;
         av_log(avctx, AV_LOG_ERROR, "Pixel buffer memory constraint violated\n");
     }

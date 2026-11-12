@@ -182,6 +182,14 @@ static unsigned int get_size(AVIOContext *s, int len)
     return v;
 }
 
+static int is_syncsafe(unsigned int size)
+{
+    return !(size & ((0x80U <<  0) |
+                     (0x80U <<  8) |
+                     (0x80U << 16) |
+                     (0x80U << 24)));
+}
+
 static unsigned int size_to_syncsafe(unsigned int size)
 {
     return (((size) & (0x7f <<  0)) >> 0) +
@@ -208,20 +216,38 @@ static int is_tag(const char *buf, unsigned int len)
 }
 
 /**
- * Return 1 if the tag of length len at the given offset is valid, 0 if not, -1 on error
+ * Return 1 if the candidate frame boundary at offset (with rem bytes left in
+ * the ID3v2 tag after it) is followed by the end of the tag, zero padding, or
+ * a plausible 10-byte ID3v2.3/2.4 frame header; 0 if not, -1 on error.
  */
-static int check_tag(AVIOContext *s, int offset, unsigned int len)
+static int check_tag(AVIOContext *s, int64_t offset, unsigned int rem)
 {
     char tag[4];
+    unsigned int nsize, nlen;
 
-    if (len > 4 ||
-        avio_seek(s, offset, SEEK_SET) < 0 ||
-        avio_read(s, tag, len) < (int)len)
-        return -1;
-    else if (!AV_RB32(tag) || is_tag(tag, len))
+    if (!rem)
         return 1;
-
-    return 0;
+    if (avio_seek(s, offset, SEEK_SET) < 0)
+        return -1;
+    if (rem < sizeof(tag)) {
+        while (rem--)
+            if (avio_r8(s))
+                return 0;
+        return 1;
+    }
+    if (avio_read(s, tag, sizeof(tag)) < (int)sizeof(tag))
+        return -1;
+    if (!AV_RB32(tag))
+        return 1;
+    if (rem < ID3v2_HEADER_SIZE || !is_tag(tag, sizeof(tag)))
+        return 0;
+    nsize = avio_rb32(s);
+    nlen  = is_syncsafe(nsize) ? size_to_syncsafe(nsize) : nsize;
+    /* ID3v2 requires frames to be at least 1 byte, but id3v2_parse()
+     * explicitly skips empty frames (tlen == 0) to recover from broken tags.
+     * Accept nlen == 0 here as well so a valid synchsafe boundary followed by
+     * an empty frame is not rejected. */
+    return nlen <= rem - ID3v2_HEADER_SIZE;
 }
 
 /**
@@ -487,7 +513,7 @@ static void list_append(ID3v2ExtraMeta *new_elem, ExtraMetaList *list)
  * Parse GEOB tag into a ID3v2ExtraMetaGEOB struct.
  */
 static void read_geobtag(AVFormatContext *s, AVIOContext *pb, int taglen,
-                         const char *tag, ExtraMetaList *extra_meta, int isv34)
+                         const char *tag, ExtraMetaList *extra_meta, int version)
 {
     ID3v2ExtraMetaGEOB *geob_data = NULL;
     ID3v2ExtraMeta *new_extra     = NULL;
@@ -618,7 +644,7 @@ static void rstrip_spaces(char *buf)
 }
 
 static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
-                      const char *tag, ExtraMetaList *extra_meta, int isv34)
+                      const char *tag, ExtraMetaList *extra_meta, int version)
 {
     int enc, pic_type;
     char mimetype[64] = {0};
@@ -628,7 +654,7 @@ static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
     ID3v2ExtraMeta *new_extra = NULL;
     int64_t end               = avio_tell(pb) + taglen;
 
-    if (taglen <= 4 || (!isv34 && taglen <= 6))
+    if (taglen <= 4 || (version == 2 && taglen <= 6))
         goto fail;
 
     new_extra = av_mallocz(sizeof(*new_extra));
@@ -641,7 +667,7 @@ static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
     taglen--;
 
     /* mimetype */
-    if (isv34) {
+    if (version != 2) {
         int ret = avio_get_str(pb, taglen, mimetype, sizeof(mimetype));
         if (ret < 0 || ret >= taglen)
             goto fail;
@@ -714,9 +740,8 @@ static void free_chapter(void *obj)
 }
 
 static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len,
-                         const char *ttag, ExtraMetaList *extra_meta, int isv34)
+                         const char *ttag, ExtraMetaList *extra_meta, int version)
 {
-    int taglen;
     char tag[5];
     ID3v2ExtraMeta *new_extra = NULL;
     ID3v2ExtraMetaCHAP *chap  = NULL;
@@ -739,19 +764,34 @@ static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len,
 
     len -= 16;
     while (len > 10) {
+        unsigned tlen;
+        int64_t start, consumed;
+
         if (avio_read(pb, tag, 4) < 4)
-            goto fail;
+            break;
         tag[4] = 0;
-        taglen = avio_rb32(pb);
+        /* Embedded frames use the same header as the surrounding tag.
+         * 2.2 has no CHAP. 2.3 sizes are plain; 2.4 sizes are synchsafe. */
+        if (version == 4)
+            tlen = get_size(pb, 4);
+        else
+            tlen = avio_rb32(pb);
         avio_skip(pb, 2);
         len -= 10;
-        if (taglen < 0 || taglen > len)
-            goto fail;
+        if (tlen > (unsigned)len) {
+            av_log(s, AV_LOG_WARNING,
+                   "Invalid ID3v2 chapter subframe %.4s size %u, keeping the chapter\n",
+                   tag, tlen);
+            break;
+        }
+        start = avio_tell(pb);
         if (tag[0] == 'T')
-            read_ttag(s, pb, taglen, &chap->meta, tag);
-        else
-            avio_skip(pb, taglen);
-        len -= taglen;
+            read_ttag(s, pb, tlen, &chap->meta, tag);
+        consumed = avio_tell(pb) - start;
+        if (consumed < 0 || consumed > tlen ||
+            avio_skip(pb, tlen - consumed) < 0)
+            break;
+        len -= tlen;
     }
 
     ff_metadata_conv(&chap->meta, NULL, ff_id3v2_34_metadata_conv);
@@ -775,7 +815,7 @@ static void free_priv(void *obj)
 }
 
 static void read_priv(AVFormatContext *s, AVIOContext *pb, int taglen,
-                      const char *tag, ExtraMetaList *extra_meta, int isv34)
+                      const char *tag, ExtraMetaList *extra_meta, int version)
 {
     ID3v2ExtraMeta *meta;
     ID3v2ExtraMetaPRIV *priv;
@@ -813,7 +853,7 @@ typedef struct ID3v2EMFunc {
     const char *tag4;
     void (*read)(AVFormatContext *s, AVIOContext *pb, int taglen,
                  const char *tag, ExtraMetaList *extra_meta,
-                 int isv34);
+                 int version);
     void (*free)(void *obj);
 } ID3v2EMFunc;
 
@@ -930,18 +970,23 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
                  * so check the next tag to see which one to use */
                 tlen = avio_rb32(pb);
                 if (tlen > 0x7f) {
-                    if (tlen < len) {
-                        int64_t cur = avio_tell(pb);
+                    unsigned int rem = len - taghdrlen;
 
-                        if (ffio_ensure_seekback(pb, 2 /* tflags */ + tlen + 4 /* next tag */))
+                    if (tlen <= rem) {
+                        int64_t cur = avio_tell(pb);
+                        unsigned int ss_tlen = size_to_syncsafe(tlen);
+
+                        if (ffio_ensure_seekback(pb, 2 /* tflags */ +
+                                                 FFMIN(rem, tlen + ID3v2_HEADER_SIZE)))
                             break;
 
-                        if (check_tag(pb, cur + 2 + size_to_syncsafe(tlen), 4) == 1)
-                            tlen = size_to_syncsafe(tlen);
-                        else if (check_tag(pb, cur + 2 + tlen, 4) != 1)
+                        if (is_syncsafe(tlen) &&
+                            check_tag(pb, cur + 2 + ss_tlen, rem - ss_tlen) == 1)
+                            tlen = ss_tlen;
+                        else if (check_tag(pb, cur + 2 + tlen, rem - tlen) != 1)
                             break;
                         avio_seek(pb, cur, SEEK_SET);
-                    } else
+                    } else if (is_syncsafe(tlen))
                         tlen = size_to_syncsafe(tlen);
                 }
             }
@@ -1092,7 +1137,7 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
                 read_lang_descr_tag(s, pbx, "comment", tlen, metadata);
             else
                 /* parse special meta tag */
-                extra_func->read(s, pbx, tlen, tag, extra_meta, isv34);
+                extra_func->read(s, pbx, tlen, tag, extra_meta, version);
         } else if (!tag[0]) {
             if (tag[1])
                 av_log(s, AV_LOG_WARNING, "invalid frame id, assuming padding\n");

@@ -229,6 +229,10 @@ static int libjxl_populate_primaries(void *avctx, JxlColorEncoding *jxl_color, e
         jxl_color->primaries = JXL_PRIMARIES_SRGB;
         jxl_color->white_point = JXL_WHITE_POINT_D65;
         return 0;
+    case AVCOL_PRI_SMPTE428:
+        av_log(avctx, AV_LOG_ERROR, "SMPTE ST 428-1 XYZ cannot be described by "
+                                    "a JXL color encoding, use an ICC profile instead.\n");
+        return AVERROR(EINVAL);
     }
 
     desc = av_csp_primaries_desc_from_id(prm);
@@ -510,8 +514,11 @@ static int libjxl_preprocess_stream(AVCodecContext *avctx, const AVFrame *frame,
     }
 
     /* jret != JXL_ENC_SUCCESS means fallthrough from above */
-    if (!sd || !sd->size || jret != JXL_ENC_SUCCESS)
-        libjxl_populate_colorspace(avctx, frame, pix_desc, &info);
+    if (!sd || !sd->size || jret != JXL_ENC_SUCCESS) {
+        ret = libjxl_populate_colorspace(avctx, frame, pix_desc, &info);
+        if (ret < 0)
+            goto end;
+    }
 
 #if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 8, 0)
     jret = JxlEncoderSetFrameBitDepth(ctx->options, &jxl_bit_depth);

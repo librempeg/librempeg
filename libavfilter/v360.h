@@ -170,7 +170,7 @@ typedef struct V360Context {
 
     int planewidth[AV_VIDEO_MAX_PLANES], planeheight[AV_VIDEO_MAX_PLANES];
     int inplanewidth[AV_VIDEO_MAX_PLANES], inplaneheight[AV_VIDEO_MAX_PLANES];
-    int uv_linesize[AV_VIDEO_MAX_PLANES];
+    ptrdiff_t uv_linesize[AV_VIDEO_MAX_PLANES];
     int nb_planes;
     int nb_allocated;
     int elements;

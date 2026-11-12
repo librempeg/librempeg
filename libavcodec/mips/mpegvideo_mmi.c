@@ -23,6 +23,7 @@
  */
 
 #include "mpegvideo_mips.h"
+#include "libavutil/avassert.h"
 #include "libavutil/mips/mmiutils.h"
 
 void ff_dct_unquantize_h263_intra_mmi(const MPVContext *s, int16_t *block,
@@ -354,7 +355,7 @@ void ff_dct_unquantize_mpeg2_intra_mmi(const MPVContext *s, int16_t *block,
     DECLARE_VAR_ALL64;
     DECLARE_VAR_ADDRT;
 
-    assert(s->block_last_index[n]>=0);
+    av_assert2(s->block_last_index[n]>=0);
 
     nCoeffs = s->intra_scantable.raster_end[s->block_last_index[n]];
 

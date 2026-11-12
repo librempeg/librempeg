@@ -121,6 +121,10 @@ AVFILTER_DEFINE_CLASS(mandelbrot);
 static av_cold int init(AVFilterContext *ctx)
 {
     MBContext *s = ctx->priv;
+    int ret = av_image_check_size(s->w, s->h, 0, ctx);
+
+    if (ret < 0)
+        return ret;
 
     s->bailout *= s->bailout;
 
@@ -131,7 +135,7 @@ static av_cold int init(AVFilterContext *ctx)
     s->cache_used = 0;
     s->point_cache= av_malloc_array(s->cache_allocated, sizeof(*s->point_cache));
     s-> next_cache= av_malloc_array(s->cache_allocated, sizeof(*s-> next_cache));
-    s-> zyklus    = av_malloc_array(s->maxiter + 16, sizeof(*s->zyklus));
+    s-> zyklus    = av_malloc_array(s->maxiter + 16LL, sizeof(*s->zyklus));
 
     if (!s->point_cache || !s->next_cache || !s->zyklus)
         return AVERROR(ENOMEM);
@@ -153,9 +157,6 @@ static int config_props(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     FilterLink *l = ff_filter_link(outlink);
     MBContext *s = ctx->priv;
-
-    if (av_image_check_size(s->w, s->h, 0, ctx) < 0)
-        return AVERROR(EINVAL);
 
     outlink->w = s->w;
     outlink->h = s->h;
@@ -345,7 +346,7 @@ static void draw_mandelbrot(AVFilterContext *ctx, uint32_t *color, int linesize,
                     break;
                 }
             }
-            if(!c){
+            if(!c && i){
                 if(s->inner==PERIOD){
                     int j;
                     for(j=i-1; j; j--)

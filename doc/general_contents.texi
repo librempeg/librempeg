@@ -589,6 +589,8 @@ library:
     @tab A format used by libvpx
 @item Internet Video Recording  @tab   @tab X
 @item IRCAM                     @tab X @tab X
+@item JPEG Multi-Picture Format @tab X @tab X
+    @tab Includes JPEG Ultra HDR (ISO 21496-1 gain map) images.
 @item LAF                       @tab   @tab X
     @tab Limitless Audio Format
 @item LATM                      @tab X @tab X
@@ -894,6 +896,8 @@ following image formats are supported:
     @tab V.Flash PTX format
 @item QOI          @tab X @tab X
     @tab Quite OK Image format
+@item RW2          @tab   @tab X
+    @tab Panasonic raw image, RawFormat 8 only
 @item SGI          @tab X @tab X
     @tab SGI RGB image format
 @item Sun Rasterfile  @tab X @tab X
@@ -946,6 +950,8 @@ following image formats are supported:
 @item Apple QuickDraw        @tab     @tab  X
     @tab fourcc: qdrw
 @item APV                    @tab     @tab  X
+@item Argonaut Games Creature Shock video  @tab     @tab  X
+    @tab Video encoding used by the Creature Shock game.
 @item Argonaut Video         @tab     @tab  X
     @tab Used in some Argonaut games.
 @item Asus v1                @tab  X  @tab  X
@@ -965,8 +971,6 @@ following image formats are supported:
     @tab Supported through external libraries libaom, libdav1d, librav1e and libsvtav1
 @item Avid 1:1 10-bit RGB Packer  @tab  X  @tab  X
     @tab fourcc: AVrp
-@item AVS (Audio Video Standard) video  @tab     @tab  X
-    @tab Video encoding used by the Creature Shock game.
 @item AVS2-P2/IEEE1857.4     @tab  E  @tab  E
     @tab Supported through external libraries libxavs2 and libdavs2
 @item AVS3-P2/IEEE1857.10    @tab     @tab  E
@@ -993,7 +997,8 @@ following image formats are supported:
 @item CDXL                   @tab     @tab  X
     @tab Amiga CD video codec
 @item Chinese AVS video      @tab  E  @tab  X
-    @tab AVS1-P2, JiZhun profile, encoding through external library libxavs
+    @tab AVS1-P2/P16 (JiZhun and Broadcasting) decoding,
+          AVS1-P2 encoding through external library libxavs
 @item Delphine Software International CIN video  @tab     @tab  X
     @tab Codec used in Delphine Software International games.
 @item Discworld II BMV Video @tab     @tab  X
@@ -1072,6 +1077,8 @@ following image formats are supported:
 @item IFF ByteRun1           @tab     @tab  X
     @tab IFF run length encoded bitmap
 @item Infinity IMM4          @tab     @tab  X
+@item Infinity IMM5          @tab     @tab  X
+@item Infinity IMM6          @tab     @tab  X
 @item Intel H.263            @tab     @tab  X
 @item Intel Indeo 2          @tab     @tab  X
 @item Intel Indeo 3          @tab     @tab  X
@@ -1568,7 +1575,6 @@ performance on systems without hardware floating point support).
 @item LIBCDIO           @tab X
 @item LIBDC1394         @tab X      @tab
 @item OpenAL            @tab X
-@item OpenGL            @tab        @tab X
 @item OSS               @tab X      @tab X
 @item PulseAudio        @tab X      @tab X
 @item SDL               @tab        @tab X

@@ -123,6 +123,24 @@ av_cold void AAC_RENAME(ff_aac_sbr_ctx_close)(ChannelElement *che)
     av_tx_uninit(&sbr->mdct_ana);
 }
 
+av_cold void AAC_RENAME(ff_aac_sbr_ctx_reset)(AACDecContext *ac, ChannelElement *che)
+{
+    SpectralBandReplication *sbr = get_sbr(che);
+    int id_aac = sbr->id_aac;
+
+    /* Discard all inter-frame state. The transform contexts (mdct_ana,
+     * mdct) and the function pointer tables (dsp, c) at the end of the
+     * struct are set up once in ff_aac_sbr_ctx_alloc_init() and hold no
+     * stream state, so they are deliberately left untouched. */
+    memset(sbr, 0, offsetof(SpectralBandReplication, mdct_ana));
+
+    sbr->id_aac = id_aac;
+    sbr_turnoff(sbr);
+    sbr->data[0].synthesis_filterbank_samples_offset = SBR_SYNTHESIS_BUF_SIZE - (1280 - 128);
+    sbr->data[1].synthesis_filterbank_samples_offset = SBR_SYNTHESIS_BUF_SIZE - (1280 - 128);
+    AAC_RENAME(ff_ps_ctx_init)(&sbr->ps);
+}
+
 static int qsort_comparison_function_int16(const void *a, const void *b)
 {
     return *(const int16_t *)a - *(const int16_t *)b;
@@ -1210,12 +1228,11 @@ int ff_aac_sbr_config_usac(AACDecContext *ac, ChannelElement *che,
     return 0;
 }
 
-int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
-                                AACUsacElemConfig *ue, GetBitContext *gb,
-                                int sbr_ch, int indep_flag)
+static int read_usac_sbr_data(AACDecContext *ac, SpectralBandReplication *sbr,
+                              AACUsacElemConfig *ue, GetBitContext *gb,
+                              int sbr_ch, int indep_flag)
 {
     int ret;
-    SpectralBandReplication *sbr = get_sbr(che);
     int info_present = 1;
     int header_present = 1;
 
@@ -1355,6 +1372,19 @@ int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
     }
 
     return 0;
+}
+
+int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
+                                AACUsacElemConfig *ue, GetBitContext *gb,
+                                int sbr_ch, int indep_flag)
+{
+    SpectralBandReplication *sbr = get_sbr(che);
+    int ret = read_usac_sbr_data(ac, sbr, ue, gb, sbr_ch, indep_flag);
+
+    if (ret < 0)
+        sbr_turnoff(sbr);
+
+    return ret;
 }
 #endif
 

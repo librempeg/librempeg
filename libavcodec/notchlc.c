@@ -284,7 +284,8 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
     rgb = *gb;
     dgb = *gb;
     bytestream2_seek(gb, s->a_control_word_offset, SEEK_SET);
-    if (s->uv_count_offset == s->a_control_word_offset) {
+    if (s->uv_count_offset == s->a_control_word_offset ||
+        s->uv_data_offset  == s->a_control_word_offset) {
         for (int y = 0; y < avctx->height; y++) {
             for (int x = 0; x < avctx->width; x++)
                 dsta[x] = 4095;
@@ -296,11 +297,12 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
 
         for (int y = 0; y < avctx->height; y += 16) {
             for (int x = 0; x < avctx->width; x += 16) {
-                unsigned m = bytestream2_get_le32(gb);
-                unsigned offset = bytestream2_get_le32(gb);
+                unsigned m, offset;
                 int alpha0, alpha1;
                 uint64_t control;
 
+                m = bytestream2_get_le32(gb);
+                offset = bytestream2_get_le32(gb);
                 if (offset >= UINT_MAX / 4)
                     return AVERROR_INVALIDDATA;
                 offset = offset * 4 + s->uv_data_offset + s->a_data_offset;
@@ -330,10 +332,14 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
                             control = bytestream2_get_le64(&dgb);
                             alpha0 = control & 0xFF;
                             alpha1 = (control >> 8) & 0xFF;
+                            alpha0 = (alpha0 << 4) | (alpha0 >> 4);
+                            alpha1 = (alpha1 << 4) | (alpha1 >> 4);
                             control >>= 16;
                             for (int i = 0; i < 4; i++) {
                                 for (int j = 0; j < 4; j++) {
-                                    dsta[x + (i + by * 4) * alinesize + bx * 4 + j] = (alpha0 + ((alpha1 - alpha0) * (int)(control & 7) + 6) / 7) << 4;
+                                    const int selector = control & 7;
+
+                                    dsta[x + (i + by * 4) * alinesize + bx * 4 + j] = (alpha0 * (7 - selector) + alpha1 * selector + 6) / 7;
                                     control >>= 3;
                                 }
                             }
@@ -362,7 +368,7 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
         for (int x = 0; x < avctx->width; x += 16) {
             unsigned offset = bytestream2_get_le32(&rgb) * 4;
             int u[16][16] = { 0 }, v[16][16] = { 0 };
-            int u0, v0, u1, v1, udif, vdif;
+            int u0, v0, u1, v1;
             unsigned escape, is8x8, loc;
 
             bytestream2_seek(&dgb, s->uv_data_offset + offset, SEEK_SET);
@@ -376,19 +382,19 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
                 u1 = bytestream2_get_byte(&dgb);
                 v1 = bytestream2_get_byte(&dgb);
                 loc = bytestream2_get_le32(&dgb);
-                u0 = (u0 << 4) | (u0 & 0xF);
-                v0 = (v0 << 4) | (v0 & 0xF);
-                u1 = (u1 << 4) | (u1 & 0xF);
-                v1 = (v1 << 4) | (v1 & 0xF);
-                udif = u1 - u0;
-                vdif = v1 - v0;
+                u0 = (u0 << 4) | (u0 >> 4);
+                v0 = (v0 << 4) | (v0 >> 4);
+                u1 = (u1 << 4) | (u1 >> 4);
+                v1 = (v1 << 4) | (v1 >> 4);
 
                 for (int i = 0; i < 16; i += 4) {
                     for (int j = 0; j < 16; j += 4) {
+                        const int selector = loc & 3;
+
                         for (int ii = 0; ii < 4; ii++) {
                             for (int jj = 0; jj < 4; jj++) {
-                                u[i + ii][j + jj] = u0 + ((udif * (int)(loc & 3) + 2) / 3);
-                                v[i + ii][j + jj] = v0 + ((vdif * (int)(loc & 3) + 2) / 3);
+                                u[i + ii][j + jj] = (u0 * (3 - selector) + u1 * selector + 2) / 3;
+                                v[i + ii][j + jj] = (v0 * (3 - selector) + v1 * selector + 2) / 3;
                             }
                         }
 
@@ -404,19 +410,19 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
                             u1 = bytestream2_get_byte(&dgb);
                             v1 = bytestream2_get_byte(&dgb);
                             loc = bytestream2_get_le32(&dgb);
-                            u0 = (u0 << 4) | (u0 & 0xF);
-                            v0 = (v0 << 4) | (v0 & 0xF);
-                            u1 = (u1 << 4) | (u1 & 0xF);
-                            v1 = (v1 << 4) | (v1 & 0xF);
-                            udif = u1 - u0;
-                            vdif = v1 - v0;
+                            u0 = (u0 << 4) | (u0 >> 4);
+                            v0 = (v0 << 4) | (v0 >> 4);
+                            u1 = (u1 << 4) | (u1 >> 4);
+                            v1 = (v1 << 4) | (v1 >> 4);
 
                             for (int ii = 0; ii < 8; ii += 2) {
                                 for (int jj = 0; jj < 8; jj += 2) {
+                                    const int selector = loc & 3;
+
                                     for (int iii = 0; iii < 2; iii++) {
                                         for (int jjj = 0; jjj < 2; jjj++) {
-                                            u[i + ii + iii][j + jj + jjj] = u0 + ((udif * (int)(loc & 3) + 2) / 3);
-                                            v[i + ii + iii][j + jj + jjj] = v0 + ((vdif * (int)(loc & 3) + 2) / 3);
+                                            u[i + ii + iii][j + jj + jjj] = (u0 * (3 - selector) + u1 * selector + 2) / 3;
+                                            v[i + ii + iii][j + jj + jjj] = (v0 * (3 - selector) + v1 * selector + 2) / 3;
                                         }
                                     }
 
@@ -431,17 +437,17 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
                                     u1 = bytestream2_get_byte(&dgb);
                                     v1 = bytestream2_get_byte(&dgb);
                                     loc = bytestream2_get_le32(&dgb);
-                                    u0 = (u0 << 4) | (u0 & 0xF);
-                                    v0 = (v0 << 4) | (v0 & 0xF);
-                                    u1 = (u1 << 4) | (u1 & 0xF);
-                                    v1 = (v1 << 4) | (v1 & 0xF);
-                                    udif = u1 - u0;
-                                    vdif = v1 - v0;
+                                    u0 = (u0 << 4) | (u0 >> 4);
+                                    v0 = (v0 << 4) | (v0 >> 4);
+                                    u1 = (u1 << 4) | (u1 >> 4);
+                                    v1 = (v1 << 4) | (v1 >> 4);
 
                                     for (int iii = 0; iii < 4; iii++) {
                                         for (int jjj = 0; jjj < 4; jjj++) {
-                                            u[i + ii + iii][j + jj + jjj] = u0 + ((udif * (int)(loc & 3) + 2) / 3);
-                                            v[i + ii + iii][j + jj + jjj] = v0 + ((vdif * (int)(loc & 3) + 2) / 3);
+                                            const int selector = loc & 3;
+
+                                            u[i + ii + iii][j + jj + jjj] = (u0 * (3 - selector) + u1 * selector + 2) / 3;
+                                            v[i + ii + iii][j + jj + jjj] = (v0 * (3 - selector) + v1 * selector + 2) / 3;
 
                                             loc >>= 2;
                                         }
@@ -519,6 +525,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *p,
             return AVERROR_INVALIDDATA;
 
         bytestream2_init(gb, s->uncompressed_buffer, uncompressed_size);
+    } else {
+        if (bytestream2_get_bytes_left(gb) < uncompressed_size)
+            return AVERROR_INVALIDDATA;
+
+        bytestream2_init(gb, avpkt->data + bytestream2_tell(gb), uncompressed_size);
     }
 
     ret = decode_blocks(avctx, p, uncompressed_size);

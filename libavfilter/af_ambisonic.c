@@ -1217,7 +1217,6 @@ static void calc_mirror_mat(AmbisonicContext *s)
                 gain *= -1.;
         }
 
-
         if (((order < 0) && (order & 1)) || ((order >= 0) && !(order & 1)) ) {
             gain *= s->gain[EVEN][D_X];
 
@@ -1580,6 +1579,8 @@ static void near_field(AmbisonicContext *s, AVFrame *frame,
         int n, m;
 
         acn_to_level_order(ch, &n, &m);
+        if (n <= 0)
+            continue;
 
         if (!s->nf_process[n - 1])
             break;
@@ -1629,6 +1630,8 @@ static void near_field_init(AmbisonicContext *s, int out,
         int n, m;
 
         acn_to_level_order(ch, &n, &m);
+        if (n <= 0)
+            continue;
 
         if (!s->nf_init[n - 1])
             break;

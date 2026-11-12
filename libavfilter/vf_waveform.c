@@ -275,14 +275,14 @@ static int query_formats(const AVFilterContext *ctx,
     int ret;
 
     switch (s->filter) {
-    case LOWPASS: formats = ff_make_format_list(in_lowpass_pix_fmts); break;
+    case LOWPASS: formats = ff_make_pixel_format_list(in_lowpass_pix_fmts); break;
     case CHROMA:
     case XFLAT:
     case YFLAT:
     case AFLAT:
-    case FLAT:    formats = ff_make_format_list(in_flat_pix_fmts);    break;
+    case FLAT:    formats = ff_make_pixel_format_list(in_flat_pix_fmts);    break;
     case ACOLOR:
-    case COLOR:   formats = ff_make_format_list(in_color_pix_fmts);   break;
+    case COLOR:   formats = ff_make_pixel_format_list(in_color_pix_fmts);   break;
     default: return AVERROR_BUG;
     }
 
@@ -293,7 +293,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(out_pix_fmts);
+    formats = ff_make_pixel_format_list(out_pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
 

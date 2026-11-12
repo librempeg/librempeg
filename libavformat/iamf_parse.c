@@ -110,6 +110,8 @@ static int aac_decoder_config(IAMFCodecConfig *codec_config,
         return ret;
 
     codec_config->sample_rate = cfg.sample_rate;
+    if (codec_config->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     return 0;
 }
@@ -138,6 +140,8 @@ static int flac_decoder_config(IAMFCodecConfig *codec_config,
 
     codec_config->extradata_size = left;
     codec_config->sample_rate = AV_RB24(codec_config->extradata + 10) >> 4;
+    if (codec_config->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     return 0;
 }
@@ -154,8 +158,11 @@ static int ipcm_decoder_config(IAMFCodecConfig *codec_config,
     if (sample_format > 1 || sample_size > 2U || codec_config->audio_roll_distance)
         return AVERROR_INVALIDDATA;
 
-    codec_config->codec_id = sample_fmt[sample_format][sample_size];
     codec_config->sample_rate = avio_rb32(pb);
+    if (codec_config->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
+
+    codec_config->codec_id = sample_fmt[sample_format][sample_size];
 
     if (len - avio_tell(pb))
         return AVERROR_INVALIDDATA;
@@ -632,6 +639,8 @@ static int param_parse(void *s, IAMFContext *c, AVIOContext *pb,
         }
 
     parameter_rate = ffio_read_leb(pb);
+    if (!parameter_rate)
+        return AVERROR_INVALIDDATA;
     mode = avio_r8(pb) >> 7;
 
     if (mode == 0) {
@@ -1263,8 +1272,8 @@ int ff_iamf_parse_obu_header(const uint8_t *buf, int buf_size,
     return size;
 }
 
-int ff_iamfdec_read_descriptors(IAMFContext *c, AVIOContext *pb,
-                                int max_size, void *log_ctx)
+static int read_descriptors(IAMFContext *c, AVIOContext *pb,
+                            int max_size, void *log_ctx)
 {
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
     int ret;
@@ -1323,4 +1332,14 @@ int ff_iamfdec_read_descriptors(IAMFContext *c, AVIOContext *pb,
     }
 
     return 0;
+}
+
+int ff_iamfdec_read_descriptors(IAMFContext *c, AVIOContext *pb,
+                                int max_size, void *log_ctx)
+{
+    int ret = read_descriptors(c, pb, max_size, log_ctx);
+
+    if (ret < 0)
+        ff_iamf_uninit_context(c);
+    return ret;
 }

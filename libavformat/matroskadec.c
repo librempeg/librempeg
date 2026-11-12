@@ -2912,8 +2912,7 @@ static int mka_parse_audio(MatroskaTrack *track, AVStream *st,
     if (track->codec_delay > 0) {
         par->initial_padding = av_rescale_q(track->codec_delay,
                                             (AVRational){1, 1000000000},
-                                            (AVRational){1, par->codec_id == AV_CODEC_ID_OPUS ?
-                                                            48000 : par->sample_rate});
+                                            (AVRational){1, par->sample_rate});
         sti->skip_samples = par->initial_padding;
     }
     if (track->seek_preroll > 0) {
@@ -3426,7 +3425,7 @@ static int matroska_parse_dovi_streams(AVFormatContext *s)
     if (err < 0)
         return err;
 
-    stg->params.layered_video->el_index = stg->nb_streams - 1;
+    stg->params.layered_video->el_index = stg->nb_entries - 1;
     stg->params.layered_video->width = bl_st->codecpar->width;
     stg->params.layered_video->height = bl_st->codecpar->height;
 
@@ -3506,7 +3505,8 @@ static int matroska_read_header(AVFormatContext *s)
 
     if (!matroska->time_scale)
         matroska->time_scale = 1000000;
-    if (isnan(matroska->duration))
+    if (isnan(matroska->duration) || matroska->duration < 0 ||
+        matroska->duration >= (double)INT64_MAX / matroska->time_scale)
         matroska->duration = 0;
     if (matroska->duration)
         matroska->ctx->duration = matroska->duration * matroska->time_scale *

@@ -78,10 +78,6 @@ fate-des: libavutil/tests/des$(EXESUF)
 fate-des: CMD = run libavutil/tests/des$(EXESUF)
 fate-des: CMP = null
 
-FATE_LIBAVUTIL += fate-detection_bbox
-fate-detection_bbox: libavutil/tests/detection_bbox$(EXESUF)
-fate-detection_bbox: CMD = run libavutil/tests/detection_bbox$(EXESUF)
-
 FATE_LIBAVUTIL += fate-dict
 fate-dict: libavutil/tests/dict$(EXESUF)
 fate-dict: CMD = run libavutil/tests/dict$(EXESUF)
@@ -130,6 +126,10 @@ fate-hdr_dynamic_vivid_metadata: CMD = run libavutil/tests/hdr_dynamic_vivid_met
 FATE_LIBAVUTIL += fate-hmac
 fate-hmac: libavutil/tests/hmac$(EXESUF)
 fate-hmac: CMD = run libavutil/tests/hmac$(EXESUF)
+
+FATE_LIBAVUTIL += fate-iamf-class
+fate-iamf-class: libavutil/tests/iamf$(EXESUF)
+fate-iamf-class: CMD = run libavutil/tests/iamf$(EXESUF)
 
 FATE_LIBAVUTIL += fate-imgutils
 fate-imgutils: libavutil/tests/imgutils$(EXESUF)

@@ -178,10 +178,10 @@ static int config_input(AVFilterLink *inlink)
         goto eval_fail;
     s->x = var_values[VAR_X] = res;
 
-    if (s->x < 0 || s->x + inlink->w > s->w)
-        s->x = var_values[VAR_X] = (s->w - inlink->w) / 2;
-    if (s->y < 0 || s->y + inlink->h > s->h)
-        s->y = var_values[VAR_Y] = (s->h - inlink->h) / 2;
+    if (s->x < 0 || (int64_t)s->x + inlink->w > s->w)
+        s->x = var_values[VAR_X] = ((int64_t)s->w - inlink->w) / 2;
+    if (s->y < 0 || (int64_t)s->y + inlink->h > s->h)
+        s->y = var_values[VAR_Y] = ((int64_t)s->h - inlink->h) / 2;
 
     s->w    = ff_draw_round_to_sub(&s->draw, 0, -1, s->w);
     s->h    = ff_draw_round_to_sub(&s->draw, 1, -1, s->h);
@@ -330,14 +330,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     PadContext *s = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFrame *out;
-    int needs_copy;
+    int needs_copy, ret;
+
+    if (s->eval_mode == EVAL_MODE_INIT &&
+        (ret = ff_inlink_check_frame_params(inlink, in, 0)) < 0) {
+        av_frame_free(&in);
+        return ret;
+    }
+
     if(s->eval_mode == EVAL_MODE_FRAME && (
            in->width  != s->inlink_w
         || in->height != s->inlink_h
         || in->format != outlink->format
         || in->sample_aspect_ratio.den != outlink->sample_aspect_ratio.den || in->sample_aspect_ratio.num != outlink->sample_aspect_ratio.num)) {
-        int ret;
-
         inlink->dst->inputs[0]->format = in->format;
         inlink->dst->inputs[0]->w      = in->width;
         inlink->dst->inputs[0]->h      = in->height;
@@ -346,12 +351,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         inlink->dst->inputs[0]->sample_aspect_ratio.num = in->sample_aspect_ratio.num;
 
 
-        if ((ret = config_input(inlink)) < 0) {
+        if ((ret = config_input(inlink)) < 0 ||
+            (ret = config_output(outlink)) < 0) {
             s->inlink_w = -1;
-            return ret;
-        }
-        if ((ret = config_output(outlink)) < 0) {
-            s->inlink_w = -1;
+            av_frame_free(&in);
             return ret;
         }
     }
@@ -464,4 +467,5 @@ const FFFilter ff_vf_pad = {
     FILTER_INPUTS(pad_inputs),
     FILTER_OUTPUTS(pad_outputs),
     FILTER_QUERY_FUNC2(query_formats),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };

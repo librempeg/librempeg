@@ -134,9 +134,12 @@ assert COMPS == 1
 %if cpuflag(avx2)
         vpermq mx, mx, q3120
 IF V2,  vpermq mx2, mx2, q3120
-%endif
         movu [out0q], xmx
 IF V2,  movu [out0q + (mmsize >> 1)], xmx2
+%else
+        movq [out0q], mx
+IF V2,  movq [out0q + (mmsize >> 1)], mx2
+%endif
         add out0q, BLOCK_WIDTH >> 1
         RET
 %endmacro
@@ -147,8 +150,8 @@ assert COMPS == 1
         vpbroadcastd mx,  [in0q]
 IF V2,  vpbroadcastd mx2, [in0q + 4]
 %else
-        movd mx, [in0q]
-IF V2,  movd mx2, [in0q + 2]
+        pinsrw mx, [in0q], 0
+IF V2,  pinsrw mx2, [in0q + 2], 0
 %endif
         mova m8, [bits_shuf]
         VBROADCASTI128 m9,  [bits_mask]
@@ -197,10 +200,10 @@ IF Y,   movu [out1q + mmsize], my2
 IF Z,   movu [out2q + mmsize], mz2
 IF W,   movu [out3q + mmsize], mw2
 %endif
-IF X,   add out0q, BLOCK_WIDTH
-IF Y,   add out1q, BLOCK_WIDTH
-IF Z,   add out2q, BLOCK_WIDTH
-IF W,   add out3q, BLOCK_WIDTH
+IF X,   add out0q, BLOCK_SIZE
+IF Y,   add out1q, BLOCK_SIZE
+IF Z,   add out2q, BLOCK_SIZE
+IF W,   add out3q, BLOCK_SIZE
         RET
 %endmacro
 
@@ -595,13 +598,15 @@ IF V2,  mova %3, %2
 %endmacro
 
 %macro CLEAR 2
+%assign PRIV_SIZE 4 * 4
 %assign ONE_MASK  %1
 %assign ZERO_MASK %2
+        LOAD_CONT tmp0q
 IF1 X,  clear 0, mx, mx2
 IF1 Y,  clear 1, my, my2
 IF1 Z,  clear 2, mz, mz2
 IF1 W,  clear 3, mw, mw2
-        CONTINUE
+        CONTINUE tmp0q
 %endmacro
 
 ;---------------------------------------------------------
@@ -731,6 +736,12 @@ IF W,   packuswb %4, m11
 %endmacro
 
 %macro SCALE 0
+%if BITS == 8
+    %assign PRIV_SIZE 4 ; packed as dword
+%else
+    %assign PRIV_SIZE BYTES
+%endif
+
         LOAD_CONT tmp0q
 %if BITS == 8
 %if cpuflag(avx2)
@@ -867,6 +878,7 @@ IF W,   mova IN3, m11
 %endmacro
 
 %macro LINEAR 2
+%assign PRIV_SIZE  gprsize
 %assign ONE_MASK   %1
 %assign ZERO_MASK  %2
 
@@ -881,57 +893,57 @@ IF2 V2, linear_pass 2
 ; Instantiate above macros to generate all uop kernels
 
 %macro decl_ops 1 ; type
-    DECL_%1_READ_PACKED     (READ_PACKED)
-    DECL_%1_READ_NIBBLE     (READ_NIBBLE)
-    DECL_%1_READ_BIT        (READ_BIT)
-    DECL_%1_READ_PALETTE    (READ_PALETTE)
-    DECL_%1_WRITE_PACKED    (WRITE_PACKED)
-    DECL_%1_WRITE_NIBBLE    (WRITE_NIBBLE)
-    DECL_%1_WRITE_BIT       (WRITE_BIT)
-    DECL_%1_PERMUTE         (MOVE)
-    DECL_%1_COPY            (MOVE)
-    DECL_%1_SWAP_BYTES      (SWAP_BYTES)
-    DECL_%1_EXPAND_BIT      (EXPAND_BIT)
-    DECL_%1_SCALE           (SCALE)
-    DECL_%1_ADD             (ADD)
-    DECL_%1_MIN             (MIN)
-    DECL_%1_MAX             (MAX)
-    DECL_%1_UNPACK          (UNPACK)
-    DECL_%1_PACK            (PACK)
-    DECL_%1_LSHIFT          (LSHIFT)
-    DECL_%1_RSHIFT          (RSHIFT)
-    DECL_%1_LINEAR_FMA      (LINEAR_FMA)
-    DECL_%1_DITHER          (DITHER)
-    DECL_%1_LINEAR          (LINEAR)
+    DECL_%1_READ_PACKED     READ_PACKED
+    DECL_%1_READ_NIBBLE     READ_NIBBLE
+    DECL_%1_READ_BIT        READ_BIT
+    DECL_%1_READ_PALETTE    READ_PALETTE
+    DECL_%1_WRITE_PACKED    WRITE_PACKED
+    DECL_%1_WRITE_NIBBLE    WRITE_NIBBLE
+    DECL_%1_WRITE_BIT       WRITE_BIT
+    DECL_%1_PERMUTE         MOVE
+    DECL_%1_COPY            MOVE
+    DECL_%1_SWAP_BYTES      SWAP_BYTES
+    DECL_%1_EXPAND_BIT      EXPAND_BIT
+    DECL_%1_SCALE           SCALE
+    DECL_%1_ADD             ADD
+    DECL_%1_MIN             MIN
+    DECL_%1_MAX             MAX
+    DECL_%1_UNPACK          UNPACK
+    DECL_%1_PACK            PACK
+    DECL_%1_LSHIFT          LSHIFT
+    DECL_%1_RSHIFT          RSHIFT
+    DECL_%1_LINEAR_FMA      LINEAR_FMA
+    DECL_%1_DITHER          DITHER
+    DECL_%1_LINEAR          LINEAR
 %endmacro
 
 %macro decl_type_invariant 0
-    DECL_U8_READ_PLANAR     (READ_PLANAR)
-    DECL_U8_WRITE_PLANAR    (WRITE_PLANAR)
-    DECL_U8_CLEAR           (CLEAR)
+    DECL_U8_READ_PLANAR     READ_PLANAR
+    DECL_U8_WRITE_PLANAR    WRITE_PLANAR
+    DECL_U8_CLEAR           CLEAR
 %endmacro
 
 %macro decl_cast_u16 0
-    DECL_U8_TO_U16          (CAST_TO)
-    DECL_U16_TO_U8          (CAST_TO)
-    DECL_U8_EXPAND_PAIR     (EXPAND_BYTE)
+    DECL_U8_TO_U16          CAST_TO
+    DECL_U16_TO_U8          CAST_TO
+    DECL_U8_EXPAND_PAIR     EXPAND_BYTE
 %endmacro
 
 %macro decl_cast_u32 0
-    DECL_U8_TO_U32          (CAST_TO)
-    DECL_U32_TO_U8          (CAST_TO)
-    DECL_U16_TO_U32         (CAST_TO)
-    DECL_U32_TO_U16         (CAST_TO)
-    DECL_U8_EXPAND_QUAD     (EXPAND_BYTE)
+    DECL_U8_TO_U32          CAST_TO
+    DECL_U32_TO_U8          CAST_TO
+    DECL_U16_TO_U32         CAST_TO
+    DECL_U32_TO_U16         CAST_TO
+    DECL_U8_EXPAND_QUAD     EXPAND_BYTE
 %endmacro
 
 %macro decl_cast_f32 0
-    DECL_U8_TO_F32          (CAST_TO)
-    DECL_F32_TO_U8          (CAST_TO)
-    DECL_U16_TO_F32         (CAST_TO)
-    DECL_F32_TO_U16         (CAST_TO)
-    DECL_U32_TO_F32         (CAST_TO)
-    DECL_F32_TO_U32         (CAST_TO)
+    DECL_U8_TO_F32          CAST_TO
+    DECL_F32_TO_U8          CAST_TO
+    DECL_U16_TO_F32         CAST_TO
+    DECL_F32_TO_U16         CAST_TO
+    DECL_U32_TO_F32         CAST_TO
+    DECL_F32_TO_U32         CAST_TO
 %endmacro
 
 INIT_XMM sse4

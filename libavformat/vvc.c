@@ -156,7 +156,7 @@ static void vvcc_update_ptl(VVCDecoderConfigurationRecord *vvcc,
                 FFMAX(vvcc->ptl.sublayer_level_idc[i],
                       ptl->sublayer_level_idc[i]);
         } else {
-            if (i == vvcc->num_sublayers - 1) {
+            if (i == vvcc->num_sublayers - 2) {
                 vvcc->ptl.sublayer_level_idc[i] = vvcc->ptl.general_level_idc;
             } else {
                 vvcc->ptl.sublayer_level_idc[i] =
@@ -245,6 +245,8 @@ static int vvcc_parse_vps(GetBitContext *gb,
 
     vps_max_layers_minus1 = get_bits(gb, 6);
     vps_max_sublayers_minus1 = get_bits(gb, 3);
+    if (vps_max_sublayers_minus1 >= VVC_MAX_SUBLAYERS)
+        return AVERROR_INVALIDDATA;
 
     /*
      * numTemporalLayers greater than 1 indicates that the stream to which this
@@ -260,7 +262,7 @@ static int vvcc_parse_vps(GetBitContext *gb,
     if (vps_max_layers_minus1 > 0 && vps_max_sublayers_minus1 > 0)
         vps_default_ptl_dpb_hrd_max_tid_flag = get_bits1(gb);
     else
-        vps_default_ptl_dpb_hrd_max_tid_flag = 0;
+        vps_default_ptl_dpb_hrd_max_tid_flag = 1;
     if (vps_max_layers_minus1 > 0)
         vps_all_independent_layers_flag = get_bits1(gb);
     else
@@ -310,9 +312,11 @@ static int vvcc_parse_vps(GetBitContext *gb,
         else
             vps_pt_present_flag[i] = 1;
 
-        if (!vps_default_ptl_dpb_hrd_max_tid_flag)
+        if (!vps_default_ptl_dpb_hrd_max_tid_flag) {
             vps_ptl_max_tid[i] = get_bits(gb, 3);
-        else
+            if (vps_ptl_max_tid[i] > vps_max_sublayers_minus1)
+                return AVERROR_INVALIDDATA;
+        } else
             vps_ptl_max_tid[i] = vps_max_sublayers_minus1;
     }
 
@@ -336,6 +340,8 @@ static int vvcc_parse_sps(GetBitContext *gb,
 
     skip_bits(gb, 8);  // sps_seq_parameter_set_id && sps_video_parameter_set_id
     sps_max_sublayers_minus1 = get_bits(gb, 3);
+    if (sps_max_sublayers_minus1 >= VVC_MAX_SUBLAYERS)
+        return AVERROR_INVALIDDATA;
 
     /*
      * numTemporalLayers greater than 1 indicates that the stream to which this

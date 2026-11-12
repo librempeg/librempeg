@@ -24,7 +24,6 @@ HEADERS = adler32.h                                                     \
           crc.h                                                         \
           csp.h                                                         \
           des.h                                                         \
-          detection_bbox.h                                              \
           dict.h                                                        \
           display.h                                                     \
           dovi_meta.h                                                   \
@@ -130,7 +129,6 @@ OBJS = adler32.o                                                        \
        crc.o                                                            \
        csp.o                                                            \
        des.o                                                            \
-       detection_bbox.o                                                 \
        dict.o                                                           \
        display.o                                                        \
        dovi_meta.o                                                      \
@@ -232,11 +230,12 @@ OBJS-$(HAVE_THREADS)                    += thread.o
 OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 # Object files to satisfy dependencies of other libraries for static builds
+STLIBOBJS-$(CONFIG_AVFILTER)            += framepool.o
 STLIBOBJS-$(CONFIG_EXR_DECODER)         += half2float.o float2half.o
 STLIBOBJS-$(CONFIG_EXR_ENCODER)         += float2half.o
 STLIBOBJS-$(CONFIG_PHM_DECODER)         += half2float.o
 STLIBOBJS-$(CONFIG_PHM_ENCODER)         += float2half.o
-STLIBOBJS-$(CONFIG_SWSCALE)             += half2float.o
+STLIBOBJS-$(CONFIG_SWSCALE)             += framepool.o half2float.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avutilres.o
@@ -280,7 +279,6 @@ TESTPROGS = adler32                                                     \
             crc                                                         \
             csp                                                         \
             des                                                         \
-            detection_bbox                                              \
             dict                                                        \
             display                                                     \
             dovi_meta                                                   \
@@ -296,6 +294,7 @@ TESTPROGS = adler32                                                     \
             hdr_dynamic_vivid_metadata                                  \
             hmac                                                        \
             hwdevice                                                    \
+            iamf                                                        \
             integer                                                     \
             imgutils                                                    \
             lfg                                                         \

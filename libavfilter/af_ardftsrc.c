@@ -123,11 +123,11 @@ static int query_formats(const AVFilterContext *ctx,
     int ret, sample_rates[] = { s->sample_rate, -1 };
     AVFilterFormats *formats;
 
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
@@ -400,7 +400,6 @@ static int filter_frame(AVFilterLink *inlink)
         return ff_filter_frame(outlink, in);
     } else if (inlink->sample_rate == outlink->sample_rate) {
         SF2SFThreadData sf2sf_td;
-
 
         out->nb_samples = in->nb_samples;
         ret = ff_filter_get_buffer(ctx, s->out);

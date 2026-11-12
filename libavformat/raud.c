@@ -69,7 +69,7 @@ static int read_probe(const AVProbeData *p)
         offset = AV_RB64(p->buf);
     else
         offset = AV_RL64(p->buf);
-    if (offset > 0x20000 || offset < 0x1c)
+    if (offset > 0x24000 || offset < 0x1c)
         return 0;
 
     if (p->buf_size < 20)
@@ -108,7 +108,7 @@ static int read_header(AVFormatContext *s)
     avio_r16 = be ? avio_rb16 : avio_rl16;
     avio_seek(pb, 0, SEEK_SET);
     table_offset = avio_r64(pb);
-    if (table_offset > 0x20000 || table_offset < 0x1c)
+    if (table_offset > 0x24000 || table_offset < 0x1c)
         return AVERROR_INVALIDDATA;
 
     raud->nb_blocks = avio_r32(pb);

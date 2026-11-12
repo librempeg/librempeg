@@ -209,16 +209,19 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
  * [framing_flag] = read one bit | Not Used
  */
 
+enum VorbisPacketType {
+    VORBIS_PACKET_DATA,
+    VORBIS_PACKET_ID,
+    VORBIS_PACKET_COMMENT,
+    VORBIS_PACKET_SETUP,
+    VORBIS_PACKET_RESERVED,
+};
+
 struct oggvorbis_private {
     unsigned int len[3];
     unsigned char *packet[3];
+    enum VorbisPacketType last_packet; ///< type of the last packet seen by vorbis_packet()
     AVVorbisParseContext *vp;
-    uint8_t *header;
-    int header_size;
-    uint8_t *comment;
-    int comment_size;
-    uint8_t *setup;
-    int setup_size;
     int64_t bos_page_pos;
     int ts_offset;
     int64_t last_page_granule;
@@ -273,10 +276,6 @@ static void vorbis_cleanup(AVFormatContext *s, int idx)
         av_vorbis_parse_free(&priv->vp);
         for (i = 0; i < 3; i++)
             av_freep(&priv->packet[i]);
-
-        av_freep(&priv->header);
-        av_freep(&priv->comment);
-        av_freep(&priv->setup);
     }
 }
 
@@ -455,6 +454,56 @@ static int vorbis_header(AVFormatContext *s, int idx)
     return 1;
 }
 
+/**
+ * Check that a packet follows the identification, comment, setup order of a
+ * chained stream's headers, and record it as the last packet.
+ *
+ * An identification header starts a new set. A misplaced packet discards the
+ * buffered headers, so an incomplete or misordered set is never packed.
+ * Reserved packet types are ignored, per Vorbis I §1.3.2.
+ *
+ * @return 0 if the packet is in order, AVERROR_INVALIDDATA otherwise
+ */
+static int vorbis_check_packet_order(AVFormatContext *s,
+                                     struct oggvorbis_private *priv,
+                                     enum VorbisPacketType type)
+{
+    enum VorbisPacketType last = priv->last_packet;
+    const char *error = NULL;
+
+    switch (type) {
+    case VORBIS_PACKET_RESERVED:
+        return 0;
+    case VORBIS_PACKET_DATA:
+        if (last == VORBIS_PACKET_ID || last == VORBIS_PACKET_COMMENT)
+            error = "data packet before the setup header";
+        break;
+    case VORBIS_PACKET_ID:
+        if (last == VORBIS_PACKET_ID || last == VORBIS_PACKET_COMMENT)
+            error = "identification header before the setup header";
+        break;
+    case VORBIS_PACKET_COMMENT:
+        if (last != VORBIS_PACKET_ID)
+            error = "comment header without identification header";
+        break;
+    case VORBIS_PACKET_SETUP:
+        if (last != VORBIS_PACKET_COMMENT)
+            error = "setup header without comment header";
+        break;
+    }
+
+    if (error)
+        av_log(s, AV_LOG_WARNING,
+               "Invalid chained stream headers: %s, discarding them\n", error);
+
+    if (error || type == VORBIS_PACKET_ID)
+        for (int i = 0; i < 3; i++)
+            av_freep(&priv->packet[i]);
+
+    priv->last_packet = error && type != VORBIS_PACKET_ID ? VORBIS_PACKET_DATA : type;
+    return error ? AVERROR_INVALIDDATA : 0;
+}
+
 static int vorbis_packet(AVFormatContext *s, int idx)
 {
     struct ogg *ogg = s->priv_data;
@@ -462,8 +511,7 @@ static int vorbis_packet(AVFormatContext *s, int idx)
     struct oggvorbis_private *priv = os->private;
     int duration, flags = 0;
     int bos, skip_packet = 0;
-    int ret, new_extradata_size;
-    PutByteContext pb;
+    int ret;
 
     if (os->psize == 0)
         return AVERROR_INVALIDDATA;
@@ -478,10 +526,10 @@ static int vorbis_packet(AVFormatContext *s, int idx)
 
     bos = os->page_start && os->page_pos == priv->bos_page_pos;
 
-    if (bos) {
+    if (bos || (os->page_start && os->lastpts == AV_NOPTS_VALUE))
         av_vorbis_parse_reset(priv->vp);
+    if (bos)
         priv->last_page_granule = 0;
-    }
 
     duration = av_vorbis_parse_frame_flags(priv->vp, os->buf + os->pstart, 1, &flags);
     if (duration < 0) {
@@ -497,12 +545,41 @@ static int vorbis_packet(AVFormatContext *s, int idx)
     if (!priv->ts_offset)
         priv->ts_offset = os->pduration;
 
-    /* Initial position shift to account for encoder delay. */
+    /* Initial position shift to account for encoder delay, or page scan
+     * to recover the page start timestamp after a seek. */
     if (bos) {
-        if (os->lastpts != AV_NOPTS_VALUE)
+        if (os->lastpts != AV_NOPTS_VALUE) {
+            if (s->streams[idx]->start_time == AV_NOPTS_VALUE) {
+                s->streams[idx]->start_time = os->lastpts;
+                if (s->streams[idx]->duration != AV_NOPTS_VALUE)
+                    s->streams[idx]->duration -= s->streams[idx]->start_time;
+            }
             os->lastpts -= priv->ts_offset;
+        }
         if (os->lastdts != AV_NOPTS_VALUE)
             os->lastdts -= priv->ts_offset;
+    } else if (os->page_start && os->lastpts == AV_NOPTS_VALUE &&
+               !(os->flags & OGG_FLAG_EOS) && (int64_t)os->granule >= 0) {
+        int seg, page_duration = os->pduration;
+        uint8_t *last_pkt = os->buf + os->pstart + os->psize;
+        uint8_t *next_pkt = last_pkt;
+
+        for (seg = os->segp; seg < os->nsegs; seg++) {
+            next_pkt += os->segments[seg];
+            if (os->segments[seg] < 255 && next_pkt != last_pkt) {
+                int pkt_flags = 0;
+                int d = av_vorbis_parse_frame_flags(priv->vp, last_pkt, 1, &pkt_flags);
+                if (d < 0) {
+                    page_duration = os->granule;
+                    break;
+                }
+                page_duration += d;
+                last_pkt = next_pkt;
+            }
+        }
+        av_vorbis_parse_frame_flags(priv->vp, os->buf + os->pstart, 1, &flags);
+        os->lastpts =
+        os->lastdts = os->granule - page_duration;
     }
 
     /* Broken files may have granule=0 on pages that contain audio data.
@@ -535,72 +612,69 @@ static int vorbis_packet(AVFormatContext *s, int idx)
      * skipped; the headers are buffered and attached as extradata to the
      * first data packet that follows. */
     if (flags & VORBIS_FLAG_HEADER) {
+        vorbis_check_packet_order(s, priv, VORBIS_PACKET_ID);
+
         ret = vorbis_parse_header(s, s->streams[idx], os->buf + os->pstart, os->psize);
         if (ret < 0)
             return ret;
 
-        ret = av_reallocp(&priv->header, os->psize);
+        ret = av_reallocp(&priv->packet[0], os->psize);
         if (ret < 0)
             return ret;
 
-        memcpy(priv->header, os->buf + os->pstart, os->psize);
-        priv->header_size = os->psize;
+        memcpy(priv->packet[0], os->buf + os->pstart, os->psize);
+        priv->len[0] = os->psize;
 
         skip_packet = 1;
     }
 
     if (flags & VORBIS_FLAG_COMMENT) {
+        if (vorbis_check_packet_order(s, priv, VORBIS_PACKET_COMMENT) < 0)
+            return 1;
+
         ret = vorbis_update_metadata(s, idx);
         if (ret < 0)
             return ret;
 
-        ret = av_reallocp(&priv->comment, os->psize);
+        ret = av_reallocp(&priv->packet[1], os->psize);
         if (ret < 0)
             return ret;
 
-        memcpy(priv->comment, os->buf + os->pstart, os->psize);
-        priv->comment_size = os->psize;
+        memcpy(priv->packet[1], os->buf + os->pstart, os->psize);
+        priv->len[1] = os->psize;
 
         flags = 0;
         skip_packet = 1;
     }
 
     if (flags & VORBIS_FLAG_SETUP) {
-        ret = av_reallocp(&priv->setup, os->psize);
+        if (vorbis_check_packet_order(s, priv, VORBIS_PACKET_SETUP) < 0)
+            return 1;
+
+        ret = av_reallocp(&priv->packet[2], os->psize);
         if (ret < 0)
             return ret;
 
-        memcpy(priv->setup, os->buf + os->pstart, os->psize);
-        priv->setup_size = os->psize;
+        memcpy(priv->packet[2], os->buf + os->pstart, os->psize);
+        priv->len[2] = os->psize;
 
         skip_packet = 1;
     }
 
+    if (!skip_packet)
+        vorbis_check_packet_order(s, priv, os->buf[os->pstart] & 1 ?
+                                  VORBIS_PACKET_RESERVED : VORBIS_PACKET_DATA);
 
     /* All three headers for the new chained stream have been collected;
      * pack them into new extradata to be attached to the next data packet. */
-    if (priv->header && priv->comment && priv->setup) {
-        new_extradata_size = priv->header_size + priv->comment_size + priv->setup_size + 6;
-
-        ret = av_reallocp(&os->new_extradata, new_extradata_size);
-        if (ret < 0)
+    if (priv->packet[0] && priv->packet[1] && priv->packet[2]) {
+        av_freep(&os->new_extradata);
+        ret = fixup_vorbis_headers(s, priv, &os->new_extradata);
+        if (ret < 0) {
+            os->new_extradata_size = 0;
             return ret;
-
-        os->new_extradata_size = new_extradata_size;
-        bytestream2_init_writer(&pb, os->new_extradata, new_extradata_size);
-        bytestream2_put_be16(&pb, priv->header_size);
-        bytestream2_put_buffer(&pb, priv->header, priv->header_size);
-        bytestream2_put_be16(&pb, priv->comment_size);
-        bytestream2_put_buffer(&pb, priv->comment, priv->comment_size);
-        bytestream2_put_be16(&pb, priv->setup_size);
-        bytestream2_put_buffer(&pb, priv->setup, priv->setup_size);
-
-        av_freep(&priv->header);
-        priv->header_size = 0;
-        av_freep(&priv->comment);
-        priv->comment_size = 0;
-        av_freep(&priv->setup);
-        priv->setup_size = 0;
+        }
+        os->new_extradata_size = ret;
 
         av_vorbis_parse_free(&priv->vp);
         priv->vp = av_vorbis_parse_init(os->new_extradata, os->new_extradata_size);

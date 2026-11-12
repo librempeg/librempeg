@@ -769,7 +769,7 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
         AacPsyBand *bands = &pch->band[w];
 
         /* 5.4.2.3 "Spreading" & 5.4.3 "Spread Energy Calculation" */
-        spread_en[0] = bands[0].energy;
+        spread_en[w] = bands[0].energy;
         for (g = 1; g < num_bands; g++) {
             bands[g].thr   = FFMAX(bands[g].thr,    bands[g-1].thr * coeffs[g].spread_hi[0]);
             spread_en[w+g] = FFMAX(bands[g].energy, spread_en[w+g-1] * coeffs[g].spread_hi[1]);
@@ -937,7 +937,9 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
                     AacPsyBand *band = &pch->band[w+g];
                     if (band->avoid_holes != PSY_3GPP_AH_NONE && coeffs[g].min_snr < PSY_SNR_1DB) {
                         coeffs[g].min_snr = PSY_SNR_1DB;
-                        band->thr = band->energy * PSY_SNR_1DB;
+                        /* a reduction step: never lower a threshold, or a
+                         * band below its threshold in quiet becomes codeable */
+                        band->thr = FFMAX(band->thr, band->energy * PSY_SNR_1DB);
                         pe += band->active_lines * 1.5f - band->pe;
                     }
                 }
@@ -965,8 +967,11 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
             int start = 0;
             for (g = 0; g < num_bands; g++) {
                 AacPsyBand *band = &pch->band[w+g];
+                /* never below the threshold in quiet: an inaudible band
+                 * must stay uncoded */
                 if (start * l2f >= knee)
-                    band->thr = FFMIN(band->thr, band->energy * lo);
+                    band->thr = FFMIN(band->thr, FFMAX(coeffs[g].ath,
+                                                       band->energy * lo));
                 start += band_sizes[g];
             }
         }

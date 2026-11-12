@@ -40,25 +40,8 @@
 
 #include "avformat.h"
 #include "avio_internal.h"
+#include "jpegmpf.h"
 #include "mux.h"
-
-/* Namespace URIs of the GContainer XMP extension */
-#define XMP_CONTAINER_NS "http://ns.google.com/photos/1.0/container/"
-#define XMP_ITEM_NS      "http://ns.google.com/photos/1.0/container/item/"
-
-/* Individual Image Attribute bits, from CIPA DC-007 Figure 8 */
-enum MPFAttribute {
-    MPF_DEPENDENT_PARENT = 0x80000000,
-    MPF_DEPENDENT_CHILD  = 0x40000000,
-    MPF_FORMAT_JPEG      = 0x00000000,
-};
-
-/* MP Index IFD tags, from CIPA DC-007 Table 3 */
-enum MPFTag {
-    MPF_TAG_MPFVersion      = 0xB000,
-    MPF_TAG_NumberOfImages  = 0xB001,
-    MPF_TAG_MPEntry         = 0xB002,
-};
 
 typedef enum MPFRole {
     MPF_ROLE_UNKNOWN = 0,
@@ -67,20 +50,12 @@ typedef enum MPFRole {
     MPF_ROLE_NB,
 } MPFRole;
 
-/* APP2 extension segments */
-typedef enum MPFExt {
-    MPF_EXT_XMP,        /* GContainer directory, First Individual Image only */
-    MPF_EXT_INDEX,      /* MP Index IFD, First Individual Image only */
-    MPF_EXT_ISO21496,   /* ISO 21496-1 version fields (in the base image) */
-    MPF_EXT_NB,
-} MPFExt;
-
 static const struct {
     const char *name;
-    uint32_t    type;  /* from CIPA DC-007 Table 4 */
+    enum MPFType type;
 } mpf_roles[MPF_ROLE_NB] = {
-    [MPF_ROLE_PRIMARY]  = { "primary image",    0x030000 },
-    [MPF_ROLE_GAIN_MAP] = { "gain map image",   0x050000 },
+    [MPF_ROLE_PRIMARY]  = { "primary image",    MPF_TYPE_PRIMARY  },
+    [MPF_ROLE_GAIN_MAP] = { "gain map image",   MPF_TYPE_GAIN_MAP },
 };
 
 typedef struct MPFImage MPFImage;
@@ -132,11 +107,15 @@ static int init_gain_map(AVFormatContext *ctx, const AVStreamGroup *sg)
 {
     MPFMuxContext *s = ctx->priv_data;
     const AVStreamGroupLayeredVideo *lv = sg->params.layered_video;
-    if (sg->nb_streams != 2 || lv->el_index >= sg->nb_streams)
+    if (sg->nb_entries != 2 || lv->el_index >= sg->nb_entries)
         return AVERROR(EINVAL);
 
-    const AVStream *bl = sg->streams[!lv->el_index];
-    const AVStream *el = sg->streams[lv->el_index];
+    if (sg->entries[!lv->el_index]->type != AV_STREAM_GROUP_ENTRY_STREAM ||
+        sg->entries[ lv->el_index]->type != AV_STREAM_GROUP_ENTRY_STREAM)
+        return AVERROR(EINVAL);
+
+    const AVStream *bl = sg->entries[!lv->el_index]->stream;
+    const AVStream *el = sg->entries[lv->el_index]->stream;
     MPFImage *base = &s->images[bl->index];
     MPFImage *gain = &s->images[el->index];
 
@@ -285,6 +264,8 @@ static int mpf_write_packet(AVFormatContext *ctx, AVPacket *pkt)
         }
 
         int marker = bytestream2_get_byte(&gb);
+        while (marker == 0xFF) /* fill bytes */
+            marker = bytestream2_get_byte(&gb);
         if (marker == SOS || marker == TEM || (marker >= RST0 && marker <= EOI)) {
             if (!img->splice_pos)
                 img->splice_pos = pos;

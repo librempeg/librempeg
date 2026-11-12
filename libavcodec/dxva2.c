@@ -692,6 +692,11 @@ int ff_dxva2_common_frame_params(AVCodecContext *avctx,
     return 0;
 }
 
+/* The H.264, HEVC and VP9 picture parameters index surfaces with 7 bits and
+ * reserve 127 as the invalid index. The AV1 specification uses 8 bits with 255
+ * as the invalid index, but indices >= 127 don't work on real hardware. */
+#define DXVA_MAX_SURFACES 127
+
 int ff_dxva2_decode_init(AVCodecContext *avctx)
 {
     FFDXVASharedContext *sctx = DXVA_SHARED_CONTEXT(avctx);
@@ -716,6 +721,13 @@ int ff_dxva2_decode_init(AVCodecContext *avctx)
 
     if (frames_ctx->format != sctx->pix_fmt) {
         av_log(avctx, AV_LOG_ERROR, "Invalid pixfmt for hwaccel!\n");
+        ret = AVERROR(EINVAL);
+        goto fail;
+    }
+
+    if (frames_ctx->initial_pool_size > DXVA_MAX_SURFACES) {
+        av_log(avctx, AV_LOG_ERROR, "The pool has %d surfaces, DXVA can address at most %d\n",
+               frames_ctx->initial_pool_size, DXVA_MAX_SURFACES);
         ret = AVERROR(EINVAL);
         goto fail;
     }
@@ -927,6 +939,20 @@ static int frame_add_buf(AVFrame *frame, AVBufferRef *ref)
     return AVERROR(EINVAL);
 }
 
+static void dxva2_frame_priv_free(void *priv)
+{
+    AVBufferRef *decoder_ref = priv;
+
+    av_buffer_unref(&decoder_ref);
+}
+
+static int dxva2_frame_post_process(void *logctx, AVFrame *frame)
+{
+    const FrameDecodeData *fdd = frame->private_ref;
+
+    return frame_add_buf(frame, fdd->hwaccel_priv);
+}
+
 int ff_dxva2_common_end_frame(AVCodecContext *avctx, AVFrame *frame,
                               const void *pp, unsigned pp_size,
                               const void *qm, unsigned qm_size,
@@ -949,9 +975,24 @@ int ff_dxva2_common_end_frame(AVCodecContext *avctx, AVFrame *frame,
     FFDXVASharedContext *sctx = DXVA_SHARED_CONTEXT(avctx);
 
     if (sctx->decoder_ref) {
-        result = frame_add_buf(frame, sctx->decoder_ref);
-        if (result < 0)
-            return result;
+        FrameDecodeData *fdd = frame->private_ref;
+
+        /* With frame threading, this may run after ff_thread_finish_setup(),
+         * when other threads may already be copying this AVFrame, so its
+         * buf[] array must not be modified here. Store the decoder
+         * reference in the per-frame decode data, which all references to
+         * the frame share, and add it to frame->buf[] once the frame is
+         * output. The second field of a field pair reuses the reference
+         * stored for the first. */
+        if (!fdd->hwaccel_priv) {
+            AVBufferRef *decoder_ref = av_buffer_ref(sctx->decoder_ref);
+            if (!decoder_ref)
+                return AVERROR(ENOMEM);
+
+            fdd->hwaccel_priv              = decoder_ref;
+            fdd->hwaccel_priv_free         = dxva2_frame_priv_free;
+            fdd->hwaccel_priv_post_process = dxva2_frame_post_process;
+        }
     }
 
     do {

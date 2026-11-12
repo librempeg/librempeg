@@ -39,7 +39,7 @@
 #include "graph.h"
 #include "ops.h"
 #include "ops_dispatch.h"
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
 #include "vulkan/ops.h"
 #endif
 
@@ -102,7 +102,7 @@ static int frame_alloc_planes_ref(AVFrame *dst, const AVFrame *src,
     return 0;
 }
 
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
 static int pass_alloc_output_hw(SwsPass *pass, AVFrame *avframe,
                                 AVBufferRef *dev_ref)
 {
@@ -141,7 +141,7 @@ static int pass_alloc_output(SwsPass *pass)
 
     int ret;
 
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
     const SwsGraph *graph = pass->graph;
     if (graph->src.hw_format == AV_PIX_FMT_VULKAN &&
         graph->dst.hw_format == AV_PIX_FMT_VULKAN) {
@@ -166,7 +166,7 @@ static int pass_alloc_output(SwsPass *pass)
         return ret;
     }
 
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
 done:
 #endif
     buffer->avframe = avframe;
@@ -290,17 +290,18 @@ static void run_copy(const SwsFrame *out, const SwsFrame *in, int y, int h,
         const int lines = h >> ff_fmt_vshift(in->format, i);
         av_assert1(in_data[i]);
 
+        if (i == 1 && av_pix_fmt_desc_get(in->format)->flags & AV_PIX_FMT_FLAG_PAL) {
+            if (!y && in->data[1] != out->data[1])
+                memcpy(out->data[1], in->data[1], AVPALETTE_SIZE);
+            break;
+        }
+
         if (in_data[i] == out_data[i]) {
             av_assert0(in->linesize[i] == out->linesize[i]);
-        } else if (in->linesize[i] == out->linesize[i]) {
-            memcpy(out_data[i], in_data[i], lines * out->linesize[i]);
         } else {
-            const int linesize = FFMIN(out->linesize[i], in->linesize[i]);
-            for (int j = 0; j < lines; j++) {
-                memcpy(out_data[i], in_data[i], linesize);
-                in_data[i]  += in->linesize[i];
-                out_data[i] += out->linesize[i];
-            }
+            ff_copyPlane(in_data[i], in->linesize[i], 0, lines,
+                         av_image_get_linesize(out->format, out->width, i),
+                         out_data[i], out->linesize[i]);
         }
     }
 }
@@ -449,7 +450,6 @@ static int init_legacy_subpass(SwsGraph *graph, SwsContext *sws,
     SwsInternal *c = sws_internal(sws);
     const int src_w = sws->src_w, src_h = sws->src_h;
     const int dst_w = sws->dst_w, dst_h = sws->dst_h;
-    const int unscaled = src_w == dst_w && src_h == dst_h;
     int align = c->dst_slice_align;
     SwsPass *pass = NULL;
     int ret;
@@ -484,7 +484,7 @@ static int init_legacy_subpass(SwsGraph *graph, SwsContext *sws,
         }
     }
 
-    if (c->srcXYZ && !(c->dstXYZ && unscaled)) {
+    if (c->srcXYZ && !c->dstXYZ) {
         ret = ff_sws_graph_add_pass(graph, AV_PIX_FMT_RGB48, src_w, src_h, input,
                                     0, 1, run_xyz2rgb, NULL, c, NULL, &input);
         if (ret < 0) {
@@ -540,10 +540,13 @@ static int init_legacy_subpass(SwsGraph *graph, SwsContext *sws,
                 c2->srcColorspaceTable[i] = c->srcColorspaceTable[i];
                 c2->dstColorspaceTable[i] = c->dstColorspaceTable[i];
             }
+
+            c2->srcXYZ = c->srcXYZ;
+            c2->dstXYZ = c->dstXYZ;
         }
     }
 
-    if (c->dstXYZ && !(c->srcXYZ && unscaled)) {
+    if (c->dstXYZ && !c->srcXYZ) {
         ret = ff_sws_graph_add_pass(graph, AV_PIX_FMT_RGB48, dst_w, dst_h, pass,
                                     0, 1, run_rgb2xyz, NULL, c, NULL, &pass);
         if (ret < 0)
@@ -609,8 +612,10 @@ static int add_legacy_sws_pass(SwsGraph *graph, const SwsFormat *src,
     ff_sws_chroma_pos(src, &graph->incomplete, &sws->src_h_chr_pos, &sws->src_v_chr_pos);
     ff_sws_chroma_pos(dst, &graph->incomplete, &sws->dst_h_chr_pos, &sws->dst_v_chr_pos);
 
-    graph->incomplete |= src->range == AVCOL_RANGE_UNSPECIFIED;
-    graph->incomplete |= dst->range == AVCOL_RANGE_UNSPECIFIED;
+    if (!isFloat(src->format))
+        graph->incomplete |= src->range == AVCOL_RANGE_UNSPECIFIED;
+    if (!isFloat(dst->format))
+        graph->incomplete |= dst->range == AVCOL_RANGE_UNSPECIFIED;
 
     /* Allow overriding chroma position with the legacy API */
     legacy_chr_pos(graph, &sws->src_h_chr_pos, ctx->src_h_chr_pos, &warned);
@@ -695,7 +700,6 @@ static int add_ops_convert_pass(SwsGraph *graph, const SwsFormat *src,
                                 const SwsFormat *dst, const SwsLut3D *lut3d,
                                 SwsPass *input, SwsPass **output)
 {
-#if CONFIG_UNSTABLE
     SwsContext *ctx = graph->ctx;
 
     /* Preemptively skip the ops list generation if the backend was
@@ -715,13 +719,11 @@ static int add_ops_convert_pass(SwsGraph *graph, const SwsFormat *src,
            av_get_pix_fmt_name(src->format), av_get_pix_fmt_name(dst->format));
 
     av_log(ctx, AV_LOG_DEBUG, "Unoptimized operation list:\n");
+    ff_sws_op_list_update(ops);
     ff_sws_op_list_print(ctx, AV_LOG_DEBUG, AV_LOG_TRACE, ops);
 
     const int flags = SWS_OP_FLAG_OPTIMIZE | SWS_OP_FLAG_SPLIT_MEMCPY;
     return ff_sws_compile_pass(graph, NULL, &ops, flags, input, output);
-#else
-    return AVERROR(ENOTSUP);
-#endif
 }
 
 static bool prefer_ops_backend(SwsContext *ctx, const SwsFormat *src, const SwsFormat *dst)
@@ -1024,7 +1026,7 @@ static void get_field(SwsGraph *graph, const SwsFormat *fmt,
 
     /* Take only every second line */
     for (int i = 0; i < 4; i++)
-        frame->linesize[i] <<= 1;
+        frame->linesize[i] *= 2;
 
     frame->height = (frame->height + (fmt->field == FIELD_TOP)) >> 1;
 }

@@ -34,6 +34,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "libavutil/attributes_internal.h"
 #include "libavutil/imgutils.h"
@@ -200,16 +201,21 @@ static void tdsc_paint_cursor(AVCodecContext *avctx, uint8_t *dst, int stride)
 static int tdsc_load_cursor(AVCodecContext *avctx)
 {
     TDSCContext *ctx  = avctx->priv_data;
-    int i, j, k, ret, cursor_fmt, w, h;
+    int i, j, k, ret, cursor_fmt, w, h, hot_x, hot_y;
     uint8_t *dst;
 
-    ctx->cursor_hot_x = bytestream2_get_le16(&ctx->gbc);
-    ctx->cursor_hot_y = bytestream2_get_le16(&ctx->gbc);
+    hot_x             = bytestream2_get_le16(&ctx->gbc);
+    hot_y             = bytestream2_get_le16(&ctx->gbc);
     w                 = bytestream2_get_le16(&ctx->gbc);
     h                 = bytestream2_get_le16(&ctx->gbc);
 
     cursor_fmt = bytestream2_get_le32(&ctx->gbc);
 
+    if (cursor_fmt != CUR_FMT_MONO && cursor_fmt != CUR_FMT_BGRA &&
+        cursor_fmt != CUR_FMT_RGBA) {
+        avpriv_request_sample(avctx, "Cursor format %08x", cursor_fmt);
+        return AVERROR_PATCHWELCOME;
+    }
     if (w < 1 || w > 256 || h < 1 || h > 256) {
         av_log(avctx, AV_LOG_ERROR, "Invalid cursor dimensions %dx%d.\n", w, h);
         return AVERROR_INVALIDDATA;
@@ -217,6 +223,8 @@ static int tdsc_load_cursor(AVCodecContext *avctx)
     ctx->cursor_w      = w;
     ctx->cursor_h      = h;
     ctx->cursor_stride = FFALIGN(w, 32) * 4;
+    ctx->cursor_hot_x  = hot_x;
+    ctx->cursor_hot_y  = hot_y;
     if (ctx->cursor_hot_x > ctx->cursor_w ||
         ctx->cursor_hot_y > ctx->cursor_h) {
         av_log(avctx, AV_LOG_WARNING, "Invalid hotspot position %d.%d.\n",
@@ -306,9 +314,6 @@ static int tdsc_load_cursor(AVCodecContext *avctx)
             }
         }
         break;
-    default:
-        avpriv_request_sample(avctx, "Cursor format %08x", cursor_fmt);
-        return AVERROR_PATCHWELCOME;
     }
 
     return 0;
@@ -497,6 +502,8 @@ static int tdsc_parse_tdsf(AVCodecContext *avctx, int number_tiles)
         ret = av_frame_get_buffer(ctx->refframe, 0);
         if (ret < 0)
             return ret;
+        memset(ctx->refframe->data[0], 0,
+               (size_t)ctx->refframe->linesize[0] * ctx->refframe->height);
     }
 
     /* Decode all tiles in a frame */

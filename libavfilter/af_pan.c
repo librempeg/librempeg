@@ -342,34 +342,29 @@ static int config_props(AVFilterLink *inlink)
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
+
+static int pan_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    AVFilterContext *ctx = inlink->dst;
-    int ret;
-    int n = in->nb_samples;
     AVFilterLink *const outlink = ctx->outputs[0];
-    const int planar = av_sample_fmt_is_planar(outlink->format);
-    AVFrame *out = ff_get_audio_buffer(outlink, n);
+    PanContext *pan = ctx->priv;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
     const int out_channels = out->ch_layout.nb_channels;
     const int in_channels = in->ch_layout.nb_channels;
-    PanContext *pan = ctx->priv;
-
-    if (!out) {
-        av_frame_free(&in);
-        return AVERROR(ENOMEM);
-    }
-    av_frame_copy_props(out, in);
-    if ((ret = av_channel_layout_copy(&out->ch_layout, &outlink->ch_layout)) < 0) {
-        av_frame_free(&out);
-        av_frame_free(&in);
-        return ret;
-    }
+    const int start = ff_slice_pos(out_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out_channels, jobnr+1, nb_jobs);
+    const int planar = av_sample_fmt_is_planar(outlink->format);
+    const int n = in->nb_samples;
 
     if (pan->pure_gains) {
         const int bps = av_get_bytes_per_sample(outlink->format);
 
         if (planar) {
-            for (int ch = 0; ch < out_channels; ch++) {
+            for (int ch = start; ch < end; ch++) {
                 const int in_ch = pan->channel_map[ch];
                 uint8_t *dst = out->extended_data[ch];
 
@@ -386,7 +381,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         } else {
             switch (outlink->format) {
             case AV_SAMPLE_FMT_U8:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const uint8_t *src = in->data[0] + in_ch;
                     uint8_t *dst = out->data[0] + ch;
@@ -406,7 +401,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 }
                 break;
             case AV_SAMPLE_FMT_S16:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const int16_t *src = ((const int16_t *)in->data[0]) + in_ch;
                     int16_t *dst = ((int16_t *)out->data[0]) + ch;
@@ -426,7 +421,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 }
                 break;
             case AV_SAMPLE_FMT_S32:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const int32_t *src = ((const int32_t *)in->data[0]) + in_ch;
                     int32_t *dst = ((int32_t *)out->data[0]) + ch;
@@ -446,7 +441,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 }
                 break;
             case AV_SAMPLE_FMT_S64:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const int64_t *src = ((const int64_t *)in->data[0]) + in_ch;
                     int64_t *dst = ((int64_t *)out->data[0]) + ch;
@@ -466,7 +461,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 }
                 break;
             case AV_SAMPLE_FMT_FLT:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const float *src = ((const float *)in->data[0]) + in_ch;
                     float *dst = ((float *)out->data[0]) + ch;
@@ -486,7 +481,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 }
                 break;
             case AV_SAMPLE_FMT_DBL:
-                for (int ch = 0; ch < out_channels; ch++) {
+                for (int ch = start; ch < end; ch++) {
                     const int in_ch = pan->channel_map[ch];
                     const double *src = ((const double *)in->data[0]) + in_ch;
                     double *dst = ((double *)out->data[0]) + ch;
@@ -508,7 +503,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             }
         }
     } else {
-        for (int ch = 0; ch < out_channels; ch++) {
+        for (int ch = start; ch < end; ch++) {
             const double *gains = &pan->gain[ch * in_channels];
 
             if (planar) {
@@ -677,6 +672,34 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
+    return 0;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *const outlink = ctx->outputs[0];
+    int ret, n = in->nb_samples;
+    ThreadData td;
+
+    AVFrame *out = ff_get_audio_buffer(outlink, n);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
+    const int out_channels = out->ch_layout.nb_channels;
+    av_frame_copy_props(out, in);
+    if ((ret = av_channel_layout_copy(&out->ch_layout, &outlink->ch_layout)) < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
+    }
+
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, pan_channels, &td, NULL,
+                      FFMIN(out_channels, ff_filter_get_nb_threads(ctx)));
+
     ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
@@ -696,8 +719,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 static const AVOptionArrayDef def_mix = {.def="FC=FC",.size_min=1,.sep='|'};
 
 static const AVOption pan_options[] = {
-    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_CHLAYOUT,  { .str = "mono" },   0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
-    { "mix", "set the output channel mix gains", OFFSET(args),   AV_OPT_TYPE_STRING|AR, { .arr = &def_mix }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "layout", "set the output channel layout",    OFFSET(layout), AV_OPT_TYPE_CHLAYOUT,  { .str = "mono" },   0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "mix",    "set the output channel mix gains", OFFSET(args),   AV_OPT_TYPE_STRING|AR, { .arr = &def_mix }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
 
@@ -716,6 +739,7 @@ const FFFilter ff_af_pan = {
     .p.name        = "pan",
     .p.description = NULL_IF_CONFIG_SMALL("Remix channels with coefficients (panning)."),
     .p.priv_class  = &pan_class,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(PanContext),
     .uninit        = uninit,
     FILTER_INPUTS(pan_inputs),

@@ -585,6 +585,10 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, AVVulkanDeviceQueueFamily *qf,
             .queueFamilyIndex = qf->idx,
             .queueIndex       = e->qi,
         };
+        if (!vk->GetDeviceQueue2) {
+            av_log(s, AV_LOG_ERROR, "vkGetDeviceQueue2 is unavailable on this device\n");
+            return AVERROR_EXTERNAL;
+        }
         vk->GetDeviceQueue2(s->hwctx->act_dev, &qinfo, &e->queue);
     }
 
@@ -1996,7 +2000,7 @@ FFVkImageViews *ff_vk_imageviews_alloc(FFVulkanContext *s, int nb_views)
     return iv;
 }
 
-static VkFormat map_fmt_to_rep(VkFormat fmt, enum FFVkShaderRepFormat rep_fmt)
+VkFormat ff_vk_map_fmt_to_rep(VkFormat fmt, enum FFVkShaderRepFormat rep_fmt)
 {
 #define REPS_FMT(fmt) \
     [FF_VK_REP_NATIVE] = fmt ## _UINT, \
@@ -2118,7 +2122,7 @@ int ff_vk_create_imageview(FFVulkanContext *s,
         .pNext      = &view_usage_info,
         .image      = vkf->img[FFMIN(plane, nb_images - 1)],
         .viewType   = VK_IMAGE_VIEW_TYPE_2D,
-        .format     = map_fmt_to_rep(rep_fmts[plane], rep_fmt),
+        .format     = ff_vk_map_fmt_to_rep(rep_fmts[plane], rep_fmt),
         .components = ff_comp_identity_map,
         .subresourceRange = {
             .aspectMask = ff_vk_aspect_flag(f, plane),
@@ -2146,16 +2150,16 @@ int ff_vk_create_imageview(FFVulkanContext *s,
     return 0;
 }
 
-int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
-                            VkImageView views[AV_NUM_DATA_POINTERS],
-                            AVFrame *f, enum FFVkShaderRepFormat rep_fmt)
+int ff_vk_create_imageviews_fmt(FFVulkanContext *s, FFVkExecContext *e,
+                                VkImageView views[AV_NUM_DATA_POINTERS],
+                                AVFrame *f,
+                                const VkFormat fmts[AV_NUM_DATA_POINTERS])
 {
     int err = 0;
     VkResult ret;
     FFVulkanFunctions *vk = &s->vkfn;
     AVHWFramesContext *hwfc = (AVHWFramesContext *)f->hw_frames_ctx->data;
     AVVulkanFramesContext *vkfc = hwfc->hwctx;
-    const VkFormat *rep_fmts = av_vkfmt_from_pixfmt(hwfc->sw_format);
     AVVkFrame *vkf = (AVVkFrame *)f->data[0];
     const int nb_images = ff_vk_count_images(vkf);
     const int nb_planes = av_pix_fmt_count_planes(hwfc->sw_format);
@@ -2173,7 +2177,7 @@ int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
             .pNext      = &view_usage_info,
             .image      = vkf->img[FFMIN(i, nb_images - 1)],
             .viewType   = VK_IMAGE_VIEW_TYPE_2D,
-            .format     = map_fmt_to_rep(rep_fmts[i], rep_fmt),
+            .format     = fmts[i],
             .components = ff_comp_identity_map,
             .subresourceRange = {
                 .aspectMask = ff_vk_aspect_flag(f, i),
@@ -2181,13 +2185,6 @@ int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
                 .layerCount = 1,
             },
         };
-        if (view_create_info.format == VK_FORMAT_UNDEFINED) {
-            av_log(s, AV_LOG_ERROR, "Unable to find a compatible representation "
-                                    "of format %i and mode %i\n",
-                   rep_fmts[i], rep_fmt);
-            err = AVERROR(EINVAL);
-            goto fail;
-        }
 
         ret = vk->CreateImageView(s->hwctx->act_dev, &view_create_info,
                                   s->hwctx->alloc, &tmp_views[i]);
@@ -2213,6 +2210,28 @@ fail:
         if (tmp_views[i])
             vk->DestroyImageView(s->hwctx->act_dev, tmp_views[i], s->hwctx->alloc);
     return err;
+}
+
+int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
+                            VkImageView views[AV_NUM_DATA_POINTERS],
+                            AVFrame *f, enum FFVkShaderRepFormat rep_fmt)
+{
+    AVHWFramesContext *hwfc = (AVHWFramesContext *)f->hw_frames_ctx->data;
+    const VkFormat *rep_fmts = av_vkfmt_from_pixfmt(hwfc->sw_format);
+    const int nb_planes = av_pix_fmt_count_planes(hwfc->sw_format);
+    VkFormat fmts[AV_NUM_DATA_POINTERS] = { 0 };
+
+    for (int i = 0; i < nb_planes; i++) {
+        fmts[i] = ff_vk_map_fmt_to_rep(rep_fmts[i], rep_fmt);
+        if (fmts[i] == VK_FORMAT_UNDEFINED) {
+            av_log(s, AV_LOG_ERROR, "Unable to find a compatible representation "
+                                    "of format %i and mode %i\n",
+                   rep_fmts[i], rep_fmt);
+            return AVERROR(EINVAL);
+        }
+    }
+
+    return ff_vk_create_imageviews_fmt(s, e, views, f, fmts);
 }
 
 void ff_vk_frame_barrier(FFVulkanContext *s, FFVkExecContext *e,

@@ -12,7 +12,6 @@ OBJS = alphablend.o                                     \
        hscale_fast_bilinear.o                           \
        filters.o                                        \
        format.o                                         \
-       framepool.o                                      \
        gamma.o                                          \
        graph.o                                          \
        input.o                                          \
@@ -29,7 +28,7 @@ OBJS = alphablend.o                                     \
        yuv2rgb.o                                        \
        vscale.o                                         \
 
-OBJS-$(CONFIG_UNSTABLE) +=                              \
+OBJS +=                                                 \
        ops.o                                            \
        ops_chain.o                                      \
        ops_dispatch.o                                   \
@@ -39,12 +38,10 @@ OBJS-$(CONFIG_UNSTABLE) +=                              \
        uops.o                                           \
        uops_backend.o                                   \
 
-ifeq ($(CONFIG_UNSTABLE),yes)
 include $(SRC_PATH)/libswscale/vulkan/Makefile
-endif
 
 # Objects duplicated from other libraries for shared builds
-SHLIBOBJS                    += log2_tab.o half2float.o
+SHLIBOBJS                    += framepool.o log2_tab.o half2float.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES) += swscaleres.o
@@ -52,10 +49,11 @@ SHLIBOBJS-$(HAVE_GNU_WINDRES) += swscaleres.o
 TESTPROGS = colorspace                                                  \
             floatimg_cmp                                                \
             pixdesc_query                                               \
+            range_convert                                               \
+            rational64                                                  \
             swscale                                                     \
+            sws_ops                                                     \
+            sws_ops_aarch64                                             \
+            unscaled_threaded                                           \
 
-TESTPROGS-$(CONFIG_UNSTABLE) = sws_ops                                  \
-                               sws_ops_aarch64                          \
-                               rational64                               \
-
-DEVPROGS-$(CONFIG_UNSTABLE)  = uops_macros_gen                          \
+DEVPROGS = uops_macros_gen                                              \

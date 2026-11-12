@@ -1,5 +1,5 @@
 /*
- * Chinese AVS video (AVS1-P2, JiZhun profile) decoder.
+ * Chinese AVS video (AVS1-P2/P16, JiZhun and Broadcasting profiles) decoder.
  * Copyright (c) 2006  Stefan Gehrer <stefan.gehrer@gmx.de>
  *
  * This file is part of Librempeg
@@ -21,7 +21,7 @@
 
 /**
  * @file
- * Chinese AVS video (AVS1-P2, JiZhun profile) decoder
+ * Chinese AVS video (AVS1-P2/P16, JiZhun and Broadcasting profiles) decoder
  * @author Stefan Gehrer <stefan.gehrer@gmx.de>
  */
 
@@ -57,7 +57,18 @@ static const uint8_t tc_tab[64] = {
 
 /** mark block as unavailable, i.e. out of picture
  *  or not yet decoded */
-static const cavs_vector un_mv = { 0, 0, 1, NOT_AVAIL };
+static const cavs_vector un_mv = { 0, 0, 1, NOT_AVAIL, 0 };
+
+/**
+ * Inverse block scan method 2 (clause 9.5.3 c), figure 23), for field
+ * coded pictures, as the inverse ff_permute_scantable() expects.
+ */
+static const uint8_t cavs_scan_field[64] = {
+     0,  8, 16,  1, 24, 32,  9, 17, 40, 48, 25,  2, 10, 56, 33, 18,
+     3, 41, 49, 26, 11, 19,  4, 57, 34, 12, 42, 27, 20, 50, 35, 28,
+     5, 13, 58, 43, 36, 21,  6, 29, 51, 44, 14, 22, 37, 59, 52, 30,
+    45, 60, 38, 53, 46, 61, 54,  7, 62, 15, 23, 31, 39, 47, 55, 63,
+};
 
 static const int8_t left_modifier_l[8] = {  0, -1,  6, -1, -1, 7, 6, 7 };
 static const int8_t top_modifier_l[8]  = { -1,  1,  5, -1, -1, 5, 7, 7 };
@@ -386,7 +397,8 @@ void ff_cavs_modify_mb_i(AVSContext *h, int *pred_mode_uv)
  *
  ****************************************************************************/
 
-static inline void mc_dir_part(AVSContext *h, AVFrame *pic, int chroma_height,
+static inline void mc_dir_part(AVSContext *h, AVFrame *pic, int parity,
+                               int chroma_height,
                                int list, uint8_t *dest_y,
                                uint8_t *dest_cb, uint8_t *dest_cr,
                                int src_x_offset, int src_y_offset,
@@ -399,15 +411,20 @@ static inline void mc_dir_part(AVSContext *h, AVFrame *pic, int chroma_height,
     const int mx         = mv->x + src_x_offset * 8;
     const int my         = mv->y + src_y_offset * 8;
     const int luma_xy    = (mx & 3) + ((my & 3) << 2);
-    uint8_t *src_y       = pic->data[0] + (mx >> 2) + (my >> 2) * h->l_stride;
-    uint8_t *src_cb      = pic->data[1] + (mx >> 3) + (my >> 3) * h->c_stride;
-    uint8_t *src_cr      = pic->data[2] + (mx >> 3) + (my >> 3) * h->c_stride;
+    uint8_t *src_y       = pic->data[0] + parity * pic->linesize[0] +
+                           (mx >> 2) + (my >> 2) * h->l_stride;
+    uint8_t *src_cb      = pic->data[1] + parity * pic->linesize[1] +
+                           (mx >> 3) + (my >> 3) * h->c_stride;
+    uint8_t *src_cr      = pic->data[2] + parity * pic->linesize[2] +
+                           (mx >> 3) + (my >> 3) * h->c_stride;
     int extra_width      = 0;
     int extra_height     = extra_width;
     const int full_mx    = mx >> 2;
     const int full_my    = my >> 2;
     const int pic_width  = 16 * h->mb_width;
-    const int pic_height = 16 * h->mb_height;
+    /* motion vectors address a field in quarter field lines (9.9.2.1) */
+    const int pic_height = h->pic_structure ? 16 * h->mb_height
+                                            :  8 * h->mb_height;
     int emu = 0;
 
     if (mx & 7)
@@ -471,11 +488,12 @@ static inline void mc_part_std(AVSContext *h, int chroma_height,
     dest_cb  += x_offset     + y_offset * h->c_stride;
     dest_cr  += x_offset     + y_offset * h->c_stride;
     x_offset += 8 * h->mbx;
-    y_offset += 8 * h->mby;
+    /* the row is counted inside the current field (clause 3.24) */
+    y_offset += 8 * h->field_mby;
 
     if (mv->ref >= 0) {
-        AVFrame *ref = h->DPB[mv->ref].f;
-        mc_dir_part(h, ref, chroma_height, 0,
+        mc_dir_part(h, h->ref[mv->ref].f, h->ref[mv->ref].parity,
+                    chroma_height, 0,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
                     qpix_op, chroma_op, mv);
 
@@ -483,11 +501,12 @@ static inline void mc_part_std(AVSContext *h, int chroma_height,
         chroma_op = chroma_avg;
     }
 
-    if ((mv + MV_BWD_OFFS)->ref >= 0) {
-        AVFrame *ref = h->DPB[0].f;
-        mc_dir_part(h, ref, chroma_height, 1,
+    mv += MV_BWD_OFFS;
+    if (mv->ref >= 0) {
+        mc_dir_part(h, h->ref[mv->ref].f, h->ref[mv->ref].parity,
+                    chroma_height, 1,
                     dest_y, dest_cb, dest_cr, x_offset, y_offset,
-                    qpix_op, chroma_op, mv + MV_BWD_OFFS);
+                    qpix_op, chroma_op, mv);
     }
 }
 
@@ -583,6 +602,9 @@ void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
 
     mvP->ref  = ref;
     mvP->dist = h->dist[mvP->ref];
+    /* a derived reference has index 0 (clause 9.4.5) */
+    if (mode >= MV_PRED_PSKIP)
+        mvP->ref_idx = 0;
     if (mvC->ref == NOT_AVAIL || (nP == MV_FWD_X3) || (nP == MV_BWD_X3 ))
         mvC = &h->mv[nP - 5];  // set to top-left (mvD)
     if (mode == MV_PRED_PSKIP &&
@@ -612,8 +634,20 @@ void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
         mv_pred_median(h, mvP, mvA, mvB, mvC);
 
     if (mode < MV_PRED_PSKIP) {
-        int mx = get_se_golomb(&h->gb) + (unsigned)mvP->x;
-        int my = get_se_golomb(&h->gb) + (unsigned)mvP->y;
+        int dx, dy, mx, my;
+
+        /* under AEC mv_diff is already in the cache (aec_mv() in cavsdec.c) */
+        if (h->aec_enable) {
+            dx = h->mvd[nP][0];
+            dy = h->mvd[nP][1];
+        } else {
+            dx = get_se_golomb(&h->gb);
+            dy = get_se_golomb(&h->gb);
+            h->mvd[nP][0] = dx;
+            h->mvd[nP][1] = dy;
+        }
+        mx = dx + (unsigned)mvP->x;
+        my = dy + (unsigned)mvP->y;
 
         if (mx != (int16_t)mx || my != (int16_t)my) {
             av_log(h->avctx, AV_LOG_ERROR, "MV %d %d out of supported range\n", mx, my);
@@ -621,6 +655,7 @@ void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
             mvP->x = mx;
             mvP->y = my;
         }
+        set_mvds(&h->mvd[nP], size);
     }
     set_mvs(mvP, size);
 }
@@ -632,12 +667,41 @@ void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
  ****************************************************************************/
 
 /**
+ * Point the macroblock sample pointers at macroblock row h->mby, addressed
+ * inside the macroblock's own field at the doubled stride (clause 7.2.3.1).
+ */
+void ff_cavs_set_mb_row(AVSContext *h)
+{
+    int parity = 0;
+
+    h->field     = !h->pic_structure && h->mby >= h->mb_height / 2;
+    h->field_mby = h->mby - h->field * (h->mb_height / 2);
+    /* the first row of a field has nothing above it */
+    if (!h->field_mby)
+        h->flags &= ~(B_AVAIL | C_AVAIL | D_AVAIL);
+    if (!h->pic_structure)
+        parity = h->field ^ !h->top_field_first;
+
+    h->cy = h->cur.f->data[0] + parity * h->cur.f->linesize[0] +
+            h->field_mby * 16 * h->l_stride;
+    h->cu = h->cur.f->data[1] + parity * h->cur.f->linesize[1] +
+            h->field_mby *  8 * h->c_stride;
+    h->cv = h->cur.f->data[2] + parity * h->cur.f->linesize[2] +
+            h->field_mby *  8 * h->c_stride;
+}
+
+/**
  * initialise predictors for motion vectors and intra prediction
  */
 void ff_cavs_init_mb(AVSContext *h)
 {
     int i;
 
+    /* a macroblock has no mv_diff until one is decoded for it */
+    memset(h->mvd[MV_FWD_X0], 0, 2 * sizeof(*h->mvd));
+    memset(h->mvd[MV_FWD_X2], 0, 2 * sizeof(*h->mvd));
+    memset(h->mvd[MV_BWD_X0], 0, 2 * sizeof(*h->mvd));
+    memset(h->mvd[MV_BWD_X2], 0, 2 * sizeof(*h->mvd));
     /* copy predictors from top line (MB B and C) into cache */
     for (i = 0; i < 3; i++) {
         h->mv[MV_FWD_B2 + i] = h->top_mv[0][h->mbx * 2 + i];
@@ -684,8 +748,10 @@ int ff_cavs_next_mb(AVSContext *h)
     h->cu    += 8;
     h->cv    += 8;
     /* copy mvs as predictors to the left */
-    for (i = 0; i <= 20; i += 4)
+    for (i = 0; i <= 20; i += 4) {
         h->mv[i] = h->mv[i + 2];
+        memcpy(h->mvd[i], h->mvd[i + 2], sizeof(*h->mvd));
+    }
     /* copy bottom mvs from cache to top line */
     h->top_mv[0][h->mbx * 2 + 0] = h->mv[MV_FWD_X2];
     h->top_mv[0][h->mbx * 2 + 1] = h->mv[MV_FWD_X3];
@@ -699,17 +765,17 @@ int ff_cavs_next_mb(AVSContext *h)
         /* clear left pred_modes */
         h->pred_mode_Y[3] = h->pred_mode_Y[6] = NOT_AVAIL;
         /* clear left mv predictors */
-        for (i = 0; i <= 20; i += 4)
+        for (i = 0; i <= 20; i += 4) {
             h->mv[i] = un_mv;
+            memset(h->mvd[i], 0, sizeof(*h->mvd));
+        }
         h->mbx = 0;
         h->mby++;
-        /* re-calculate sample pointers */
-        h->cy = h->cur.f->data[0] + h->mby * 16 * h->l_stride;
-        h->cu = h->cur.f->data[1] + h->mby * 8 * h->c_stride;
-        h->cv = h->cur.f->data[2] + h->mby * 8 * h->c_stride;
         if (h->mby == h->mb_height) { // Frame end
             return 0;
         }
+        /* re-calculate sample pointers */
+        ff_cavs_set_mb_row(h);
     }
     return 1;
 }
@@ -725,22 +791,23 @@ int ff_cavs_init_pic(AVSContext *h)
     int i;
 
     /* clear some predictors */
-    for (i = 0; i <= 20; i += 4)
+    for (i = 0; i <= 20; i += 4) {
         h->mv[i] = un_mv;
+        memset(h->mvd[i], 0, sizeof(*h->mvd));
+    }
     h->mv[MV_BWD_X0] = CAVS_DIR_MV;
     set_mvs(&h->mv[MV_BWD_X0], BLK_16X16);
     h->mv[MV_FWD_X0] = CAVS_DIR_MV;
     set_mvs(&h->mv[MV_FWD_X0], BLK_16X16);
     h->pred_mode_Y[3] = h->pred_mode_Y[6] = NOT_AVAIL;
-    h->cy             = h->cur.f->data[0];
-    h->cu             = h->cur.f->data[1];
-    h->cv             = h->cur.f->data[2];
-    h->l_stride       = h->cur.f->linesize[0];
-    h->c_stride       = h->cur.f->linesize[1];
+    /* a field is every other line of the frame (clause 6.1.2) */
+    h->l_stride       = h->cur.f->linesize[0] << !h->pic_structure;
+    h->c_stride       = h->cur.f->linesize[1] << !h->pic_structure;
     h->luma_scan[2]   = 8 * h->l_stride;
     h->luma_scan[3]   = 8 * h->l_stride + 8;
     h->mbx            = h->mby = h->mbidx = 0;
     h->flags          = 0;
+    ff_cavs_set_mb_row(h);
 
     return 0;
 }
@@ -772,10 +839,18 @@ int ff_cavs_init_top_lines(AVSContext *h)
                                  4 * sizeof(*h->col_mv));
     h->col_type_base = av_mallocz(h->mb_width * h->mb_height);
 
+    h->top_cbp         = av_mallocz(h->mb_width);
+    h->top_mb_type     = av_mallocz(h->mb_width);
+    h->top_c_pred_mode = av_mallocz(h->mb_width);
+
     if (!h->top_qp || !h->top_mv[0] || !h->top_mv[1] || !h->top_pred_Y ||
+        !h->top_cbp || !h->top_c_pred_mode || !h->top_mb_type ||
         !h->top_border_y || !h->top_border_u || !h->top_border_v ||
         !h->col_mv || !h->col_type_base) {
         av_freep(&h->top_qp);
+        av_freep(&h->top_cbp);
+        av_freep(&h->top_c_pred_mode);
+        av_freep(&h->top_mb_type);
         av_freep(&h->top_mv[0]);
         av_freep(&h->top_mv[1]);
         av_freep(&h->top_pred_Y);
@@ -800,6 +875,9 @@ av_cold int ff_cavs_init(AVCodecContext *avctx)
     ff_cavsdsp_init(&h->cdsp);
     ff_init_scantable_permutation(permutation, h->cdsp.idct_perm);
     ff_permute_scantable(h->permutated_scantable, ff_zigzag_direct, permutation);
+    ff_permute_scantable(h->permutated_scantable_field, cavs_scan_field,
+                         permutation);
+    h->scantable = h->permutated_scantable;
 
     h->avctx       = avctx;
     avctx->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -829,6 +907,8 @@ av_cold int ff_cavs_init(AVCodecContext *avctx)
     h->intra_pred_c[INTRA_C_DC_128]     = intra_pred_dc_128;
     h->mv[7]                            = un_mv;
     h->mv[19]                           = un_mv;
+    for (int i = 0; i < FF_ARRAY_ELEMS(h->direct_den); i++)
+        h->direct_den[i] = i ? 16384 / i : 0;
     return 0;
 }
 
@@ -841,6 +921,9 @@ av_cold int ff_cavs_end(AVCodecContext *avctx)
     av_frame_free(&h->DPB[1].f);
 
     av_freep(&h->top_qp);
+    av_freep(&h->top_cbp);
+    av_freep(&h->top_c_pred_mode);
+    av_freep(&h->top_mb_type);
     av_freep(&h->top_mv[0]);
     av_freep(&h->top_mv[1]);
     av_freep(&h->top_pred_Y);
@@ -850,5 +933,9 @@ av_cold int ff_cavs_end(AVCodecContext *avctx)
     av_freep(&h->col_mv);
     av_freep(&h->col_type_base);
     av_freep(&h->edge_emu_buffer);
+    av_freep(&h->deemulated_buf);
+    h->deemulated_buf_size = 0;
+    av_freep(&h->stc_offset);
+    h->stc_offset_size = 0;
     return 0;
 }

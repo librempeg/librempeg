@@ -186,7 +186,7 @@ static int query_formats(const AVFilterContext *ctx,
         ctx->inputs[0]->incfg.samplerates->nb_formats < 1)
         return AVERROR(EAGAIN);
 
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 

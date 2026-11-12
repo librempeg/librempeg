@@ -344,6 +344,8 @@ enum AVCodecID {
     AV_CODEC_ID_BINKVIDEO2,
     AV_CODEC_ID_TTVIDEO,
     AV_CODEC_ID_ECM,
+    AV_CODEC_ID_RW2,
+    AV_CODEC_ID_IMM6,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -644,6 +646,7 @@ enum AVCodecID {
     AV_CODEC_ID_APPLE_APAC,
     AV_CODEC_ID_RADA,
     AV_CODEC_ID_COMPRESSWAVE,
+    AV_CODEC_ID_ULC,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.

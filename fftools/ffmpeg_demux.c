@@ -77,12 +77,14 @@ typedef struct DemuxStream {
 
     int                      streamcopy_needed;
     int                      have_sub2video;
-    enum IFilterParamChange  param_change;
+    int                      reinit_filters;
     int                      autorotate;
     int                      apply_cropping;
     int                      force_display_matrix;
     int                      force_mastering_display;
     int                      force_content_light;
+    int                      drop_changed;
+
 
     int                      wrap_correction_done;
     int                      saw_first_ts;
@@ -614,7 +616,7 @@ static int do_bsf_graph(Demuxer *d, DemuxThreadContext *dt, DemuxStreamGroup *ds
 {
     const AVStreamGroup *stg = dsg->istg.stg;
     const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
-    const int enhancement = ds->ist.index == stg->streams[lcevc->el_index]->index;
+    const int enhancement = ds->ist.index == stg->entries[lcevc->el_index]->stream->index;
     AVBitStreamFilterContext *source = dsg->lcevc[enhancement];
     int ret, flags = AV_BSF_SOURCE_FLAG_PUSH;
 
@@ -1094,7 +1096,7 @@ int ist_use(InputStream *ist, int decoding_needed,
         if (!dsg->graph || istg->stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
             continue;
         const AVStreamGroupLayeredVideo *lcevc = istg->stg->params.layered_video;
-        if (ist->st->index == istg->stg->streams[lcevc->el_index]->index)
+        if (ist->st->index == istg->stg->entries[lcevc->el_index]->stream->index)
             break;
 
         AVBitStreamFilterContext *lcevc_merge = av_bsf_graph_get_filter(dsg->graph, "lcevc_merge");
@@ -1126,7 +1128,7 @@ int ist_use(InputStream *ist, int decoding_needed,
         if (ret < 0)
             return ret;
 
-        InputStream *lcevc_ist = d->f.streams[istg->stg->streams[lcevc->el_index]->index];
+        InputStream *lcevc_ist = d->f.streams[istg->stg->entries[lcevc->el_index]->stream->index];
         lcevc_ist->st->discard = 0;
 
         dsg->graph_enabled = 1;
@@ -1135,7 +1137,6 @@ int ist_use(InputStream *ist, int decoding_needed,
     }
 
     if (decoding_needed && ds->sch_idx_dec < 0) {
-        const AVPacketSideData *sd;
         int is_audio = ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO;
         int is_unreliable = !!(d->f.ctx->iformat->flags & AVFMT_NOTIMESTAMPS);
         int64_t use_wallclock_as_timestamps;
@@ -1156,18 +1157,6 @@ int ist_use(InputStream *ist, int decoding_needed,
             ds->dec_opts.framerate  = ist->framerate;
         } else
             ds->dec_opts.framerate  = ist->st->avg_frame_rate;
-
-        ds->dec_opts.apply_cropping = ds->apply_cropping;
-
-        sd = av_packet_side_data_get(ist->par->coded_side_data,
-                                     ist->par->nb_coded_side_data,
-                                     AV_PKT_DATA_FRAME_CROPPING);
-        if (sd && sd->size >= sizeof(uint32_t) * 4) {
-            ds->dec_opts.crop_top       = AV_RL32(sd->data +  0);
-            ds->dec_opts.crop_bottom    = AV_RL32(sd->data +  4);
-            ds->dec_opts.crop_left      = AV_RL32(sd->data +  8);
-            ds->dec_opts.crop_right     = AV_RL32(sd->data + 12);
-        }
 
         if (ist->dec->id == AV_CODEC_ID_DVB_SUBTITLE &&
            (ds->decoding_needed & DECODING_FOR_OST)) {
@@ -1238,11 +1227,23 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
     ist->filters[ist->nb_filters - 1] = ifilter;
 
     if (ist->par->codec_type == AVMEDIA_TYPE_VIDEO) {
+        const AVPacketSideData *sd = av_packet_side_data_get(ist->par->coded_side_data,
+                                                             ist->par->nb_coded_side_data,
+                                                             AV_PKT_DATA_FRAME_CROPPING);
         if (ist->framerate.num > 0 && ist->framerate.den > 0) {
             opts->framerate = ist->framerate;
             opts->flags |= IFILTER_FLAG_CFR;
         } else
             opts->framerate = av_guess_frame_rate(d->f.ctx, ist->st, NULL);
+        if (sd && sd->size >= sizeof(uint32_t) * 4) {
+            opts->crop_top    = AV_RL32(sd->data +  0);
+            opts->crop_bottom = AV_RL32(sd->data +  4);
+            opts->crop_left   = AV_RL32(sd->data +  8);
+            opts->crop_right  = AV_RL32(sd->data + 12);
+            if (ds->apply_cropping && ds->apply_cropping != CROP_CODEC &&
+                (opts->crop_top | opts->crop_bottom | opts->crop_left | opts->crop_right))
+                opts->flags |= IFILTER_FLAG_CROP;
+        }
     } else if (ist->par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         /* Compute the size of the canvas for the subtitles stream.
            If the subtitles codecpar has set a size, use it. Otherwise use the
@@ -1292,13 +1293,13 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
                           AV_NOPTS_VALUE : tsoffset;
     opts->trim_end_us   = d->recording_time;
 
-    opts->param_change  = ds->param_change;
-
     opts->name = av_strdup(ds->dec_name);
     if (!opts->name)
         return AVERROR(ENOMEM);
 
-    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate);
+    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate) |
+                   IFILTER_FLAG_REINIT     * !!(ds->reinit_filters) |
+                   IFILTER_FLAG_DROPCHANGED* !!(ds->drop_changed);
 
     return 0;
 }
@@ -1581,7 +1582,6 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
     const char *hwaccel_output_format = NULL;
     const char *codec_tag = NULL;
     const char *bsfs = NULL;
-    const char *reinit_filters = NULL;
     char *next;
     const char *discard_str = NULL;
     AVBPrint bp;
@@ -1738,31 +1738,18 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
             return ret;
     }
 
-    ds->param_change = IFILTER_PARAM_CHANGE_KEEP_FIRST;
-    opt_match_per_stream_str(ist, &o->reinit_filters, ic, st, &reinit_filters);
-    if (reinit_filters) {
-        if (!strcmp(reinit_filters, "keepfirst"))
-            ds->param_change = IFILTER_PARAM_CHANGE_KEEP_FIRST;
-        else if (!strcmp(reinit_filters, "reinit"))
-            ds->param_change = IFILTER_PARAM_CHANGE_REINIT;
-        else if (!strcmp(reinit_filters, "passthrough"))
-            ds->param_change = IFILTER_PARAM_CHANGE_PASSTHROUGH;
-        else {
-            char *endptr;
-            int val = strtol(reinit_filters, &endptr, 0);
-            if (*endptr) {
-                av_log(ist, AV_LOG_ERROR, "Invalid -reinit_filter argument: %s\n",
-                       reinit_filters);
-                return AVERROR(EINVAL);
-            }
+    ds->reinit_filters = -1;
+    opt_match_per_stream_int(ist, &o->reinit_filters, ic, st, &ds->reinit_filters);
 
-            av_log(ist, AV_LOG_WARNING, "Numeric arguments to -reinit_filter are "
-                   "deprecated, use '%s' rather than '%s'\n",
-                   val ? "reinit" : "passthrough", reinit_filters);
+    ds->drop_changed = 0;
+    opt_match_per_stream_int(ist, &o->drop_changed, ic, st, &ds->drop_changed);
 
-            ds->param_change = val ? IFILTER_PARAM_CHANGE_REINIT :
-                                     IFILTER_PARAM_CHANGE_PASSTHROUGH;
+    if (ds->drop_changed && ds->reinit_filters) {
+        if (ds->reinit_filters > 0) {
+            av_log(ist, AV_LOG_ERROR, "drop_changed and reinit_filters both enabled. These are mutually exclusive.\n");
+            return AVERROR(EINVAL);
         }
+        ds->reinit_filters = 0;
     }
 
     ist->user_set_discard = AVDISCARD_NONE;
@@ -1785,6 +1772,9 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
 
     ds->dec_opts.flags |= DECODER_FLAG_BITEXACT * !!o->bitexact;
 
+    av_dict_set_int(&ds->decoder_opts, "apply_cropping",
+                    ds->apply_cropping && ds->apply_cropping != CROP_CONTAINER, 0);
+
     av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
     if (ds->force_display_matrix) {
         if (av_dict_get(ds->decoder_opts, "side_data_prefer_packet", NULL, 0))
@@ -1804,6 +1794,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
     if (bp.len)
         av_dict_set(&ds->decoder_opts, "side_data_prefer_packet", bp.str, AV_DICT_APPEND);
     av_bprint_finalize(&bp, NULL);
+
     /* Attached pics are sparse, therefore we would not want to delay their decoding
      * till EOF. */
     if (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC)
@@ -1950,6 +1941,63 @@ static DemuxStreamGroup *demux_stream_group_alloc(Demuxer *d, AVStreamGroup *stg
     return dsg;
 }
 
+static int istg_parse_alpha(const OptionsContext *o, Demuxer *d, InputStreamGroup *istg)
+{
+    InputFile *f = &d->f;
+    AVStreamGroup *stg = istg->stg;
+    const AVStreamGroupLayeredVideo *layered_video = stg->params.layered_video;
+    OutputFilterOptions opts;
+    AVBPrint bp;
+    char *graph_str;
+    int ret;
+
+    if (stg->nb_entries != 2) {
+        av_log(istg, AV_LOG_FATAL, "A demuxer exported an invalid Alpha stream group. "
+                                   "This is a bug, please report it.\n");
+        return AVERROR_BUG;
+    }
+
+    memset(&opts, 0, sizeof(opts));
+
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    if (stg->entries[!layered_video->el_index]->type == AV_STREAM_GROUP_ENTRY_STREAM)
+        av_bprintf(&bp, "[%d:g:%d:%d]", f->index, stg->index, !layered_video->el_index);
+    else
+        av_bprintf(&bp, "[%d:g:%d]", f->index,
+                   stg->entries[!layered_video->el_index]->stream_group->index);
+    if (stg->entries[layered_video->el_index]->type == AV_STREAM_GROUP_ENTRY_STREAM)
+        av_bprintf(&bp, "[%d:g:%d:%d]", f->index, stg->index, layered_video->el_index);
+    else
+        av_bprintf(&bp, "[%d:g:%d]", f->index,
+                   stg->entries[layered_video->el_index]->stream_group->index);
+    av_bprintf(&bp, "alphamerge[%d:g:%d]", f->index, stg->index);
+    ret = av_bprint_finalize(&bp, &graph_str);
+    if (ret < 0)
+        return ret;
+
+    for (int i = 0; i < stg->nb_coded_side_data; i++) {
+        const AVPacketSideData *sd = &stg->coded_side_data[i];
+
+        ret = av_packet_side_data_to_frame(&opts.side_data, &opts.nb_side_data, sd, 0);
+        if (ret < 0 && ret != AVERROR(EINVAL))
+            goto fail;
+    }
+
+    ret = fg_create(NULL, &graph_str, d->sch, &opts);
+    if (ret < 0)
+        goto fail;
+
+    istg->fg = filtergraphs[nb_filtergraphs-1];
+    istg->fg->is_internal = 1;
+
+    ret = 0;
+fail:
+    if (ret < 0)
+        av_freep(&graph_str);
+
+    return ret;
+}
+
 static int istg_parse_tile_grid(const OptionsContext *o, Demuxer *d, InputStreamGroup *istg)
 {
     InputFile *f = &d->f;
@@ -2011,8 +2059,8 @@ static int istg_parse_tile_grid(const OptionsContext *o, Demuxer *d, InputStream
         opts.crop_right  = tg->coded_width - tg->width - tg->horizontal_offset;
     }
 
-    for (int i = 0; i < tg->nb_coded_side_data; i++) {
-        const AVPacketSideData *sd = &tg->coded_side_data[i];
+    for (int i = 0; i < stg->nb_coded_side_data; i++) {
+        const AVPacketSideData *sd = &stg->coded_side_data[i];
 
         ret = av_packet_side_data_to_frame(&opts.side_data, &opts.nb_side_data, sd, 0);
         if (ret < 0 && ret != AVERROR(EINVAL))
@@ -2040,11 +2088,11 @@ static int istg_parse_lcevc(const OptionsContext *o, Demuxer *d, DemuxStreamGrou
     const AVStreamGroup *stg = dsg->istg.stg;
     const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
     const AVBitStreamFilter *filter, *lcevc_filter = av_bsf_get_by_name("lcevc_merge");
-    const InputStream *lcevc_ist = f->streams[stg->streams[lcevc->el_index]->index];
-    const InputStream *base_ist = f->streams[stg->streams[!lcevc->el_index]->index];
+    const InputStream *lcevc_ist = f->streams[stg->entries[lcevc->el_index]->stream->index];
+    const InputStream *base_ist = f->streams[stg->entries[!lcevc->el_index]->stream->index];
     int ret;
 
-    if (!lcevc_filter || stg->nb_streams != 2)
+    if (!lcevc_filter || stg->nb_entries != 2)
         return 0;
 
     dsg->graph = av_bsf_graph_alloc();
@@ -2100,11 +2148,21 @@ static int istg_add(const OptionsContext *o, Demuxer *d, AVStreamGroup *stg)
 
     switch (stg->type) {
     case AV_STREAM_GROUP_PARAMS_LCEVC:
-        for (int i = 0; i < istg->stg->nb_streams; i++) {
-            DemuxStream *ds = ds_from_ist(f->streams[istg->stg->streams[i]->index]);
+        for (int i = 0; i < istg->stg->nb_entries; i++) {
+            AVStreamGroupEntry *entry = istg->stg->entries[i];
+            if (entry->type != AV_STREAM_GROUP_ENTRY_STREAM)
+                return AVERROR_BUG;
+            DemuxStream *ds = ds_from_ist(f->streams[entry->stream->index]);
             ret = av_dynarray_add_nofree(&ds->dsg, &ds->nb_dsg, dsg);
             if (ret < 0)
                 return ret;
+        }
+        break;
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID:
+        for (int i = 0; i < istg->stg->nb_entries; i++) {
+            AVStreamGroupEntry *entry = istg->stg->entries[i];
+            if (entry->type != AV_STREAM_GROUP_ENTRY_STREAM)
+                return AVERROR_BUG;
         }
         break;
     default:
@@ -2112,6 +2170,11 @@ static int istg_add(const OptionsContext *o, Demuxer *d, AVStreamGroup *stg)
     }
 
     switch (stg->type) {
+    case AV_STREAM_GROUP_PARAMS_ALPHA:
+        ret = istg_parse_alpha(o, d, istg);
+        if (ret < 0)
+            return ret;
+        break;
     case AV_STREAM_GROUP_PARAMS_TILE_GRID:
         ret = istg_parse_tile_grid(o, d, istg);
         if (ret < 0)
@@ -2314,6 +2377,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
 
     stdin_interaction &= strncmp(filename, "pipe:", 5) &&
                          strcmp(filename, "fd:") &&
+                         strcmp(filename, "handle:") &&
                          strcmp(filename, "/dev/stdin");
 
     /* get default parameters from command line */

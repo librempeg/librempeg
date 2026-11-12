@@ -24,6 +24,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "config.h"
 #include "libavutil/attributes.h"
@@ -1124,46 +1125,107 @@ static inline void rgb24tobgr24_mmxext(const uint8_t *src, uint8_t *dst, int src
     }
 }
 
-static inline void yuvPlanartoyuy2_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
-                                           int width, int height,
-                                           int lumStride, int chromStride, int dstStride, int vertLumPerChroma)
+static inline void yuvPlanartoyuy2_line_mmxext(uint8_t *dst, const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc,
+                                           x86_reg chromWidth)
+{
+    __asm__ volatile(
+        "xor                 %%"FF_REG_a", %%"FF_REG_a" \n\t"
+        ".p2align                    4              \n\t"
+        "1:                                         \n\t"
+        PREFETCH" 32(%1, %%"FF_REG_a", 2)           \n\t"
+        PREFETCH" 32(%2, %%"FF_REG_a")              \n\t"
+        PREFETCH" 32(%3, %%"FF_REG_a")              \n\t"
+        "movq       (%2, %%"FF_REG_a"), %%mm0       \n\t" // U(0)
+        "movq                    %%mm0, %%mm2       \n\t" // U(0)
+        "movq       (%3, %%"FF_REG_a"), %%mm1       \n\t" // V(0)
+        "punpcklbw               %%mm1, %%mm0       \n\t" // UVUV UVUV(0)
+        "punpckhbw               %%mm1, %%mm2       \n\t" // UVUV UVUV(8)
+
+        "movq     (%1, %%"FF_REG_a",2), %%mm3       \n\t" // Y(0)
+        "movq    8(%1, %%"FF_REG_a",2), %%mm5       \n\t" // Y(8)
+        "movq                    %%mm3, %%mm4       \n\t" // Y(0)
+        "movq                    %%mm5, %%mm6       \n\t" // Y(8)
+        "punpcklbw               %%mm0, %%mm3       \n\t" // YUYV YUYV(0)
+        "punpckhbw               %%mm0, %%mm4       \n\t" // YUYV YUYV(4)
+        "punpcklbw               %%mm2, %%mm5       \n\t" // YUYV YUYV(8)
+        "punpckhbw               %%mm2, %%mm6       \n\t" // YUYV YUYV(12)
+
+        MOVNTQ"                  %%mm3,   (%0, %%"FF_REG_a", 4)    \n\t"
+        MOVNTQ"                  %%mm4,  8(%0, %%"FF_REG_a", 4)    \n\t"
+        MOVNTQ"                  %%mm5, 16(%0, %%"FF_REG_a", 4)    \n\t"
+        MOVNTQ"                  %%mm6, 24(%0, %%"FF_REG_a", 4)    \n\t"
+
+        "add                        $8, %%"FF_REG_a" \n\t"
+        "cmp                        %4, %%"FF_REG_a" \n\t"
+        " jb                        1b               \n\t"
+        ::"r"(dst), "r"(ysrc), "r"(usrc), "r"(vsrc), "g" (chromWidth)
+        : "%"FF_REG_a, "memory"
+    );
+}
+
+static inline void yuvPlanartouyvy_line_mmxext(uint8_t *dst, const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc,
+                                           x86_reg chromWidth)
+{
+    __asm__ volatile(
+        "xor             %%"FF_REG_a", %%"FF_REG_a" \n\t"
+        ".p2align                   4               \n\t"
+        "1:                                         \n\t"
+        PREFETCH" 32(%1, %%"FF_REG_a", 2)           \n\t"
+        PREFETCH" 32(%2, %%"FF_REG_a")              \n\t"
+        PREFETCH" 32(%3, %%"FF_REG_a")              \n\t"
+        "movq      (%2, %%"FF_REG_a"), %%mm0        \n\t" // U(0)
+        "movq                   %%mm0, %%mm2        \n\t" // U(0)
+        "movq      (%3, %%"FF_REG_a"), %%mm1        \n\t" // V(0)
+        "punpcklbw              %%mm1, %%mm0        \n\t" // UVUV UVUV(0)
+        "punpckhbw              %%mm1, %%mm2        \n\t" // UVUV UVUV(8)
+
+        "movq    (%1, %%"FF_REG_a",2), %%mm3        \n\t" // Y(0)
+        "movq   8(%1, %%"FF_REG_a",2), %%mm5        \n\t" // Y(8)
+        "movq                   %%mm0, %%mm4        \n\t" // Y(0)
+        "movq                   %%mm2, %%mm6        \n\t" // Y(8)
+        "punpcklbw              %%mm3, %%mm0        \n\t" // YUYV YUYV(0)
+        "punpckhbw              %%mm3, %%mm4        \n\t" // YUYV YUYV(4)
+        "punpcklbw              %%mm5, %%mm2        \n\t" // YUYV YUYV(8)
+        "punpckhbw              %%mm5, %%mm6        \n\t" // YUYV YUYV(12)
+
+        MOVNTQ"                 %%mm0,   (%0, %%"FF_REG_a", 4)     \n\t"
+        MOVNTQ"                 %%mm4,  8(%0, %%"FF_REG_a", 4)     \n\t"
+        MOVNTQ"                 %%mm2, 16(%0, %%"FF_REG_a", 4)     \n\t"
+        MOVNTQ"                 %%mm6, 24(%0, %%"FF_REG_a", 4)     \n\t"
+
+        "add                       $8, %%"FF_REG_a" \n\t"
+        "cmp                       %4, %%"FF_REG_a" \n\t"
+        " jb                       1b               \n\t"
+        ::"r"(dst), "r"(ysrc), "r"(usrc), "r"(vsrc), "g" (chromWidth)
+        : "%"FF_REG_a, "memory"
+    );
+}
+
+static inline void yuvPlanartopacked_mmxext(void (*pack_line)(uint8_t *, const uint8_t *, const uint8_t *, const uint8_t *, x86_reg),
+                                            int luma_first,
+                                            const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
+                                            int width, int height,
+                                            int lumStride, int chromStride, int dstStride, int vertLumPerChroma)
 {
     const x86_reg chromWidth= width>>1;
     for (int y = 0; y < height; y++) {
         //FIXME handle 2 lines at once (fewer prefetches, reuse some chroma, but very likely memory-limited anyway)
-        __asm__ volatile(
-            "xor                 %%"FF_REG_a", %%"FF_REG_a" \n\t"
-            ".p2align                    4              \n\t"
-            "1:                                         \n\t"
-            PREFETCH" 32(%1, %%"FF_REG_a", 2)           \n\t"
-            PREFETCH" 32(%2, %%"FF_REG_a")              \n\t"
-            PREFETCH" 32(%3, %%"FF_REG_a")              \n\t"
-            "movq       (%2, %%"FF_REG_a"), %%mm0       \n\t" // U(0)
-            "movq                    %%mm0, %%mm2       \n\t" // U(0)
-            "movq       (%3, %%"FF_REG_a"), %%mm1       \n\t" // V(0)
-            "punpcklbw               %%mm1, %%mm0       \n\t" // UVUV UVUV(0)
-            "punpckhbw               %%mm1, %%mm2       \n\t" // UVUV UVUV(8)
-
-            "movq     (%1, %%"FF_REG_a",2), %%mm3       \n\t" // Y(0)
-            "movq    8(%1, %%"FF_REG_a",2), %%mm5       \n\t" // Y(8)
-            "movq                    %%mm3, %%mm4       \n\t" // Y(0)
-            "movq                    %%mm5, %%mm6       \n\t" // Y(8)
-            "punpcklbw               %%mm0, %%mm3       \n\t" // YUYV YUYV(0)
-            "punpckhbw               %%mm0, %%mm4       \n\t" // YUYV YUYV(4)
-            "punpcklbw               %%mm2, %%mm5       \n\t" // YUYV YUYV(8)
-            "punpckhbw               %%mm2, %%mm6       \n\t" // YUYV YUYV(12)
-
-            MOVNTQ"                  %%mm3,   (%0, %%"FF_REG_a", 4)    \n\t"
-            MOVNTQ"                  %%mm4,  8(%0, %%"FF_REG_a", 4)    \n\t"
-            MOVNTQ"                  %%mm5, 16(%0, %%"FF_REG_a", 4)    \n\t"
-            MOVNTQ"                  %%mm6, 24(%0, %%"FF_REG_a", 4)    \n\t"
-
-            "add                        $8, %%"FF_REG_a" \n\t"
-            "cmp                        %4, %%"FF_REG_a" \n\t"
-            " jb                        1b               \n\t"
-            ::"r"(dst), "r"(ysrc), "r"(usrc), "r"(vsrc), "g" (chromWidth)
-            : "%"FF_REG_a
-        );
+        if (chromWidth < 8) {
+            ff_pack_yuv422_line(dst, ysrc, usrc, vsrc, 0, width, luma_first);
+        } else {
+            pack_line(dst, ysrc, usrc, vsrc, chromWidth & ~7);
+            if (width & 15) {
+                x86_reg i = ((width + 1) >> 1) - 8;
+                const uint8_t *y = ysrc + 2 * i;
+                uint8_t last[16];
+                if (width & 1) {
+                    memcpy(last, y, 15);
+                    last[15] = last[14];
+                    y = last;
+                }
+                pack_line(dst + 4 * i, y, usrc + i, vsrc + i, 8);
+            }
+        }
         if ((y&(vertLumPerChroma-1)) == vertLumPerChroma-1) {
             usrc += chromStride;
             vsrc += chromStride;
@@ -1176,100 +1238,34 @@ static inline void yuvPlanartoyuy2_mmxext(const uint8_t *ysrc, const uint8_t *us
             :::"memory");
 }
 
-/**
- * Height should be a multiple of 2 and width should be a multiple of 16.
- * (If this is a problem for anyone then tell me, and I will fix it.)
- */
 static inline void yv12toyuy2_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
                                       int width, int height,
                                       int lumStride, int chromStride, int dstStride)
 {
     //FIXME interpolate chroma
-    yuvPlanartoyuy2_mmxext(ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 2);
+    yuvPlanartopacked_mmxext(yuvPlanartoyuy2_line_mmxext, 1, ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 2);
 }
 
-static inline void yuvPlanartouyvy_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
-                                           int width, int height,
-                                           int lumStride, int chromStride, int dstStride, int vertLumPerChroma)
-{
-    const x86_reg chromWidth= width>>1;
-    for (int y = 0; y < height; y++) {
-        //FIXME handle 2 lines at once (fewer prefetches, reuse some chroma, but very likely memory-limited anyway)
-        __asm__ volatile(
-            "xor             %%"FF_REG_a", %%"FF_REG_a" \n\t"
-            ".p2align                   4               \n\t"
-            "1:                                         \n\t"
-            PREFETCH" 32(%1, %%"FF_REG_a", 2)           \n\t"
-            PREFETCH" 32(%2, %%"FF_REG_a")              \n\t"
-            PREFETCH" 32(%3, %%"FF_REG_a")              \n\t"
-            "movq      (%2, %%"FF_REG_a"), %%mm0        \n\t" // U(0)
-            "movq                   %%mm0, %%mm2        \n\t" // U(0)
-            "movq      (%3, %%"FF_REG_a"), %%mm1        \n\t" // V(0)
-            "punpcklbw              %%mm1, %%mm0        \n\t" // UVUV UVUV(0)
-            "punpckhbw              %%mm1, %%mm2        \n\t" // UVUV UVUV(8)
-
-            "movq    (%1, %%"FF_REG_a",2), %%mm3        \n\t" // Y(0)
-            "movq   8(%1, %%"FF_REG_a",2), %%mm5        \n\t" // Y(8)
-            "movq                   %%mm0, %%mm4        \n\t" // Y(0)
-            "movq                   %%mm2, %%mm6        \n\t" // Y(8)
-            "punpcklbw              %%mm3, %%mm0        \n\t" // YUYV YUYV(0)
-            "punpckhbw              %%mm3, %%mm4        \n\t" // YUYV YUYV(4)
-            "punpcklbw              %%mm5, %%mm2        \n\t" // YUYV YUYV(8)
-            "punpckhbw              %%mm5, %%mm6        \n\t" // YUYV YUYV(12)
-
-            MOVNTQ"                 %%mm0,   (%0, %%"FF_REG_a", 4)     \n\t"
-            MOVNTQ"                 %%mm4,  8(%0, %%"FF_REG_a", 4)     \n\t"
-            MOVNTQ"                 %%mm2, 16(%0, %%"FF_REG_a", 4)     \n\t"
-            MOVNTQ"                 %%mm6, 24(%0, %%"FF_REG_a", 4)     \n\t"
-
-            "add                       $8, %%"FF_REG_a" \n\t"
-            "cmp                       %4, %%"FF_REG_a" \n\t"
-            " jb                       1b               \n\t"
-            ::"r"(dst), "r"(ysrc), "r"(usrc), "r"(vsrc), "g" (chromWidth)
-            : "%"FF_REG_a
-        );
-        if ((y&(vertLumPerChroma-1)) == vertLumPerChroma-1) {
-            usrc += chromStride;
-            vsrc += chromStride;
-        }
-        ysrc += lumStride;
-        dst += dstStride;
-    }
-    __asm__(EMMS"       \n\t"
-            SFENCE"     \n\t"
-            :::"memory");
-}
-
-/**
- * Height should be a multiple of 2 and width should be a multiple of 16
- * (If this is a problem for anyone then tell me, and I will fix it.)
- */
 static inline void yv12touyvy_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
                                       int width, int height,
                                       int lumStride, int chromStride, int dstStride)
 {
     //FIXME interpolate chroma
-    yuvPlanartouyvy_mmxext(ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 2);
+    yuvPlanartopacked_mmxext(yuvPlanartouyvy_line_mmxext, 0, ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 2);
 }
 
-/**
- * Width should be a multiple of 16.
- */
 static inline void yuv422ptouyvy_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
                                          int width, int height,
                                          int lumStride, int chromStride, int dstStride)
 {
-    yuvPlanartouyvy_mmxext(ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 1);
+    yuvPlanartopacked_mmxext(yuvPlanartouyvy_line_mmxext, 0, ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 1);
 }
 
-/**
- * Width should be a multiple of 16.
- */
 static inline void yuv422ptoyuy2_mmxext(const uint8_t *ysrc, const uint8_t *usrc, const uint8_t *vsrc, uint8_t *dst,
                                          int width, int height,
                                          int lumStride, int chromStride, int dstStride)
 {
-    yuvPlanartoyuy2_mmxext(ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 1);
+    yuvPlanartopacked_mmxext(yuvPlanartoyuy2_line_mmxext, 1, ysrc, usrc, vsrc, dst, width, height, lumStride, chromStride, dstStride, 1);
 }
 
 static inline void planar2x_mmxext(const uint8_t *src, uint8_t *dst, int srcWidth, int srcHeight, int srcStride, int dstStride)
@@ -1746,8 +1742,8 @@ static void extract_even2avg_mmxext(const uint8_t *src0, const uint8_t *src1, ui
     }
 #endif
     while(count<0) {
-        dst0[count]= (src0[4*count+0]+src1[4*count+0])>>1;
-        dst1[count]= (src0[4*count+2]+src1[4*count+2])>>1;
+        dst0[count] = (src0[4*count+0]+src1[4*count+0]+1)>>1;
+        dst1[count] = (src0[4*count+2]+src1[4*count+2]+1)>>1;
         count++;
     }
 }
@@ -1848,8 +1844,8 @@ static void extract_odd2avg_mmxext(const uint8_t *src0, const uint8_t *src1, uin
     src0++;
     src1++;
     while(count<0) {
-        dst0[count]= (src0[4*count+0]+src1[4*count+0])>>1;
-        dst1[count]= (src0[4*count+2]+src1[4*count+2])>>1;
+        dst0[count] = (src0[4*count+0]+src1[4*count+0]+1)>>1;
+        dst1[count] = (src0[4*count+2]+src1[4*count+2]+1)>>1;
         count++;
     }
 }

@@ -110,7 +110,8 @@ typedef struct GainMapContext {
     enum GainMapMeasure measure;
 
     /* Generated gain map parameters (recomputed per frame) */
-    AVGainMapParams params;
+    AVGainMapParams *params;
+    size_t params_size;
 } GainMapContext;
 
 typedef struct ThreadData {
@@ -171,8 +172,8 @@ static void setup_range(AVFilterContext *ctx, int ch, AVRational min, AVRational
         s->quant_offset[ch] = -minf * s->quant_scale[ch];
     }
 
-    s->params.channels[ch].gain_map_min = min;
-    s->params.channels[ch].gain_map_max = max;
+    s->params->channels[ch].gain_map_min = min;
+    s->params->channels[ch].gain_map_max = max;
     av_log(ctx, AV_LOG_TRACE, "channel %d: measured min=%g max=%g\n",
            ch, av_q2d(min), av_q2d(max));
 }
@@ -181,7 +182,7 @@ static void setup_gamma(AVFilterContext *ctx, int ch, AVRational gamma)
 {
     GainMapContext *s = ctx->priv;
     s->quant_gamma[ch] = av_q2d(gamma);
-    s->params.channels[ch].gamma = gamma;
+    s->params->channels[ch].gamma = gamma;
     av_log(ctx, AV_LOG_TRACE, "channel %d: measured gamma=%g\n",
            ch, s->quant_gamma[ch]);
 }
@@ -208,15 +209,17 @@ static av_cold int init(AVFilterContext *ctx)
                "parameters from the input frame.\n");
     }
 
-    s->params = (AVGainMapParams) {
-        .version              = 0,
-        .nb_channels          = s->nb_channels,
-        .use_base_color_space = s->colorspace == GAINMAP_CSP_BASE,
-        /* payload metadata recomputed per frame */
-    };
+    s->params = av_gain_map_params_alloc(&s->params_size);
+    if (!s->params)
+        return AVERROR(ENOMEM);
+
+    /* payload metadata recomputed per frame */
+    s->params->version              = 0;
+    s->params->nb_channels          = s->nb_channels;
+    s->params->use_base_color_space = s->colorspace == GAINMAP_CSP_BASE;
 
     for (int c = 0; c < s->nb_channels; c++) {
-        struct AVGainMapChannel *ch = &s->params.channels[c];
+        struct AVGainMapChannel *ch = &s->params->channels[c];
         ch->base_offset      = s->base_offset;
         ch->alternate_offset = s->alt_offset;
         if (!(s->measure & MEASURE_RANGE))
@@ -338,8 +341,8 @@ static int setup_colorspace(AVFilterContext *ctx, const AVFrame *base, const AVF
     double  alt_lw = s->alt_nits.den  ? av_q2d(s->alt_nits)  : frame_luminance(alt);
     double base_headroom = fmax(log2(base_lw / SDR_DIFFUSE_WHITE), 0.0);
     double  alt_headroom = fmax(log2(alt_lw  / SDR_DIFFUSE_WHITE), 0.0);
-    s->params.base_hdr_headroom      = quantq(base_headroom, AV_ROUND_NEAR_INF);
-    s->params.alternate_hdr_headroom = quantq(alt_headroom,  AV_ROUND_NEAR_INF);
+    s->params->base_hdr_headroom      = quantq(base_headroom, AV_ROUND_NEAR_INF);
+    s->params->alternate_hdr_headroom = quantq(alt_headroom,  AV_ROUND_NEAR_INF);
     s->sign = FFDIFFSIGN(alt_headroom, base_headroom);
     if (!s->sign) {
         /* No-op, set up empty gain map */
@@ -623,8 +626,9 @@ static int process_frame(FFFrameSync *fs)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *base, *alt, *out;
 
-    int ret = ff_framesync_dualinput_get(fs, &base, &alt);
-    if (ret < 0)
+    int ret;
+    if ((ret = ff_framesync_get_frame(fs, 0, &base, 0)) < 0 ||
+        (ret = ff_framesync_get_frame(fs, 1, &alt,  0)) < 0)
         return ret;
     if (!base || !alt)
         return AVERROR_BUG;
@@ -637,6 +641,7 @@ static int process_frame(FFFrameSync *fs)
     if (!out)
         return AVERROR(ENOMEM);
     av_frame_copy_props(out, base);
+    out->pts = av_rescale_q(fs->pts, fs->time_base, outlink->time_base);
     av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
                                        AV_SIDE_DATA_PROP_COLOR_DEPENDENT);
 
@@ -678,7 +683,7 @@ skip:;
         goto fail;
     }
 
-    *params = s->params;
+    memcpy(params, s->params, s->params_size);
     if (av_gain_map_params_validate(params) < 0)
         return AVERROR_BUG; /* should never happen */
 
@@ -737,6 +742,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->slice_min);
     av_freep(&s->slice_max);
     av_freep(&s->slice_sum);
+    av_freep(&s->params);
 }
 
 static const AVFilterPad gainmap_inputs[] = {

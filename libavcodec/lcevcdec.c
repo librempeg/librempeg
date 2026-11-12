@@ -21,6 +21,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/log.h"
 #include "libavutil/mem.h"
+#include "libavutil/opt.h"
 #include "libavutil/refstruct.h"
 
 #include "cbs.h"
@@ -74,26 +75,33 @@ static LCEVC_ColorFormat map_format(int format)
     return LCEVC_ColorFormat_Unknown;
 }
 
-static int alloc_base_frame(FFLCEVCContext *lcevc,
-                            const AVFrame *frame, LCEVC_PictureHandle *picture)
+static int alloc_base_frame(FFLCEVCContext *lcevc, const AVFrame *frame,
+                            LCEVC_PictureDesc *desc, LCEVC_PictureHandle *picture)
 {
-    LCEVC_PictureDesc desc;
     LCEVC_ColorFormat fmt = map_format(frame->format);
     LCEVC_PicturePlaneDesc planes[AV_VIDEO_MAX_PLANES] = { 0 };
     int width = frame->width - frame->crop_left - frame->crop_right;
     int height = frame->height - frame->crop_top - frame->crop_bottom;
     LCEVC_ReturnCode res;
 
-    res = LCEVC_DefaultPictureDesc(&desc, fmt, width, height);
+    res = LCEVC_DefaultPictureDesc(desc, fmt, width, height);
     if (res != LCEVC_Success)
         return AVERROR_EXTERNAL;
 
-    desc.cropTop    = frame->crop_top;
-    desc.cropBottom = frame->crop_bottom;
-    desc.cropLeft   = frame->crop_left;
-    desc.cropRight  = frame->crop_right;
-    desc.sampleAspectRatioNum  = frame->sample_aspect_ratio.num;
-    desc.sampleAspectRatioDen  = frame->sample_aspect_ratio.den;
+    desc->cropTop    = frame->crop_top;
+    desc->cropBottom = frame->crop_bottom;
+    desc->cropLeft   = frame->crop_left;
+    desc->cropRight  = frame->crop_right;
+    desc->sampleAspectRatioNum  = frame->sample_aspect_ratio.num;
+    desc->sampleAspectRatioDen  = frame->sample_aspect_ratio.den;
+    desc->colorRange = LCEVC_ColorRange_Unknown;
+    if (frame->color_range == AVCOL_RANGE_JPEG)
+        desc->colorRange = LCEVC_ColorRange_Full;
+    else if (frame->color_range == AVCOL_RANGE_MPEG)
+        desc->colorRange = LCEVC_ColorRange_Limited;
+    desc->colorPrimaries = (LCEVC_ColorPrimaries)frame->color_primaries;
+    desc->matrixCoefficients = (LCEVC_MatrixCoefficients)frame->colorspace;
+    desc->transferCharacteristics = (LCEVC_TransferCharacteristics)frame->color_trc;
 
     for (int i = 0; i < AV_VIDEO_MAX_PLANES; i++) {
         planes[i].firstSample = frame->data[i];
@@ -101,7 +109,7 @@ static int alloc_base_frame(FFLCEVCContext *lcevc,
     }
 
     /* Allocate LCEVC Picture */
-    res = LCEVC_AllocPictureExternal(lcevc->decoder, &desc, NULL, planes, picture);
+    res = LCEVC_AllocPictureExternal(lcevc->decoder, desc, NULL, planes, picture);
     if (res != LCEVC_Success) {
         return AVERROR_EXTERNAL;
     }
@@ -136,6 +144,31 @@ static int alloc_enhanced_frame(FFLCEVCFrame *frame_ctx,
     return 0;
 }
 
+static int lcevc_flush_pictures(FFLCEVCContext *lcevc)
+{
+    LCEVC_PictureHandle picture;
+    LCEVC_ReturnCode res;
+
+    while (1) {
+        AVFrame *base = NULL;
+        res = LCEVC_ReceiveDecoderBase (lcevc->decoder, &picture);
+        if (res != LCEVC_Success && res != LCEVC_Again)
+            return AVERROR_EXTERNAL;
+
+        if (res == LCEVC_Again)
+            break;
+
+        LCEVC_GetPictureUserData(lcevc->decoder, picture, (void **)&base);
+        av_frame_free(&base);
+
+        res = LCEVC_FreePicture(lcevc->decoder, picture);
+        if (res != LCEVC_Success)
+            return AVERROR_EXTERNAL;
+    }
+
+    return 0;
+}
+
 static int lcevc_send_frame(FFLCEVCFrame *frame_ctx, const AVFrame *in)
 {
     FFLCEVCContext *lcevc = frame_ctx->lcevc;
@@ -143,10 +176,11 @@ static int lcevc_send_frame(FFLCEVCFrame *frame_ctx, const AVFrame *in)
     const AVFrameSideData *sd = av_frame_get_side_data(in, AV_FRAME_DATA_LCEVC);
     AVFrame *opaque;
     LCEVC_PictureHandle picture;
+    LCEVC_PictureDesc desc, base_desc;
     LCEVC_ReturnCode res;
     int ret;
 
-    if (!sd || fmt == LCEVC_ColorFormat_Unknown)
+    if (!sd || fmt == LCEVC_ColorFormat_Unknown || lcevc->passthrough_mode == 1)
         return 1;
 
     res = LCEVC_SendDecoderEnhancementData(lcevc->decoder, lcevc->last_pts,
@@ -156,15 +190,15 @@ static int lcevc_send_frame(FFLCEVCFrame *frame_ctx, const AVFrame *in)
         goto end;
     }
 
-    ret = alloc_base_frame(lcevc, in, &picture);
+    ret = alloc_base_frame(lcevc, in, &base_desc, &picture);
     if (ret < 0)
-        goto end;
+        goto fail;
 
     opaque = av_frame_clone(in);
     if (!opaque) {
         LCEVC_FreePicture(lcevc->decoder, picture);
         ret = AVERROR(ENOMEM);
-        goto end;
+        goto fail;
     }
 
     res = LCEVC_SetPictureUserData(lcevc->decoder, picture, opaque);
@@ -172,7 +206,7 @@ static int lcevc_send_frame(FFLCEVCFrame *frame_ctx, const AVFrame *in)
         LCEVC_FreePicture(lcevc->decoder, picture);
         av_frame_free(&opaque);
         ret = AVERROR_EXTERNAL;
-        goto end;
+        goto fail;
     }
 
     res = LCEVC_SendDecoderBase(lcevc->decoder, lcevc->last_pts, picture, -1, opaque);
@@ -180,22 +214,45 @@ static int lcevc_send_frame(FFLCEVCFrame *frame_ctx, const AVFrame *in)
         LCEVC_FreePicture(lcevc->decoder, picture);
         av_frame_free(&opaque);
         ret = AVERROR_EXTERNAL;
-        goto end;
+        goto fail;
+    }
+
+    res = LCEVC_PeekDecoderPictureDesc(lcevc->decoder, lcevc->last_pts, &desc);
+    if (res != LCEVC_Success ||
+        desc.width       != frame_ctx->frame->width  ||
+        desc.height      != frame_ctx->frame->height ||
+        desc.colorFormat != map_format(frame_ctx->frame->format)) {
+        if (res == LCEVC_Success &&
+            desc.width       == base_desc.width  &&
+            desc.height      == base_desc.height &&
+            desc.colorFormat == base_desc.colorFormat) {
+            av_log(lcevc, AV_LOG_VERBOSE, "Passing the base picture through\n");
+            ret = 1;
+            goto fail;
+        }
+        av_log(lcevc, AV_LOG_ERROR, "Output picture does not match the enhancement data\n");
+        ret = AVERROR_INVALIDDATA;
+        goto fail;
     }
 
     memset(&picture, 0, sizeof(picture));
     ret = alloc_enhanced_frame(frame_ctx, &picture);
     if (ret < 0)
-        goto end;
+        goto fail;
 
     res = LCEVC_SendDecoderPicture(lcevc->decoder, picture);
     if (res != LCEVC_Success) {
         LCEVC_FreePicture(lcevc->decoder, picture);
         ret = AVERROR_EXTERNAL;
-        goto end;
+        goto fail;
     }
 
     ret = 0;
+    goto end;
+fail:
+    LCEVC_SkipDecoder(lcevc->decoder, lcevc->last_pts);
+    LCEVC_SynchronizeDecoder(lcevc->decoder, 0);
+    lcevc_flush_pictures(lcevc);
 end:
     lcevc->last_pts++;
 
@@ -234,44 +291,29 @@ static int generate_output(FFLCEVCFrame *frame_ctx, AVFrame *out)
     out->sample_aspect_ratio.den = desc.sampleAspectRatioDen;
     out->width = desc.width + out->crop_left + out->crop_right;
     out->height = desc.height + out->crop_top + out->crop_bottom;
+    out->color_range = AVCOL_RANGE_UNSPECIFIED;
+    if (desc.colorRange == LCEVC_ColorRange_Full)
+        out->color_range = AVCOL_RANGE_JPEG;
+    else if (desc.colorRange == LCEVC_ColorRange_Limited)
+        out->color_range = AVCOL_RANGE_MPEG;
+    out->color_primaries = (enum AVColorPrimaries)desc.colorPrimaries;
+    out->colorspace = (enum AVColorSpace)desc.matrixCoefficients;
+    out->color_trc = (enum AVColorTransferCharacteristic)desc.transferCharacteristics;
 
     av_log(lcevc, AV_LOG_DEBUG,  "out PTS %"PRId64", %dx%d, "
                                  "%zu/%zu/%zu/%zu, "
                                  "SAR %d:%d, "
+                                 "color_range %d, color_primaries %d, colorspace %d, color_trc %d, "
                                  "hasEnhancement %d, enhanced %d\n",
            out->pts, out->width, out->height,
            out->crop_top, out->crop_bottom, out->crop_left, out->crop_right,
            out->sample_aspect_ratio.num, out->sample_aspect_ratio.den,
+           out->color_range, out->color_primaries, out->colorspace, out->color_trc,
            info.hasEnhancement, info.enhanced);
 
     res = LCEVC_FreePicture(lcevc->decoder, picture);
     if (res != LCEVC_Success)
         return AVERROR_EXTERNAL;
-
-    return 0;
-}
-
-static int lcevc_flush_pictures(FFLCEVCContext *lcevc)
-{
-    LCEVC_PictureHandle picture;
-    LCEVC_ReturnCode res;
-
-    while (1) {
-        AVFrame *base = NULL;
-        res = LCEVC_ReceiveDecoderBase (lcevc->decoder, &picture);
-        if (res != LCEVC_Success && res != LCEVC_Again)
-            return AVERROR_EXTERNAL;
-
-        if (res == LCEVC_Again)
-            break;
-
-        LCEVC_GetPictureUserData(lcevc->decoder, picture, (void **)&base);
-        av_frame_free(&base);
-
-        res = LCEVC_FreePicture(lcevc->decoder, picture);
-        if (res != LCEVC_Success)
-            return AVERROR_EXTERNAL;
-    }
 
     return 0;
 }
@@ -320,7 +362,7 @@ static void event_callback(LCEVC_DecoderHandle dec, LCEVC_Event event,
 static void lcevc_free(AVRefStructOpaque unused, void *obj)
 {
     FFLCEVCContext *lcevc = obj;
-    if (lcevc->initialized) {
+    if (lcevc->initialized == FF_LCEVCDEC_INIT) {
         LCEVC_FlushDecoder(lcevc->decoder);
         lcevc_flush_pictures(lcevc);
         LCEVC_DestroyDecoder(lcevc->decoder);
@@ -330,6 +372,7 @@ static void lcevc_free(AVRefStructOpaque unused, void *obj)
     av_freep(&lcevc->frag);
     ff_cbs_close(&lcevc->cbc);
     av_refstruct_pool_uninit(&lcevc->frame_pool);
+    av_opt_free(lcevc);
     memset(lcevc, 0, sizeof(*lcevc));
 }
 
@@ -380,16 +423,52 @@ static int lcevc_init(FFLCEVCContext *lcevc)
 {
     LCEVC_AccelContextHandle dummy = { 0 };
     const int32_t event = LCEVC_Log;
+    LCEVC_ReturnCode res;
     int level;
+
+    lcevc->initialized = FF_LCEVCDEC_FAIL;
 
     if (LCEVC_CreateDecoder(&lcevc->decoder, dummy) != LCEVC_Success) {
         av_log(lcevc, AV_LOG_ERROR, "Failed to create LCEVC decoder\n");
         return AVERROR_EXTERNAL;
     }
 
+    if (lcevc->pipeline) {
+        res = LCEVC_ConfigureDecoderString(lcevc->decoder, "pipeline", lcevc->pipeline);
+        if (res != LCEVC_Success) {
+            av_log(lcevc, AV_LOG_ERROR, "Failed to set pipeline to \"%s\"\n", lcevc->pipeline);
+            LCEVC_DestroyDecoder(lcevc->decoder);
+            return AVERROR_EXTERNAL;
+        }
+    }
+
     level = get_log_level(lcevc->loglevel);
 
     LCEVC_ConfigureDecoderInt(lcevc->decoder, "log_level", level);
+    res = LCEVC_ConfigureDecoderInt(lcevc->decoder, "threads", lcevc->threads);
+    if (res != LCEVC_Success) {
+        av_log(lcevc, AV_LOG_ERROR, "Failed to set threads to %d\n", lcevc->threads);
+        LCEVC_DestroyDecoder(lcevc->decoder);
+        return AVERROR_EXTERNAL;
+    }
+    res = LCEVC_ConfigureDecoderInt(lcevc->decoder, "passthrough_mode", lcevc->passthrough_mode);
+    if (res != LCEVC_Success) {
+        av_log(lcevc, AV_LOG_ERROR, "Failed to set passthrough_mode to %d\n", lcevc->passthrough_mode);
+        LCEVC_DestroyDecoder(lcevc->decoder);
+        return AVERROR_EXTERNAL;
+    }
+    res = LCEVC_ConfigureDecoderBool(lcevc->decoder, "allow_dithering", lcevc->allow_dithering);
+    if (res != LCEVC_Success) {
+        av_log(lcevc, AV_LOG_ERROR, "Failed to set allow_dithering to %d\n", lcevc->allow_dithering);
+        LCEVC_DestroyDecoder(lcevc->decoder);
+        return AVERROR_EXTERNAL;
+    }
+    res = LCEVC_ConfigureDecoderBool(lcevc->decoder, "highlight_residuals", lcevc->highlight_residuals);
+    if (res != LCEVC_Success) {
+        av_log(lcevc, AV_LOG_ERROR, "Failed to set highlight_residuals to %d\n", lcevc->highlight_residuals);
+        LCEVC_DestroyDecoder(lcevc->decoder);
+        return AVERROR_EXTERNAL;
+    }
     LCEVC_ConfigureDecoderIntArray(lcevc->decoder, "events", 1, &event);
     LCEVC_SetDecoderEventCallback(lcevc->decoder, event_callback, lcevc);
 
@@ -399,7 +478,7 @@ static int lcevc_init(FFLCEVCContext *lcevc)
         return AVERROR_EXTERNAL;
     }
 
-    lcevc->initialized = 1;
+    lcevc->initialized = FF_LCEVCDEC_INIT;
 
     return 0;
 }
@@ -411,11 +490,12 @@ int ff_lcevc_process(void *logctx, AVFrame *frame)
     FFLCEVCContext *lcevc = frame_ctx->lcevc;
     int ret;
 
-    if (!lcevc->initialized) {
+    if (lcevc->initialized == FF_LCEVCDEC_UNINIT) {
         ret = lcevc_init(lcevc);
         if (ret < 0)
             return ret;
-    }
+    } else if (lcevc->initialized == FF_LCEVCDEC_FAIL)
+        return 0;
 
     av_assert0(frame_ctx->frame);
 
@@ -434,7 +514,8 @@ int ff_lcevc_process(void *logctx, AVFrame *frame)
 }
 
 int ff_lcevc_parse_frame(FFLCEVCContext *lcevc, const AVFrame *frame,
-                         enum AVPixelFormat *format, int *width, int *height)
+                         enum AVPixelFormat *format, enum AVPixelFormat *base_format,
+                         int *width, int *height)
 {
     LCEVCRawProcessBlock *block = NULL;
     const LCEVCRawGlobalConfig *gc;
@@ -448,7 +529,7 @@ int ff_lcevc_parse_frame(FFLCEVCContext *lcevc, const AVFrame *frame,
     }
 
     ret = ff_cbs_lcevc_find_process_block(lcevc->cbc, lcevc->frag,
-                                          LCEVC_PAYLOAD_TYPE_GLOBAL_CONFIG, &block);
+                                          LCEVC_PAYLOAD_TYPE_GLOBAL_CONFIG, NULL, &block);
     if (ret < 0) {
         ret = 0;
         goto end;
@@ -457,6 +538,7 @@ int ff_lcevc_parse_frame(FFLCEVCContext *lcevc, const AVFrame *frame,
     gc = block->payload;
 
     *format = ff_lcevc_depth_type[gc->enhancement_depth_type][gc->chroma_sampling_type];
+    *base_format = ff_lcevc_depth_type[gc->base_depth_type][gc->chroma_sampling_type];
     if (gc->resolution_type < 63) {
         *width  = ff_lcevc_resolution_type[gc->resolution_type].width;
         *height = ff_lcevc_resolution_type[gc->resolution_type].height;
@@ -477,22 +559,60 @@ static const CodedBitstreamUnitType decompose_unit_types[] = {
     LCEVC_NON_IDR_NUT,
 };
 
+#define OFFSET(x) offsetof(FFLCEVCContext, x)
+#define FLAGS (AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_DECODING_PARAM)
+static const AVOption lcevc_opts[] = {
+    { "passthrough_mode", "Set passthrough mode", OFFSET(passthrough_mode), AV_OPT_TYPE_INT,
+            { .i64 = 0 }, -1, 2, FLAGS, .unit = "passthrough_mode" },
+        { "disable", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = -1 }, .unit = "passthrough_mode" },
+        { "allow",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  .unit = "passthrough_mode" },
+        { "force",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  .unit = "passthrough_mode" },
+        { "scale",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 },  .unit = "passthrough_mode" },
+    { "allow_dithering", "Allow dithering", OFFSET(allow_dithering), AV_OPT_TYPE_BOOL,
+            { .i64 = 1 }, 0, 1, FLAGS },
+    { "highlight_residuals", "Highlight residuals", OFFSET(highlight_residuals), AV_OPT_TYPE_BOOL,
+            { .i64 = 0 }, 0, 1, FLAGS },
+    { "threads", "Thread count", OFFSET(threads), AV_OPT_TYPE_INT,
+            { .i64 = 1 }, 0, INT_MAX, FLAGS },
+    { "pipeline", "Decoding pipeline", OFFSET(pipeline), AV_OPT_TYPE_STRING,
+            { .str = NULL }, 0, 0, FLAGS },
+    { NULL },
+};
+#undef OFFSET
+#undef FLAGS
 
 static const AVClass lcevcdec_context_class = {
     .class_name     = "liblcevc_dec",
     .item_name      = av_default_item_name,
+    .option         = lcevc_opts,
     .version        = LIBAVUTIL_VERSION_INT,
     .category       = AV_CLASS_CATEGORY_DECODER,
 };
 
-int ff_lcevc_alloc(FFLCEVCContext **plcevc, int loglevel)
+int ff_lcevc_alloc(FFLCEVCContext **plcevc, AVDictionary **options, int loglevel)
 {
     FFLCEVCContext *lcevc = NULL;
+    const AVDictionaryEntry *t;
     int ret;
 
     lcevc = av_refstruct_alloc_ext(sizeof(*lcevc), 0, NULL, lcevc_free);
     if (!lcevc)
         return AVERROR(ENOMEM);
+
+    lcevc->class = &lcevcdec_context_class;
+    av_opt_set_defaults(lcevc);
+
+    lcevc->loglevel = loglevel;
+
+    ret = av_opt_set_dict2(lcevc, options, 0);
+    if (ret < 0)
+        goto fail;
+
+    if (t = av_dict_iterate(*options, NULL)) {
+        av_log(NULL, AV_LOG_FATAL, "liblcevc-dec option %s not found.\n", t->key);
+        ret = AVERROR_OPTION_NOT_FOUND;
+        goto fail;
+    }
 
     lcevc->frag = av_mallocz(sizeof(*lcevc->frag));
     if (!lcevc->frag) {
@@ -515,9 +635,6 @@ int ff_lcevc_alloc(FFLCEVCContext **plcevc, int loglevel)
         ret = AVERROR(ENOMEM);
         goto fail;
     }
-
-    lcevc->class = &lcevcdec_context_class;
-    lcevc->loglevel = loglevel;
 
     *plcevc = lcevc;
     return 0;

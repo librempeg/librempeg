@@ -509,3 +509,8 @@ fate-h264-bsf-redundant-pps-side-data2: CMD = transcode mov $(TARGET_SAMPLES)/h2
 
 fate-h264-encparams: CMD = venc_data $(TARGET_SAMPLES)/h264-conformance/FRext/FRExt_MMCO4_Sony_B.264 0 1
 FATE_SAMPLES_DUMP_DATA += fate-h264-encparams
+
+# Progressive-source fields must not acquire an interlaced stream label.
+fate-h264-twofields-packet-probe: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -bitexact -v 0 -select_streams v \
+                                          -show_entries stream=field_order,avg_frame_rate \
+                                          $(TARGET_SAMPLES)/h264/twofields_packet.mp4

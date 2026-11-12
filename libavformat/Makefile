@@ -152,8 +152,6 @@ OBJS-$(CONFIG_ARGO_CVG_DEMUXER)          += argo_cvg.o
 OBJS-$(CONFIG_ARGO_CVG_MUXER)            += argo_cvg.o
 OBJS-$(CONFIG_ASF_DEMUXER)               += asfdec_f.o asf.o asfcrypt.o \
                                             asf_tags.o
-OBJS-$(CONFIG_ASF_O_DEMUXER)             += asfdec_o.o asf.o asfcrypt.o \
-                                            asf_tags.o
 OBJS-$(CONFIG_ASF_MUXER)                 += asfenc.o asf.o asf_tags.o
 OBJS-$(CONFIG_ASS_DEMUXER)               += assdec.o subtitles.o
 OBJS-$(CONFIG_ASS_MUXER)                 += assenc.o
@@ -418,6 +416,7 @@ OBJS-$(CONFIG_IMAGE_PPM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PSD_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_QDRAW_PIPE_DEMUXER)   += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_QOI_PIPE_DEMUXER)     += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_RW2_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_SGI_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_SVG_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_SUNRAST_PIPE_DEMUXER) += img2dec.o img2.o
@@ -443,6 +442,7 @@ OBJS-$(CONFIG_IVF_MUXER)                 += ivfenc.o
 OBJS-$(CONFIG_IVR_DEMUXER)               += rmdec.o rm.o rmsipr.o
 OBJS-$(CONFIG_JACOSUB_DEMUXER)           += jacosubdec.o subtitles.o
 OBJS-$(CONFIG_JACOSUB_MUXER)             += jacosubenc.o rawenc.o
+OBJS-$(CONFIG_JPEG_MPF_DEMUXER)          += jpegmpfdec.o
 OBJS-$(CONFIG_JPEG_MPF_MUXER)            += jpegmpfenc.o
 OBJS-$(CONFIG_JPEGXL_ANIM_DEMUXER)       += jpegxl_anim_dec.o
 OBJS-$(CONFIG_JV_DEMUXER)                += jvdec.o
@@ -463,6 +463,8 @@ OBJS-$(CONFIG_LAF_DEMUXER)               += lafdec.o
 OBJS-$(CONFIG_LATM_MUXER)                += latmenc.o rawenc.o
 OBJS-$(CONFIG_LC3_DEMUXER)               += lc3.o
 OBJS-$(CONFIG_LC3_MUXER)                 += lc3.o
+OBJS-$(CONFIG_LCEVC_DEMUXER)             += lcevcdec.o
+OBJS-$(CONFIG_LCEVC_MUXER)               += rawenc.o
 OBJS-$(CONFIG_LDAC_DEMUXER)              += ldac.o
 OBJS-$(CONFIG_LMLM4_DEMUXER)             += lmlm4.o
 OBJS-$(CONFIG_LOAS_DEMUXER)              += loasdec.o rawdec.o
@@ -743,6 +745,7 @@ OBJS-$(CONFIG_RTSP_MUXER)                += rtsp.o rtspenc.o httpauth.o
 OBJS-$(CONFIG_RWS_DEMUXER)               += rws.o
 OBJS-$(CONFIG_S337M_DEMUXER)             += s337m.o spdif.o
 OBJS-$(CONFIG_SAB_DEMUXER)               += sab.o pcm.o
+OBJS-$(CONFIG_SACD_DEMUXER)              += sacd.o
 OBJS-$(CONFIG_SADB_DEMUXER)              += sadb.o pcm.o
 OBJS-$(CONFIG_SADL_DEMUXER)              += sadl.o pcm.o
 OBJS-$(CONFIG_SAMI_DEMUXER)              += samidec.o subtitles.o
@@ -831,7 +834,7 @@ OBJS-$(CONFIG_STMA_DEMUXER)              += stma.o pcm.o
 OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
 OBJS-$(CONFIG_STR_MUXER)                 += psxstrenc.o
 OBJS-$(CONFIG_STRM_DEMUXER)              += strm.o pcm.o
-OBJS-$(CONFIG_STREAMHASH_MUXER)          += hashenc.o
+OBJS-$(CONFIG_STREAMHASH_MUXER)          += hashenc.o framehash.o
 OBJS-$(CONFIG_STREAM_SEGMENT_MUXER)      += segment.o
 OBJS-$(CONFIG_STRWAV_DEMUXER)            += strwav.o
 OBJS-$(CONFIG_SUBVIEWER1_DEMUXER)        += subviewer1dec.o subtitles.o
@@ -881,6 +884,7 @@ OBJS-$(CONFIG_UE4OPUS_DEMUXER)           += ue4opus.o
 OBJS-$(CONFIG_UE5XMA_DEMUXER)            += ue5xma.o pcm.o
 OBJS-$(CONFIG_UEBA_DEMUXER)              += ueba.o
 OBJS-$(CONFIG_UEOPUS_DEMUXER)            += ueopus.o
+OBJS-$(CONFIG_ULC_DEMUXER)               += ulcdec.o
 OBJS-$(CONFIG_UNCODEDFRAMECRC_MUXER)     += uncodedframecrcenc.o framehash.o
 OBJS-$(CONFIG_USM_DEMUXER)               += usmdec.o
 OBJS-$(CONFIG_UTK_DEMUXER)               += utkdec.o
@@ -1088,12 +1092,14 @@ SKIPHEADERS-$(CONFIG_IMF_DEMUXER)        += imf.h
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
 SKIPHEADERS-$(CONFIG_NETWORK)            += ip.h network.h rtsp.h
 
-TESTPROGS = id3v2                                                       \
+TESTPROGS = demux_probe                                                 \
+            id3v2                                                       \
             mkdir                                                       \
             rename                                                      \
             seek                                                        \
             url                                                         \
             seek_utils
+TESTPROGS-$(CONFIG_RTPDEC)               += rtpdec
 #           async                                                       \
 
 FIFO-MUXER-TESTPROGS-$(CONFIG_NETWORK)   += fifo_muxer
@@ -1103,6 +1109,8 @@ TESTPROGS-$(CONFIG_HTTP_PROTOCOL)        += http
 TESTPROGS-$(CONFIG_NETWORK)              += noproxy
 TESTPROGS-$(CONFIG_SRTP)                 += srtp
 TESTPROGS-$(CONFIG_IMF_DEMUXER)          += imf
+TESTPROGS-$(CONFIG_MP3_MUXER)            += id3v2enc id3v2chap
+TESTPROGS-$(CONFIG_AU_MUXER)             += auenc
 TESTPROGS-$(CONFIG_OGG_MUXER)            += ogg_pages
 
 TOOLS     = aviocat                                                     \

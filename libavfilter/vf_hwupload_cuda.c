@@ -87,14 +87,14 @@ static int cudaupload_query_formats(const AVFilterContext *ctx,
     const enum AVPixelFormat *output_pix_fmts = s->output_format == CUDAUPLOAD_FMT_CUARRAY
                                                 ? output_cuarray_fmts
                                                 : output_cuda_fmts;
-    AVFilterFormats *in_fmts  = ff_make_format_list(input_pix_fmts);
+    AVFilterFormats *in_fmts  = ff_make_pixel_format_list(input_pix_fmts);
     AVFilterFormats *out_fmts;
 
     ret = ff_formats_ref(in_fmts, &cfg_in[0]->formats);
     if (ret < 0)
         return ret;
 
-    out_fmts = ff_make_format_list(output_pix_fmts);
+    out_fmts = ff_make_pixel_format_list(output_pix_fmts);
 
     ret = ff_formats_ref(out_fmts, &cfg_out[0]->formats);
     if (ret < 0)
@@ -195,6 +195,7 @@ static const AVFilterPad cudaupload_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = cudaupload_filter_frame,
+        .get_buffer.video = ff_hwupload_get_video_buffer,
     },
 };
 

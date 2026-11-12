@@ -274,7 +274,7 @@ typedef struct VideoState {
     int frame_drops_late;
 
     enum ShowMode {
-        SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_NB
+        SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_PHASE, SHOW_MODE_NB
     } show_mode;
     int16_t sample_array[SAMPLE_ARRAY_SIZE];
     int sample_array_index;
@@ -597,6 +597,7 @@ static int decoder_init(Decoder *d, AVCodecContext *avctx, PacketQueue *queue, S
     d->empty_queue_cond = empty_queue_cond;
     d->start_pts = AV_NOPTS_VALUE;
     d->pkt_serial = -1;
+    packet_queue_start(d->queue);
     return 0;
 }
 
@@ -1120,6 +1121,26 @@ static inline int compute_mod(int a, int b)
     return a < 0 ? a%b + b : a%b;
 }
 
+static inline AVComplexFloat get_bin(const AVComplexFloat *data, const int y)
+{
+    AVComplexFloat num, den, ret;
+    float beta;
+
+    num.re = 2.f * data[y].re;
+    num.im = 2.f * data[y].im;
+
+    den.re = data[y-1].re + data[y+1].re;
+    den.im = data[y-1].im + data[y+1].im;
+
+    beta = 0.5f * av_clipf((num.re * den.re + num.im * den.im) /
+                           (den.re * den.re + den.im * den.im + FLT_EPSILON), 0.f, 1.f);
+
+    ret.re = data[y].re - beta * den.re;
+    ret.im = data[y].im - beta * den.im;
+
+    return ret;
+}
+
 static void video_audio_display(VideoState *s)
 {
     int i, i_start, x, y1, y, ys, delay, n, nb_display_channels;
@@ -1236,31 +1257,42 @@ static void video_audio_display(VideoState *s)
                 data_in[ch] = s->real_data + 2 * nb_freq * ch;
                 data[ch] = s->rdft_data + nb_freq * ch;
                 i = i_start + ch;
+                int16_t *sample_array = s->sample_array;
                 for (x = 0; x < 2 * nb_freq; x++) {
-                    double w = (x-nb_freq) * (1.0 / nb_freq);
-                    data_in[ch][x] = s->sample_array[i] * (1.0 - w * w);
+                    data_in[ch][x] = sample_array[i];
                     i += channels;
                     if (i >= SAMPLE_ARRAY_SIZE)
                         i -= SAMPLE_ARRAY_SIZE;
                 }
                 s->rdft_fn(s->rdft, data[ch], data_in[ch], sizeof(float));
-                data[ch][0].im = data[ch][nb_freq].re;
-                data[ch][nb_freq].re = 0;
             }
             /* Least efficient way to do this, we should of course
              * directly access it but it is more than fast enough. */
             if (!SDL_LockTexture(s->vis_texture, &rect, (void **)&pixels, &pitch)) {
+                int show_phase = s->show_mode == SHOW_MODE_PHASE && nb_display_channels == 2;
                 pitch >>= 2;
                 pixels += pitch * s->height;
-                for (y = 0; y < s->height; y++) {
-                    double w = 1 / sqrt(nb_freq);
-                    int a = sqrt(w * sqrt(data[0][y].re * data[0][y].re + data[0][y].im * data[0][y].im));
-                    int b = (nb_display_channels == 2 ) ? sqrt(w * hypot(data[1][y].re, data[1][y].im))
-                                                        : a;
+                for (y = 1; y < s->height-1; y++) {
+                    AVComplexFloat aa = get_bin(data[0], y);
+                    AVComplexFloat bb = (nb_display_channels == 2) ? get_bin(data[1], y) : aa;
+
+                    int a = 0.2f*sqrtf(hypotf(aa.re, aa.im));
+                    int b = 0.2f*sqrtf(hypotf(bb.re, bb.im));
+
                     a = FFMIN(a, 255);
                     b = FFMIN(b, 255);
+                    int blue = (a+b) >> 1;
+                    if (show_phase) {
+                        /* phase(left) - phase(right) in units of pi */
+                        float phase = atan2f(aa.im * bb.re - aa.re * bb.im,
+                                             aa.re * bb.re + aa.im * bb.im) / M_PIf;
+                        int phase_shift = lrintf(phase * FFMIN(a, b));
+                        a    = FFMIN(a    - phase_shift / 2, 255);
+                        b    = FFMIN(b    - phase_shift / 2, 255);
+                        blue = FFMIN(blue + phase_shift,     255);
+                    }
                     pixels -= pitch;
-                    *pixels = (a << 16) + (b << 8) + ((a+b) >> 1);
+                    *pixels = (a << 16) + (b << 8) + blue;
                 }
                 SDL_UnlockTexture(s->vis_texture);
             }
@@ -1288,9 +1320,9 @@ static void uninit_bsf_graph(AVFormatContext *ic, int stream_index)
         av_bsf_graph_free(&stgi->graph);
         stgi->sink = NULL;
 
-        for (int i = 0; i < stgi->stg->nb_streams; i++) {
-            ici->streams[stgi->stg->streams[i]->index]->filter = NULL;
-            ici->streams[stgi->stg->streams[i]->index]->group = NULL;
+        for (int i = 0; i < stgi->stg->nb_entries; i++) {
+            ici->streams[stgi->stg->entries[i]->stream->index]->filter = NULL;
+            ici->streams[stgi->stg->entries[i]->stream->index]->group = NULL;
         }
     }
     sti->group = stgi;
@@ -2040,7 +2072,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
                                 AV_OPT_TYPE_INT, sdl_supported_color_spaces)) < 0)
         goto fail;
 
-    if ((ret = av_opt_set_array(filt_out, "alphamodes", AV_OPT_SEARCH_CHILDREN,
+    if ((ret = av_opt_set_array(filt_out, "alpha_modes", AV_OPT_SEARCH_CHILDREN,
                                 0, FF_ARRAY_ELEMS(sdl_supported_alpha_modes),
                                 AV_OPT_TYPE_INT, sdl_supported_alpha_modes)) < 0)
         goto fail;
@@ -2258,7 +2290,6 @@ static int audio_thread(void *arg)
 
 static int decoder_start(Decoder *d, int (*fn)(void *), const char *thread_name, void* arg)
 {
-    packet_queue_start(d->queue);
     d->decoder_tid = SDL_CreateThread(fn, thread_name, arg);
     if (!d->decoder_tid) {
         av_log(NULL, AV_LOG_ERROR, "SDL_CreateThread(): %s\n", SDL_GetError());
@@ -2651,7 +2682,7 @@ static int init_lcevc_graph(AVFormatContext *ic, int stream_index)
 
     const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
     AVStream *base_st = ic->streams[stream_index];
-    AVStream *lcevc_st = stg->streams[lcevc->el_index];
+    AVStream *lcevc_st = stg->entries[lcevc->el_index]->stream;
     Stream *lcevc_sti = ici->streams[lcevc_st->index];
     Stream *base_sti = ici->streams[stream_index];
 
@@ -2981,6 +3012,7 @@ static int read_thread(void *arg)
     int pkt_in_play_range = 0;
     const AVDictionaryEntry *t;
     SDL_mutex *wait_mutex = SDL_CreateMutex();
+    AVDictionary *format_options = NULL;
     int scan_all_pmts_set = 0;
     int64_t pkt_ts;
 
@@ -3013,21 +3045,23 @@ static int read_thread(void *arg)
     }
     ic->interrupt_callback.callback = decode_interrupt_cb;
     ic->interrupt_callback.opaque = is;
-    if (!av_dict_get(format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
-        av_dict_set(&format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
+    if ((ret = av_dict_copy(&format_options, format_opts, 0)) < 0)
+        goto fail;
+    if (!av_dict_get(format_options, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
+        av_dict_set(&format_options, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
-    err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
+    err = avformat_open_input(&ic, is->filename, is->iformat, &format_options);
     if (err < 0) {
         print_error(is->filename, err);
         ret = -1;
         goto fail;
     }
     if (scan_all_pmts_set)
-        av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
-    remove_avoptions(&format_opts, codec_opts);
+        av_dict_set(&format_options, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
+    remove_avoptions(&format_options, codec_opts);
 
-    ret = check_avoptions(format_opts);
+    ret = check_avoptions(format_options);
     if (ret < 0)
         goto fail;
     is->ic = ic;
@@ -3141,11 +3175,18 @@ static int read_thread(void *arg)
 
         if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
             continue;
-        if (!av_bsf_get_by_name("lcevc_merge") || stg->nb_streams != 2)
+        if (!av_bsf_get_by_name("lcevc_merge") || stg->nb_entries != 2)
             continue;
+        for (int j = 0; j < stg->nb_entries; j++) {
+            AVStreamGroupEntry *entry = stg->entries[j];
+            if (entry->type != AV_STREAM_GROUP_ENTRY_STREAM) {
+                ret = AVERROR_BUG;
+                goto fail;
+            }
+        }
 
         const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
-        const AVStream *base_st = ic->streams[stg->streams[!lcevc->el_index]->index];
+        const AVStream *base_st = ic->streams[stg->entries[!lcevc->el_index]->stream->index];
         Stream *base_sti = ici->streams[base_st->index];
 
         base_sti->group = ici->stream_groups[i];
@@ -3389,6 +3430,7 @@ static int read_thread(void *arg)
         av_freep(&ic->opaque);
         avformat_close_input(&ic);
     }
+    av_dict_free(&format_options);
 
     av_packet_free(&pkt);
     if (ret != 0) {
@@ -3456,9 +3498,7 @@ static VideoState *stream_open(const char *filename,
                 goto fail;
         }
     }
-    startup_volume = av_clip(startup_volume, 0, 100);
-    startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
-    is->audio_volume = startup_volume;
+    is->audio_volume = SDL_MIX_MAXVOLUME * av_clip(startup_volume, 0, 100) / 100;
     is->muted = 0;
     is->av_sync_type = av_sync_type;
     is->read_tid     = SDL_CreateThread(read_thread, "read_thread", is);
@@ -3867,7 +3907,8 @@ static int opt_show_mode(void *optctx, const char *opt, const char *arg)
 {
     show_mode = !strcmp(arg, "video") ? SHOW_MODE_VIDEO :
                 !strcmp(arg, "waves") ? SHOW_MODE_WAVES :
-                !strcmp(arg, "rdft" ) ? SHOW_MODE_RDFT  : SHOW_MODE_NONE;
+                !strcmp(arg, "rdft" ) ? SHOW_MODE_RDFT  :
+                !strcmp(arg, "phase") ? SHOW_MODE_PHASE : SHOW_MODE_NONE;
 
     if (show_mode == SHOW_MODE_NONE) {
         double num;
@@ -3963,7 +4004,7 @@ static const OptionDef options[] = {
     { "vf",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
     { "af",                 OPT_TYPE_STRING,          0, { &afilters }, "set audio filters", "filter_graph" },
     { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
-    { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
+    { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT, 3 = phase)", "mode" },
     { "i",                  OPT_TYPE_BOOL,            0, { &dummy}, "read specified file", "input_file"},
     { "codec",              OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
     { "acodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &audio_codec_name }, "force audio decoder",    "decoder_name" },

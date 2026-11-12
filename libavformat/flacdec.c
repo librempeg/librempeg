@@ -42,12 +42,16 @@ typedef struct FLACDecContext {
     AVCodecContext *parser_dec;
 } FLACDecContext;
 
-static void reset_index_position(int64_t metadata_head_size, AVStream *st)
+static int reset_index_position(int64_t metadata_head_size, AVStream *st)
 {
     FFStream *const sti = ffstream(st);
     /* the real seek index offset should be the size of metadata blocks with the offset in the frame blocks */
-    for (int i = 0; i < sti->nb_index_entries; i++)
+    for (int i = 0; i < sti->nb_index_entries; i++) {
+        if (0x7FFFFFFFFFFFFFFF - metadata_head_size < sti->index_entries[i].pos)
+            return AVERROR_INVALIDDATA;
         sti->index_entries[i].pos += metadata_head_size;
+    }
+    return 0;
 }
 
 static const uint16_t sr_table[16] = {
@@ -225,7 +229,8 @@ static int flac_read_header(AVFormatContext *s)
     if (ret < 0)
         return ret;
 
-    reset_index_position(avio_tell(s->pb), st);
+    if (ret = reset_index_position(avio_tell(s->pb), st))
+        return ret;
     return 0;
 
 fail:
@@ -284,7 +289,7 @@ av_unused static int64_t flac_read_timestamp(AVFormatContext *s, int stream_inde
     AVPacket *const pkt = si->parse_pkt;
     AVStream *st = s->streams[stream_index];
     AVCodecParserContext *parser;
-    int ret;
+    int ret = 0;
     int64_t pts = AV_NOPTS_VALUE;
 
     if (avio_seek(s->pb, *ppos, SEEK_SET) < 0)
@@ -309,7 +314,12 @@ av_unused static int64_t flac_read_timestamp(AVFormatContext *s, int stream_inde
         uint8_t *data;
         int size;
 
-        ret = ff_raw_read_partial_packet(s, pkt);
+        if (ret >= 0 || ret == AVERROR(EAGAIN))
+            ret = ff_raw_read_partial_packet(s, pkt);
+        if (!ret) {
+            av_packet_unref(pkt);
+            continue;
+        }
         if (ret < 0){
             if (ret == AVERROR(EAGAIN))
                 continue;

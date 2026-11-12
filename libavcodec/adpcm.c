@@ -1091,7 +1091,7 @@ static inline int16_t adpcm_rhetorex_expand_nibble(ADPCMChannelStatus *c, const 
     c->sample2 = c->sample1;
     c->sample1 = sample;
 
-    c->step_index = FFABS(64512 * c->step_index + (rhetorex_index[delta] << 16)) >> 16;
+    c->step_index = FFABS((int)(64512U * c->step_index + 65536U * rhetorex_index[delta])) >> 16;
 
     return sample;
 }
@@ -2111,11 +2111,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
-    ADPCMDecodeContext *c = avctx->priv_data;
+    av_unused ADPCMDecodeContext *c = avctx->priv_data;
     int channels = avctx->ch_layout.nb_channels;
-    int16_t *samples;
-    int16_t **samples_p;
-    int st; /* stereo */
+    av_unused int16_t *samples;
+    av_unused int16_t **samples_p;
+    av_unused int st; /* stereo */
     int nb_samples, coded_samples, approx_nb_samples, ret;
     GetByteContext gb;
 

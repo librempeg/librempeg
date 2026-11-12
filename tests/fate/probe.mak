@@ -22,8 +22,21 @@ fate-probe-format-mp3-with-art: REF = mp3
 FATE_PROBE_FORMAT-$(CONFIG_MPEGTS_DEMUXER) += fate-probe-format-mpegts-png-prefix
 fate-probe-format-mpegts-png-prefix: REF = mpegts
 
+FATE_PROBE_FORMAT-$(CONFIG_MPEGTS_DEMUXER) += fate-probe-format-mpegts-png-prefix-unaligned
+fate-probe-format-mpegts-png-prefix-unaligned: REF = mpegts
+
+FATE_PROBE_FORMAT-$(CONFIG_IMAGE_PNG_PIPE_DEMUXER) += fate-probe-format-png-concat
+fate-probe-format-png-concat: REF = png_pipe
+fate-probe-format-png-concat: CMD = probefmt $(TARGET_SAMPLES)/png1/feed_4x_concat.png
+
 FATE_PROBE_FORMAT-$(call ALLYES, IMAGE_TIFF_PIPE_DEMUXER MPEGTS_DEMUXER) += fate-probe-format-tiff-not-mpegts
 fate-probe-format-tiff-not-mpegts: REF = tiff_pipe
+
+FATE_PROBE_FORMAT-$(call ALLYES, IMAGE_JPEG_PIPE_DEMUXER CAVSVIDEO_DEMUXER) += fate-probe-format-jpeg-not-cavsvideo
+fate-probe-format-jpeg-not-cavsvideo: REF = jpeg_pipe
+
+FATE_PROBE_FORMAT-$(call ALLYES, WAV_DEMUXER MPEGTS_DEMUXER) += fate-probe-format-wav-not-mpegts
+fate-probe-format-wav-not-mpegts: REF = wav
 
 FATE_PROBE_FORMAT = $(FATE_PROBE_FORMAT-yes)
 

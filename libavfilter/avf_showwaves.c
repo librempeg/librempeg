@@ -182,13 +182,11 @@ static int query_formats(const AVFilterContext *ctx,
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGBA, AV_PIX_FMT_RGB0, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
     int ret;
 
-    /* set input audio formats */
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    /* set output video format */
-    formats = ff_make_format_list(pix_fmts);
+    formats = ff_make_pixel_format_list(pix_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
@@ -282,7 +280,7 @@ static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t line
                                         const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
     uint8_t *bufk;
 
     if (start > end)
@@ -301,7 +299,7 @@ static void draw_sample_line_rgba_scaleh(uint8_t *buf, int width,
                                          const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
     uint8_t *bufk;
 
     if (start > end)
@@ -320,7 +318,7 @@ static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t lines
                                        const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
     uint32_t clr = AV_RN32(color);
     uint8_t *bufk;
 
@@ -336,7 +334,7 @@ static void draw_sample_line_rgba_fullh(uint8_t *buf, int width,
                                         const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
     uint32_t clr = AV_RN32(color);
     uint8_t *bufk;
 
@@ -524,7 +522,7 @@ static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                   const uint8_t color[4], int h)
 {
     int start = height/2;
-    int end = av_clip(h, 0, height-1);
+    int end = av_clip(h, 0, FFMAX(0, height-1));
 
     if (start > end)
         FFSWAP(int, start, end);
@@ -576,7 +574,7 @@ static void draw_sample_line_grayh(uint8_t *buf, int width,
                                   const uint8_t color[4], int w)
 {
     int start = width/2;
-    int end = av_clip(w, 0, width-1);
+    int end = av_clip(w, 0, FFMAX(0, width-1));
 
     if (start > end)
         FFSWAP(int, start, end);
@@ -957,6 +955,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (s->history_filled < s->history_nb_samples) {
             if (!s->status) {
                 ff_inlink_request_frame(inlink);
+                ff_filter_set_ready(ctx, 10);
                 return 0;
             }
         }

@@ -46,17 +46,24 @@ typedef struct OpenMPTContext {
     int sample_rate;
     AVChannelLayout ch_layout;
     int subsong;
+    int interp;
 } OpenMPTContext;
 
 #define OFFSET(x) offsetof(OpenMPTContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define D AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "sample_rate", "set sample rate",    OFFSET(sample_rate), AV_OPT_TYPE_INT,            { .i64 = 48000 },               1000, INT_MAX,   A | D },
-    { "layout",      "set channel layout", OFFSET(ch_layout),   AV_OPT_TYPE_CHLAYOUT,       { .str = "stereo" },            0,    0,         A | D },
-    { "subsong",     "set subsong",        OFFSET(subsong),     AV_OPT_TYPE_INT,            { .i64 = -2 },                  -2,   INT_MAX,   A | D, .unit = "subsong"},
-    { "all",         "all",                0,                   AV_OPT_TYPE_CONST,          { .i64 = -1},                   0,    0,         A | D, .unit = "subsong" },
-    { "auto",        "auto",               0,                   AV_OPT_TYPE_CONST,          { .i64 = -2},                   0,    0,         A | D, .unit = "subsong" },
+    { "sample_rate",   "set sample rate",          OFFSET(sample_rate), AV_OPT_TYPE_INT,      { .i64 = 48000 },    1000, INT_MAX, A | D },
+    { "layout",        "set channel layout",       OFFSET(ch_layout),   AV_OPT_TYPE_CHLAYOUT, { .str = "stereo" }, 0,    0,       A | D },
+    { "subsong",       "set subsong",              OFFSET(subsong),     AV_OPT_TYPE_INT,      { .i64 = -2 },       -2,   INT_MAX, A | D, .unit = "subsong"},
+    { "all",           "all",                      0,                   AV_OPT_TYPE_CONST,    { .i64 = -1 },       0,    0,       A | D, .unit = "subsong" },
+    { "auto",          "auto",                     0,                   AV_OPT_TYPE_CONST,    { .i64 = -2 },       0,    0,       A | D, .unit = "subsong" },
+    { "interpolation", "set interpolation method", OFFSET(interp),      AV_OPT_TYPE_INT,      { .i64 = 0 },        0,    INT_MAX, A | D, .unit = "interpolation"},
+    { "default",       "default",                  0,                   AV_OPT_TYPE_CONST,    { .i64 = 0 },        0,    0,       A | D, .unit = "interpolation"},
+    { "none",          "none",                     0,                   AV_OPT_TYPE_CONST,    { .i64 = 1 },        0,    0,       A | D, .unit = "interpolation"},
+    { "linear",        "linear",                   0,                   AV_OPT_TYPE_CONST,    { .i64 = 2 },        0,    0,       A | D, .unit = "interpolation"},
+    { "cubic",         "cubic",                    0,                   AV_OPT_TYPE_CONST,    { .i64 = 4 },        0,    0,       A | D, .unit = "interpolation"},
+    { "8-tap-sinc",    "8-tap windowed sinc",      0,                   AV_OPT_TYPE_CONST,    { .i64 = 8 },        0,    0,       A | D, .unit = "interpolation"},
     { NULL }
 };
 
@@ -119,6 +126,14 @@ static int read_header_openmpt(AVFormatContext *s)
     if (!openmpt->module)
             return AVERROR_INVALIDDATA;
 #endif
+
+    ret = openmpt_module_set_render_param(openmpt->module,
+        OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH,
+        openmpt->interp);
+    if (!ret) {
+        av_log(s, AV_LOG_ERROR, "Invalid interpolation setting: %d\n", openmpt->interp);
+        return AVERROR(EINVAL);
+    }
 
     if (openmpt->subsong >= openmpt_module_get_num_subsongs(openmpt->module)) {
         av_log(s, AV_LOG_ERROR, "Invalid subsong index: %d\n", openmpt->subsong);

@@ -2018,8 +2018,6 @@ int ff_h264_decode_mb_cabac(const H264Context *h, H264SliceContext *sl)
         }
     } else {
         mb_type = decode_cabac_intra_mb_type(sl, 3, 1);
-        if (sl->slice_type == AV_PICTURE_TYPE_SI && mb_type)
-            mb_type--;
         av_assert2(sl->slice_type_nos == AV_PICTURE_TYPE_I);
 decode_intra_mb:
         partition_count = 0;
@@ -2043,9 +2041,7 @@ decode_intra_mb:
         // decode, I think it should be done by a function in cabac.h (or cabac.c).
         ptr= sl->cabac.bytestream;
         if(sl->cabac.low&0x1) ptr--;
-        if(CABAC_BITS==16){
-            if(sl->cabac.low&0x1FF) ptr--;
-        }
+        if(sl->cabac.low&0x1FF) ptr--;
 
         // The pixels are stored in the same order as levels in h->mb array.
         if ((int) (sl->cabac.bytestream_end - ptr) < mb_size)

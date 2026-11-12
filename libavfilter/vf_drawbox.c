@@ -33,7 +33,6 @@
 #include "libavutil/eval.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/parseutils.h"
-#include "libavutil/detection_bbox.h"
 #include "avfilter.h"
 #include "drawutils.h"
 #include "filters.h"
@@ -133,6 +132,12 @@ static void draw_region(AVFrame *frame, DrawBoxContext *ctx, int left, int top, 
             }
         }
     } else {
+        const double alpha = (double)ctx->yuv_color[A] / 255;
+        const int hsub = ctx->hsub;
+        const int yc = ctx->yuv_color[Y];
+        const int uc = ctx->yuv_color[U];
+        const int vc = ctx->yuv_color[V];
+
         for (y = top; y < down; y++) {
             ASSIGN_THREE_CHANNELS
             if (ctx->invert_color) {
@@ -141,12 +146,10 @@ static void draw_region(AVFrame *frame, DrawBoxContext *ctx, int left, int top, 
                         row[0][x] = 0xff - row[0][x];
             } else {
                 for (x = left; x < right; x++) {
-                    double alpha = (double)ctx->yuv_color[A] / 255;
-
                     if (pixel_belongs_to_region(ctx, x, y)) {
-                        row[0][x             ] = (1 - alpha) * row[0][x             ] + alpha * ctx->yuv_color[Y];
-                        row[1][x >> ctx->hsub] = (1 - alpha) * row[1][x >> ctx->hsub] + alpha * ctx->yuv_color[U];
-                        row[2][x >> ctx->hsub] = (1 - alpha) * row[2][x >> ctx->hsub] + alpha * ctx->yuv_color[V];
+                        row[0][x        ] = (1 - alpha) * row[0][x        ] + alpha * yc;
+                        row[1][x >> hsub] = (1 - alpha) * row[1][x >> hsub] + alpha * uc;
+                        row[2][x >> hsub] = (1 - alpha) * row[2][x >> hsub] + alpha * vc;
                     }
                 }
             }
@@ -191,6 +194,8 @@ static void draw_region_rgb_packed(AVFrame *frame, DrawBoxContext *ctx, int left
             }
         }
     } else {
+        const float alpha = (float)ctx->rgba_color[A] / 255.f;
+
         for (int y = top; y < down; y++) {
             ASSIGN_THREE_CHANNELS_PACKED
             if (ctx->invert_color) {
@@ -202,8 +207,6 @@ static void draw_region_rgb_packed(AVFrame *frame, DrawBoxContext *ctx, int left
                     }
             } else {
                 for (int x = left; x < right; x++) {
-                    float alpha = (float)ctx->rgba_color[A] / 255.f;
-
                     if (pixel_belongs_to_region(ctx, x, y)) {
                         row[0][x*C] = (1.f - alpha) * row[0][x*C] + alpha * ctx->rgba_color[R];
                         row[1][x*C] = (1.f - alpha) * row[1][x*C] + alpha * ctx->rgba_color[G];
@@ -215,28 +218,9 @@ static void draw_region_rgb_packed(AVFrame *frame, DrawBoxContext *ctx, int left
     }
 }
 
-static enum AVFrameSideDataType box_source_string_parse(const char *box_source_string)
-{
-    av_assert0(box_source_string);
-    if (!strcmp(box_source_string, "side_data_detection_bboxes")) {
-        return AV_FRAME_DATA_DETECTION_BBOXES;
-    } else {
-        // will support side_data_regions_of_interest next
-        return AVERROR(EINVAL);
-    }
-}
-
 static av_cold int init(AVFilterContext *ctx)
 {
     DrawBoxContext *s = ctx->priv;
-
-    if (s->box_source_string) {
-        s->box_source = box_source_string_parse(s->box_source_string);
-        if ((int)s->box_source < 0) {
-            av_log(ctx, AV_LOG_ERROR, "Error box source: %s\n",s->box_source_string);
-            return AVERROR(EINVAL);
-        }
-    }
 
     if (!s->invert_color) {
         s->yuv_color[Y] = RGB_TO_Y_CCIR(s->rgba_color[0], s->rgba_color[1], s->rgba_color[2]);
@@ -303,36 +287,48 @@ static int config_input(AVFilterLink *inlink)
                                           var_names, var_values,
                                           NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0 && i == NUM_EXPR_EVALS)
             goto fail;
-        s->x = var_values[VAR_X] = res;
+        var_values[VAR_X] = res;
 
         var_values[VAR_MAX] = inlink->h;
         if ((ret = av_expr_parse_and_eval(&res, (expr = s->y_expr),
                                           var_names, var_values,
                                           NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0 && i == NUM_EXPR_EVALS)
             goto fail;
-        s->y = var_values[VAR_Y] = res;
+        var_values[VAR_Y] = res;
 
-        var_values[VAR_MAX] = inlink->w - s->x;
+        var_values[VAR_MAX] = inlink->w - trunc(var_values[VAR_X]);
         if ((ret = av_expr_parse_and_eval(&res, (expr = s->w_expr),
                                           var_names, var_values,
                                           NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0 && i == NUM_EXPR_EVALS)
             goto fail;
-        s->w = var_values[VAR_W] = res;
+        var_values[VAR_W] = res;
 
-        var_values[VAR_MAX] = inlink->h - s->y;
+        var_values[VAR_MAX] = inlink->h - trunc(var_values[VAR_Y]);
         if ((ret = av_expr_parse_and_eval(&res, (expr = s->h_expr),
                                           var_names, var_values,
                                           NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0 && i == NUM_EXPR_EVALS)
             goto fail;
-        s->h = var_values[VAR_H] = res;
+        var_values[VAR_H] = res;
 
         var_values[VAR_MAX] = INT_MAX;
         if ((ret = av_expr_parse_and_eval(&res, (expr = s->t_expr),
                                           var_names, var_values,
                                           NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0 && i == NUM_EXPR_EVALS)
             goto fail;
-        s->thickness = var_values[VAR_T] = res;
+        var_values[VAR_T] = res;
     }
+
+    if (!(fabs(var_values[VAR_X]) <= INT_MAX / 4 && fabs(var_values[VAR_Y]) <= INT_MAX / 4 &&
+          fabs(var_values[VAR_W]) <= INT_MAX / 4 && fabs(var_values[VAR_H]) <= INT_MAX / 4 &&
+          fabs(var_values[VAR_T]) <= INT_MAX)) {
+        av_log(ctx, AV_LOG_ERROR, "Position, size or thickness out of range.\n");
+        return AVERROR(EINVAL);
+    }
+    s->x         = var_values[VAR_X];
+    s->y         = var_values[VAR_Y];
+    s->w         = var_values[VAR_W];
+    s->h         = var_values[VAR_H];
+    s->thickness = var_values[VAR_T];
 
     /* if w or h are zero, use the input w/h */
     s->w = (s->w > 0) ? s->w : inlink->w;
@@ -367,31 +363,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     AVFilterContext *ctx = inlink->dst;
     DrawBoxContext *s = ctx->priv;
-    const AVDetectionBBoxHeader *header = NULL;
-    const AVDetectionBBox *bbox;
-    AVFrameSideData *sd;
     int loop = 1;
 
-    if (s->box_source == AV_FRAME_DATA_DETECTION_BBOXES) {
-        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DETECTION_BBOXES);
-        if (sd) {
-            header = (AVDetectionBBoxHeader *)sd->data;
-            loop = header->nb_bboxes;
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "No detection bboxes.\n");
-            return ff_filter_frame(inlink->dst->outputs[0], frame);
-        }
-    }
-
     for (int i = 0; i < loop; i++) {
-        if (header) {
-            bbox = av_get_detection_bbox(header, i);
-            s->y = bbox->y;
-            s->x = bbox->x;
-            s->h = bbox->h;
-            s->w = bbox->w;
-        }
-
         s->draw_region(frame, s, FFMAX(s->x, 0), FFMAX(s->y, 0), FFMIN(s->x + s->w, frame->width),
                        FFMIN(s->y + s->h, frame->height), pixel_belongs_to_box);
     }
@@ -477,6 +451,7 @@ const FFFilter ff_vf_drawbox = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .process_command = process_command,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };
 #endif /* CONFIG_DRAWBOX_FILTER */
 
@@ -553,6 +528,7 @@ const FFFilter ff_vf_drawgrid = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .process_command = process_command,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };
 
 #endif  /* CONFIG_DRAWGRID_FILTER */

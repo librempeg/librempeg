@@ -314,7 +314,8 @@ int ff_rtmp_packet_write(URLContext *h, RTMPPacket *pkt,
                          int chunk_size, RTMPPacket **prev_pkt_ptr,
                          int *nb_prev_pkt)
 {
-    uint8_t pkt_hdr[16], *p = pkt_hdr;
+    uint8_t pkt_hdr[18], *p = pkt_hdr;
+    int basic_hdr_size;
     int mode = RTMP_PS_TWELVEBYTES;
     int off = 0;
     int written = 0;
@@ -363,6 +364,7 @@ int ff_rtmp_packet_write(URLContext *h, RTMPPacket *pkt,
         bytestream_put_byte(&p, 1               | (mode << 6));
         bytestream_put_le16(&p, pkt->channel_id - 64);
     }
+    basic_hdr_size = p - pkt_hdr;
     if (mode != RTMP_PS_ONEBYTE) {
         bytestream_put_be24(&p, pkt->ts_field);
         if (mode != RTMP_PS_FOURBYTES) {
@@ -391,16 +393,16 @@ int ff_rtmp_packet_write(URLContext *h, RTMPPacket *pkt,
     if ((ret = ffurl_write(h, pkt_hdr, p - pkt_hdr)) < 0)
         return ret;
     written = p - pkt_hdr + pkt->size;
+    pkt_hdr[0] |= RTMP_PS_ONEBYTE << 6;
     while (off < pkt->size) {
         int towrite = FFMIN(chunk_size, pkt->size - off);
         if ((ret = ffurl_write(h, pkt->data + off, towrite)) < 0)
             return ret;
         off += towrite;
         if (off < pkt->size) {
-            uint8_t marker = 0xC0 | pkt->channel_id;
-            if ((ret = ffurl_write(h, &marker, 1)) < 0)
+            if ((ret = ffurl_write(h, pkt_hdr, basic_hdr_size)) < 0)
                 return ret;
-            written++;
+            written += basic_hdr_size;
             if (pkt->ts_field == 0xFFFFFF) {
                 uint8_t ts_header[4];
                 AV_WB32(ts_header, timestamp);
@@ -551,7 +553,7 @@ static int amf_get_field_value2(GetByteContext *gb,
                     return -1;
                 if (dst_size < len + 1)
                     len = dst_size - 1;
-                bytestream2_get_buffer(gb, dst, len);
+                len = bytestream2_get_buffer(gb, dst, len);
                 dst[len] = 0;
                 break;
             default:

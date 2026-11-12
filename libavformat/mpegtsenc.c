@@ -39,6 +39,7 @@
 #include "avformat.h"
 #include "avio_internal.h"
 #include "internal.h"
+#include "lcevc.h"
 #include "mpegts.h"
 #include "mux.h"
 
@@ -271,6 +272,9 @@ typedef struct MpegTSWriteStream {
     int opus_pending_trim_start;
 
     DVBAC3Descriptor *dvb_ac3_desc;
+
+    int nb_stream_groups;
+    AVStreamGroup **stream_groups;
 } MpegTSWriteStream;
 
 static void mpegts_write_pat(AVFormatContext *s)
@@ -379,6 +383,9 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
     case AV_CODEC_ID_VVC:
         stream_type = STREAM_TYPE_VIDEO_VVC;
         break;
+    case AV_CODEC_ID_LCEVC:
+        stream_type = STREAM_TYPE_VIDEO_LCEVC;
+        break;
     case AV_CODEC_ID_CAVS:
         stream_type = STREAM_TYPE_VIDEO_CAVS;
         break;
@@ -477,6 +484,9 @@ static int get_m2ts_stream_type(AVFormatContext *s, AVStream *st)
         break;
     case AV_CODEC_ID_HEVC:
         stream_type = STREAM_TYPE_VIDEO_HEVC;
+        break;
+    case AV_CODEC_ID_LCEVC:
+        stream_type = STREAM_TYPE_VIDEO_LCEVC;
         break;
     case AV_CODEC_ID_PCM_BLURAY:
         stream_type = STREAM_TYPE_BLURAY_AUDIO_PCM_BLURAY;
@@ -747,7 +757,20 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                        language++;
 
                    if (st->codecpar->extradata_size - extradata_copied >= 5) {
-                       *q++ = st->codecpar->extradata[extradata_copied + 4]; /* subtitling_type */
+                       /* subtitling_type: encoders are not aware of the hard
+                        * of hearing flag, so rederive it from the disposition:
+                        * 0x1x is a normal subtitle, 0x2x the same subtitle for
+                        * the hard of hearing. Only single-service records are
+                        * adjusted: the demuxer flags the whole stream as soon
+                        * as one of several services is for the hard of
+                        * hearing, so rewriting a multi-service record would
+                        * also change the type of the other services. */
+                       uint8_t subtitling_type = st->codecpar->extradata[extradata_copied + 4];
+                       if (st->codecpar->extradata_size == 5 &&
+                           (st->disposition & AV_DISPOSITION_HEARING_IMPAIRED) &&
+                           (subtitling_type & 0xF0) == 0x10)
+                           subtitling_type = 0x20 | (subtitling_type & 0x0F);
+                       *q++ = subtitling_type;
                        memcpy(q, st->codecpar->extradata + extradata_copied, 4); /* composition_page_id and ancillary_page_id */
                        extradata_copied += 5;
                        q += 4;
@@ -815,6 +838,32 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
             } else if (stream_type == STREAM_TYPE_VIDEO_CAVS || stream_type == STREAM_TYPE_VIDEO_AVS2 ||
                        stream_type == STREAM_TYPE_VIDEO_AVS3) {
                 put_registration_descriptor(&q, MKTAG('A', 'V', 'S', 'V'));
+            }
+            if (ts_st->nb_stream_groups) {
+                if (stream_type == STREAM_TYPE_VIDEO_LCEVC) {
+                    LCEVCDecoderConfigurationRecord lvcc = { 0 };
+                    ff_lcvec_parse_config_record(&lvcc, st->codecpar->extradata,
+                                                 st->codecpar->extradata_size, s);
+                    *q++ = EXTENSION_DESCRIPTOR;
+                    *q++ = 5;
+                    *q++ = LCEVC_VIDEO_DESCRIPTOR;
+                    *q++ = st->id;
+                    *q++ = (lvcc.profile_idc << 4) | lvcc.level_idc;
+                    *q++ = (lvcc.sublevel_idc << 6) |
+                           (lvcc.processed_planes_type_flag << 5) |
+                           (lvcc.picture_type_bit_flag << 4) |
+                           (lvcc.field_type_bit_flag << 3);
+                    *q++ = 0xC0; // HDR_WCG_idc == 3, video_properties_tag == 0
+                } else {
+                    *q++ = EXTENSION_DESCRIPTOR;
+                    *q++ = 2 + ts_st->nb_stream_groups;
+                    *q++ = LCEVC_LINKAGE_DESCRIPTOR;
+                    *q++ = ts_st->nb_stream_groups;
+                    for (int j = 0; j < ts_st->nb_stream_groups; j++) {
+                        AVStreamGroup *stg = ts_st->stream_groups[j];
+                        *q++ = stg->entries[stg->params.layered_video->el_index]->stream->id;
+                    }
+                }
             }
             break;
         case AVMEDIA_TYPE_DATA:
@@ -1293,6 +1342,35 @@ static int mpegts_init(AVFormatContext *s)
         }
         if (st->codecpar->codec_id == AV_CODEC_ID_OPUS) {
             ts_st->opus_pending_trim_start = st->codecpar->initial_padding * 48000 / st->codecpar->sample_rate;
+        }
+    }
+
+    for (i = 0; i < s->nb_stream_groups; i++) {
+        AVStreamGroup *stg = s->stream_groups[i];
+
+        if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
+            continue;
+
+        if (stg->nb_entries != 2) {
+            av_log(s, AV_LOG_ERROR, "LCEVC Stream Group #%"PRId64" needs exactly two streams\n", stg->id);
+            return AVERROR(EINVAL);
+        }
+
+        for (j = 0; j < stg->nb_entries; j++) {
+            AVStreamGroupEntry *entry = stg->entries[j];
+            AVStream *st;
+            MpegTSWriteStream *ts_st;
+
+            if (entry->type != AV_STREAM_GROUP_ENTRY_STREAM) {
+                av_log(s, AV_LOG_ERROR, "LCEVC Stream Group #%"PRId64" must only reference streams\n", stg->id);
+                return AVERROR(EINVAL);
+            }
+            st = entry->stream;
+            ts_st = st->priv_data;
+
+            av_dynarray_add((void *)&ts_st->stream_groups, &ts_st->nb_stream_groups, (void *)stg);
+            if (!ts_st->nb_stream_groups)
+                return AVERROR(ENOMEM);
         }
     }
 
@@ -1897,12 +1975,17 @@ static uint8_t *h26x_prefix_aud(const uint8_t *aud, const int aud_size,
     const uint8_t *extra_data, const int extra_size, AVPacket *pkt, int *size)
 {
     const int sz = 4;       //start code size
-    uint8_t *data = av_malloc(pkt->size + sz + aud_size + extra_size);
+    uint8_t *data;
+
+    if (pkt->size > INT_MAX - sz - aud_size - extra_size)
+        return NULL;
+    data = av_malloc(pkt->size + sz + aud_size + extra_size);
     if (!data)
         return NULL;
     AV_WB32(data, 0x00000001);
     memcpy(data + sz, aud, aud_size);
-    memcpy(data + sz + aud_size, extra_data, extra_size);
+    if (extra_size)
+        memcpy(data + sz + aud_size, extra_data, extra_size);
     memcpy(data + sz + aud_size + extra_size, pkt->data, pkt->size);
     *size = pkt->size + sz + aud_size + extra_size;
     return data;
@@ -2000,7 +2083,11 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
             /* Move the AUD up to the beginning of the frame, where the H.264
              * spec requires it to appear. Emit the extradata after it. */
             PutByteContext pb;
-            const int new_pkt_size = pkt->size + 1 + extradd;
+            int new_pkt_size;
+
+            if (pkt->size > INT_MAX - 1 - extradd)
+                return AVERROR(ENOMEM);
+            new_pkt_size = pkt->size + 1 + extradd;
             data = av_malloc(new_pkt_size);
             if (!data)
                 return AVERROR(ENOMEM);
@@ -2137,6 +2224,8 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
                 trim_end = AV_RL32(side_data + 4) * 48000 / st->codecpar->sample_rate;
             }
 
+            if (pkt->size > INT_MAX - 7 - pkt->size / 255)
+                return AVERROR(ENOMEM);
             ctrl_header_size = pkt->size + 2 + pkt->size / 255 + 1;
             if (ts_st->opus_pending_trim_start)
               ctrl_header_size += 2;
@@ -2338,6 +2427,7 @@ static void mpegts_deinit(AVFormatContext *s)
         if (ts_st) {
             av_freep(&ts_st->dvb_ac3_desc);
             av_freep(&ts_st->payload);
+            av_freep(&ts_st->stream_groups);
             if (ts_st->amux) {
                 avformat_free_context(ts_st->amux);
                 ts_st->amux = NULL;
@@ -2363,6 +2453,7 @@ static int mpegts_check_bitstream(AVFormatContext *s, AVStream *st,
     } list[] = {
         { AV_CODEC_ID_H264, "h264_mp4toannexb", 0xff, 0x01 /* configurationVersion in AVCDecoderConfigurationRecord  */},
         { AV_CODEC_ID_HEVC, "hevc_mp4toannexb", 0xff, 0x01 /* configurationVersion in HEVCDecoderConfigurationRecord */},
+        { AV_CODEC_ID_LCEVC, "lcevc_metadata",  0xff, 0x01 /* configurationVersion in LCEVCDecoderConfigurationRecord */},
         { AV_CODEC_ID_VVC,  "vvc_mp4toannexb",  0xf8, 0xf8 /* reserved '11111'b    in VVCDecoderConfigurationRecord  */},
     };
 

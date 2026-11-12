@@ -437,6 +437,9 @@ static int get_tiles_info(AVCodecContext *avctx, const AV1RawTileGroup *tile_gro
     s->tg_start = tile_group->tg_start;
     s->tg_end = tile_group->tg_end;
 
+    if (tile_group->tg_end >= s->raw_frame_header->tile_cols * s->raw_frame_header->tile_rows)
+        return AVERROR_INVALIDDATA;
+
     for (tile_num = tile_group->tg_start; tile_num <= tile_group->tg_end; tile_num++) {
         tile_row = tile_num / s->raw_frame_header->tile_cols;
         tile_col = tile_num % s->raw_frame_header->tile_cols;
@@ -746,10 +749,9 @@ static void av1_frame_replace(AV1Frame *dst, const AV1Frame *src)
 
     dst->raw_frame_header = src->raw_frame_header;
 
-    ff_progress_frame_replace(&dst->pf, &src->pf);
-
     av_refstruct_replace(&dst->hwaccel_picture_private,
                           src->hwaccel_picture_private);
+    ff_progress_frame_replace(&dst->pf, &src->pf);
 
     dst->spatial_id = src->spatial_id;
     dst->temporal_id = src->temporal_id;
@@ -1070,7 +1072,9 @@ static int export_film_grain(AVCodecContext *avctx, AVFrame *frame)
 {
     AV1DecContext *s = avctx->priv_data;
     const AV1RawFilmGrainParams *film_grain = &s->cur_frame.film_grain;
-    const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(frame->format);
+    /* Use the negotiated software format for chroma subsampling,
+     * since frame->format may be a hardware pixel format. */
+    const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(avctx->sw_pix_fmt);
     AVFilmGrainParams *fgp;
     AVFilmGrainAOMParams *aom;
 
@@ -1126,12 +1130,12 @@ static int export_film_grain(AVCodecContext *avctx, AVFrame *frame)
         aom->ar_coeffs_uv[1][i] = film_grain->ar_coeffs_cr_plus_128[i] - 128;
     }
 
-    aom->uv_mult[0] = film_grain->cb_mult;
-    aom->uv_mult[1] = film_grain->cr_mult;
-    aom->uv_mult_luma[0] = film_grain->cb_luma_mult;
-    aom->uv_mult_luma[1] = film_grain->cr_luma_mult;
-    aom->uv_offset[0] = film_grain->cb_offset;
-    aom->uv_offset[1] = film_grain->cr_offset;
+    aom->uv_mult[0] = film_grain->cb_mult - 128;
+    aom->uv_mult[1] = film_grain->cr_mult - 128;
+    aom->uv_mult_luma[0] = film_grain->cb_luma_mult - 128;
+    aom->uv_mult_luma[1] = film_grain->cr_luma_mult - 128;
+    aom->uv_offset[0] = film_grain->cb_offset - 256;
+    aom->uv_offset[1] = film_grain->cr_offset - 256;
 
     return 0;
 }
@@ -1168,6 +1172,10 @@ static int set_output_frame(AVCodecContext *avctx, AVFrame *frame)
 
     frame->pts = pkt->pts;
     frame->pkt_dts = pkt->dts;
+    if (pkt->flags & AV_PKT_FLAG_DISCARD)
+        frame->flags |= AV_FRAME_FLAG_DISCARD;
+    else
+        frame->flags &= ~AV_FRAME_FLAG_DISCARD;
 
     av_packet_unref(pkt);
 

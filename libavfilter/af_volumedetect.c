@@ -37,6 +37,7 @@ typedef struct VolDetectContext {
     float max;
     double sum2;
     int eof;
+    int print_done;
     int64_t eof_pts;
 
     double max_volume;

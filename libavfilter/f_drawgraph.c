@@ -155,7 +155,7 @@ static int query_formats(const AVFilterContext *ctx,
         AV_PIX_FMT_RGBA,
         AV_PIX_FMT_NONE
     };
-    AVFilterFormats *formats = ff_make_format_list(pix_fmts);
+    AVFilterFormats *formats = ff_make_pixel_format_list(pix_fmts);
 
     return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
@@ -521,6 +521,7 @@ const FFFilter ff_vf_drawgraph = {
     FILTER_INPUTS(ff_video_default_filterpad),
     FILTER_OUTPUTS(drawgraph_outputs),
     FILTER_QUERY_FUNC2(query_formats),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 
 #endif // CONFIG_DRAWGRAPH_FILTER

@@ -746,6 +746,30 @@ ffmpeg -framerate 10 -pattern_type glob -i "*.png" out.mkv
 @end example
 @end itemize
 
+@section jpeg_mpf
+
+JPEG Multi-Picture Format demuxer.
+
+Exposes each JPEG image stored in a CIPA DC-007 MP file as a separate stream,
+in the order of the MP Entries, with the First Individual Image flagged as the
+default stream. If the file contains an ISO 21496-1 gain map, as is the case
+for JPEG Ultra HDR, the primary image and the gain map are linked by a
+@samp{gain_map} stream group, and the gain map parameters are exported as
+frame side data by the decoder.
+
+Images of any other type (e.g. large thumbnails or multi-view images) are
+exposed as additional streams.
+
+This demuxer accepts the following options, which behave like the options of
+the same name of the @samp{image2} demuxer:
+@table @option
+@item framerate
+Set the frame rate of the video streams. The default is 25.
+@item loop
+If set to 1, loop over the images in the file. The default is 0. This requires
+seekable input.
+@end table
+
 @section ktx
 
 Khronos Texture 1.0 demuxer for ASTC textures.

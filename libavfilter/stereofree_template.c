@@ -31,6 +31,7 @@
 #undef FEXP
 #undef FEPS
 #undef FMAX
+#undef FMIN
 #undef SQRT
 #if DEPTH == 32
 #define M_2PI M_2_PIf
@@ -43,6 +44,7 @@
 #define FABS fabsf
 #define FEXP expf
 #define FMAX fmaxf
+#define FMIN fminf
 #define SQRT sqrtf
 #define FEPS FLT_EPSILON
 #else
@@ -56,6 +58,7 @@
 #define FABS fabs
 #define FEXP exp
 #define FMAX fmax
+#define FMIN fmin
 #define SQRT sqrt
 #define FEPS DBL_EPSILON
 #endif
@@ -123,6 +126,9 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
     const ftype center_c = s->center[1];
     const ftype center_f = s->center[2];
     const ftype size_f = s->fft_size/2+1;
+    const ftype floor_g = FMIN(s->gain[0], s->gain[1]);
+    const ftype ceil_g = FMAX(s->gain[0], s->gain[1]);
+    const ftype range_g = ceil_g - floor_g;
     const int type = s->type;
 
     for (int i = start; i < end; i++) {
@@ -142,7 +148,7 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
         const ftype ip = (p - center_p) * width_p;
         const ftype ff = (f - center_f) * width_f;
         const ftype scale = FEXP(F(-0.5) * ic * ic + F(-0.5) * ip * ip + F(-0.5) * ff * ff);
-        const ftype g = type ? F(1.0) - scale : scale;
+        const ftype g = (type ? F(1.0) - scale : scale) * range_g + floor_g;
 
         fl[i].re = l_re * g;
         fl[i].im = l_im * g;
@@ -183,8 +189,8 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = ((ftype *)out->extended_data[1]) + doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
+    const int nb_samples = FFMIN(overlap, FFMAX(s->in->nb_samples - doffset, 0));
     fn(ThreadData) td;
 
     // shift in/out buffers
@@ -244,15 +250,15 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = 0;
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples);
     fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
     memmove(right_in, &right_in[overlap], offset * sizeof(*right_in));
 
-    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
-    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
+    memset(&left_in[offset], 0, overlap * sizeof(*left_in));
+    memset(&right_in[offset], 0, overlap * sizeof(*right_in));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
@@ -277,11 +283,11 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     fn(apply_window)(s, windowed_right, right_out, 1);
 
     if (ff_filter_disabled(ctx)) {
-        memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_in, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out_nb_samples * sizeof(*right_osamples));
     } else {
-        memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
     }
 
     return 0;

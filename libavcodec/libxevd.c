@@ -329,6 +329,7 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 
     if (pkt->size > 0) {
         int bs_read_pos = 0;
+        int pkt_au_retained = 0;
         XEVD_STAT stat;
         XEVD_BITB bitb;
         int nalu_size;
@@ -346,7 +347,7 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
             memset(&stat, 0, sizeof(XEVD_STAT));
 
             nalu_size = read_nal_unit_length(pkt_au->data + bs_read_pos, XEVD_NAL_UNIT_LENGTH_BYTE, avctx);
-            if (nalu_size == 0) {
+            if (nalu_size <= 0 || nalu_size > pkt_au->size - bs_read_pos - XEVD_NAL_UNIT_LENGTH_BYTE) {
                 av_log(avctx, AV_LOG_ERROR, "Invalid bitstream\n");
                 av_packet_free(&pkt_au);
                 ret = AVERROR_INVALIDDATA;
@@ -377,6 +378,8 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
             }
 
             bs_read_pos += nalu_size;
+            if (stat.fnum < 0)
+                av_freep(&bitb.pdata[1]);
 
             if (stat.nalu_type == XEVD_NUT_SPS) { // EVC stream parameters changed
                 if ((ret = export_stream_params(xectx, avctx)) != 0) {
@@ -392,6 +395,7 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 
             // stat.fnum - has negative value if the decoded data is not frame
             if (stat.fnum >= 0) {
+                pkt_au_retained = 1;
                 // store stat.stype into the bitb.pdata[1] that will be retrieved in an image
                 *(int*)bitb.pdata[1] = stat.stype;
 
@@ -425,6 +429,8 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                 }
             }
         }
+        if (!pkt_au_retained)
+            av_packet_free(&pkt_au);
     } else { // decoder draining mode handling
 
         while (1) {
@@ -456,7 +462,7 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         }
     }
 
-    return ret;
+    return AVERROR(EAGAIN);
 }
 
 /**

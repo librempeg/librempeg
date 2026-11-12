@@ -99,7 +99,7 @@ static int roq_read_packet(AVFormatContext *s,
     RoqDemuxContext *roq = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret = 0;
-    unsigned int chunk_size;
+    int64_t chunk_size;
     unsigned int chunk_type;
     unsigned int codebook_size;
     unsigned char preamble[RoQ_CHUNK_PREAMBLE_SIZE];
@@ -139,10 +139,10 @@ static int roq_read_packet(AVFormatContext *s,
                     return ret;
                 st->codecpar->width  = roq->width  = AV_RL16(preamble);
                 st->codecpar->height = roq->height = AV_RL16(preamble + 2);
-                break;
+                chunk_size -= RoQ_CHUNK_PREAMBLE_SIZE;
             }
             /* don't care about this chunk anymore */
-            avio_skip(pb, RoQ_CHUNK_PREAMBLE_SIZE);
+            avio_skip(pb, chunk_size);
             break;
 
         case RoQ_QUAD_CODEBOOK:
@@ -154,7 +154,7 @@ static int roq_read_packet(AVFormatContext *s,
             avio_skip(pb, codebook_size);
             if ((ret = ffio_read_size(pb, preamble, RoQ_CHUNK_PREAMBLE_SIZE)) < 0)
                 return ret;
-            chunk_size = AV_RL32(&preamble[2]) + RoQ_CHUNK_PREAMBLE_SIZE * 2 +
+            chunk_size = (int64_t)AV_RL32(&preamble[2]) + RoQ_CHUNK_PREAMBLE_SIZE * 2 +
                 codebook_size;
 
             if (chunk_size > INT_MAX)

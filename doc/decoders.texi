@@ -81,6 +81,21 @@ the corresponding elements of @option{view_ids_available}, i.e.
 Same validity restrictions as for @option{view_ids_available} apply to
 this option.
 
+@item tile_interleave
+Decode pictures split into tile columns in CTB row order rather than in tile
+scan order, so that frame threading keeps overlapping. With the tile scan the
+lower CTB rows are published only once the last tile column has been decoded,
+which stalls the frames waiting for them. Only the order in which the CTBs are
+decoded changes, the output is the same.
+
+The default of -1 takes this order for eligible pictures when frame threading is
+in use, 0 disables it, and 1 takes it for eligible pictures even without frame
+threading. A picture is eligible when it has two or more tile columns, does not
+use entropy coding synchronization and packs its tiles into slices in a layout
+the traversal supports. Every other picture is decoded in tile scan order as
+before. With slice threading, a picture whose tiles are all carried in one
+slice is still decoded tile-parallel, whatever this option is set to.
+
 @end table
 
 @section rawvideo
@@ -279,6 +294,27 @@ Audio reproduction is between full range and full compression.
 DRC enabled. Applies drc_scale asymmetrically.
 Loud sounds are fully compressed.  Soft sounds are enhanced.
 @end table
+
+@end table
+
+@section dca
+
+DCA (DTS Coherent Acoustics) audio decoder, including the DTS-HD extensions.
+
+@subsection DCA Decoder Options
+
+@table @option
+
+@item -downmix @var{channel_layout}
+Request a smaller channel layout from the decoder: @samp{stereo},
+@samp{5.0(side)}, @samp{5.1(side)} or @samp{7.1}.
+
+A DTS:X stream in the standard presentation decodes to 7.1.4 by default. Its
+four height channels are carried in an extension at the end of each lossless
+(XLL) frame, and the encoder also folds them into the 7.1 bed, so the decoder
+removes them from the bed when it outputs them. Requesting @samp{7.1} outputs
+the bed as coded instead, with the heights folded in, and so does every
+smaller layout. A @samp{7.1} request has no effect on other streams.
 
 @end table
 

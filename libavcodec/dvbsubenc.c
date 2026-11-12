@@ -21,8 +21,15 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "libavutil/avassert.h"
 #include "libavutil/colorspace.h"
+#include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
+
+/* Every display set produced by this encoder uses this single page, i.e.
+ * the composition page id and the ancillary page id are both 1. */
+#define DVB_SUB_PAGE_ID 1
 
 typedef struct DVBSubtitleContext {
     AVClass * class;
@@ -54,7 +61,7 @@ static int dvb_encode_rle2(uint8_t **pq, int buf_size,
 
     for(y = 0; y < h; y++) {
         // Worst case line is 3 bits per value + 4 bytes overhead
-        if (buf_size * 8 < w * 3 + 32)
+        if (buf_size * 8LL < w * 3 + 32)
             return AVERROR_BUFFER_TOO_SMALL;
         line_begin = q;
         *q++ = 0x10;
@@ -149,7 +156,7 @@ static int dvb_encode_rle4(uint8_t **pq, int buf_size,
 
     for(y = 0; y < h; y++) {
         // Worst case line is 6 bits per value, + 4 bytes overhead
-        if (buf_size * 8 < w * 6 + 32)
+        if (buf_size * 8LL < w * 6 + 32)
             return AVERROR_BUFFER_TOO_SMALL;
         line_begin = q;
         *q++ = 0x11;
@@ -221,8 +228,8 @@ static int dvb_encode_rle8(uint8_t **pq, int buf_size,
     q = *pq;
 
     for (y = 0; y < h; y++) {
-        // Worst case line is 12 bits per value, + 3 bytes overhead
-        if (buf_size * 8 < w * 12 + 24)
+        // Worst case line is 12 bits per value, + 4 bytes overhead
+        if (buf_size * 8LL < w * 12 + 32)
             return AVERROR_BUFFER_TOO_SMALL;
         line_begin = q;
         *q++ = 0x12;
@@ -273,6 +280,30 @@ static int dvb_encode_rle8(uint8_t **pq, int buf_size,
     return len;
 }
 
+static av_cold int dvbsub_encode_init(AVCodecContext *avctx)
+{
+    /* Muxers use this FFmpeg/Matroska extradata layout: composition page
+     * id, ancillary page id, then subtitling type. MPEG-TS writes the
+     * type before the page ids in its subtitling descriptor. The decoder
+     * reads the page ids. Type 0x10 denotes normal subtitles with no
+     * monitor aspect ratio criticality. */
+    uint8_t *extradata = av_mallocz(5 + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!extradata)
+        return AVERROR(ENOMEM);
+
+    AV_WB16(extradata,     DVB_SUB_PAGE_ID);
+    AV_WB16(extradata + 2, DVB_SUB_PAGE_ID);
+    extradata[4]           = 0x10;
+
+    /* Extradata of the input stream has been copied into the context; it is
+     * of no use here, the page ids are always the ones above. */
+    av_freep(&avctx->extradata);
+    avctx->extradata      = extradata;
+    avctx->extradata_size = 5;
+
+    return 0;
+}
+
 static int dvbsub_encode(AVCodecContext *avctx, uint8_t *outbuf, int buf_size,
                          const AVSubtitle *h)
 {
@@ -283,7 +314,7 @@ static int dvbsub_encode(AVCodecContext *avctx, uint8_t *outbuf, int buf_size,
 
     q = outbuf;
 
-    page_id = 1;
+    page_id = DVB_SUB_PAGE_ID;
 
     switch(s->min_bpp) {
     case 2:
@@ -301,6 +332,13 @@ static int dvbsub_encode(AVCodecContext *avctx, uint8_t *outbuf, int buf_size,
 
     if (h->num_rects >= 256)
         return AVERROR(EINVAL);
+
+    for (i = 0; i < h->num_rects; i++) {
+        av_assert0(h->rects[i]->w >= 0 && h->rects[i]->h >= 0 &&
+                   h->rects[i]->nb_colors >= 0 && h->rects[i]->nb_colors <= 256);
+        if (h->rects[i]->w > 0xFFFF || h->rects[i]->h > 0xFFFF)
+            return AVERROR(EINVAL);
+    }
 
     if (avctx->width > 0 && avctx->height > 0) {
         if (buf_size < 11)
@@ -360,7 +398,7 @@ static int dvbsub_encode(AVCodecContext *avctx, uint8_t *outbuf, int buf_size,
                 return AVERROR(EINVAL);
             }
 
-            if (buf_size < 6 + h->rects[clut_id]->nb_colors * 6)
+            if (buf_size < 8 + h->rects[clut_id]->nb_colors * 6)
                 return AVERROR_BUFFER_TOO_SMALL;
 
             /* CLUT segment */
@@ -391,7 +429,7 @@ static int dvbsub_encode(AVCodecContext *avctx, uint8_t *outbuf, int buf_size,
             }
 
             bytestream_put_be16(&pseg_len, q - pseg_len - 2);
-            buf_size -= 6 + h->rects[clut_id]->nb_colors * 6;
+            buf_size -= 8 + h->rects[clut_id]->nb_colors * 6;
         }
 
         if (buf_size < h->num_rects * 22)
@@ -547,6 +585,7 @@ const FFCodec ff_dvbsub_encoder = {
     .p.type         = AVMEDIA_TYPE_SUBTITLE,
     .p.id           = AV_CODEC_ID_DVB_SUBTITLE,
     .priv_data_size = sizeof(DVBSubtitleContext),
+    .init           = dvbsub_encode_init,
     FF_CODEC_ENCODE_SUB_CB(dvbsub_encode),
     .p.priv_class   = &dvbsubenc_class,
 };

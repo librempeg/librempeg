@@ -828,8 +828,12 @@ static int frame_start(VVCContext *s, VVCFrameContext *fc, SliceContext *sc)
 
     av_frame_unref(fc->output_frame);
 
-    if ((ret = ff_vvc_output_frame(s, fc, fc->output_frame,rsh->sh_no_output_of_prior_pics_flag, 0)) < 0)
-        goto fail;
+    /* Do not abort the current picture when outputting an earlier one
+     * fails: decode and submit it, then report the error afterwards. */
+    fc->output_error = ff_vvc_output_frame(s, fc, fc->output_frame,
+                                          rsh->sh_no_output_of_prior_pics_flag, 0);
+    if (fc->output_error < 0)
+        av_frame_unref(fc->output_frame);
 
     if ((ret = ff_vvc_frame_rpl(s, fc, sc)) < 0)
         goto fail;
@@ -961,6 +965,15 @@ static int decode_slice(VVCContext *s, VVCFrameContext *fc, AVBufferRef *buf_ref
         ret = frame_setup(fc, s);
         if (ret < 0)
             return ret;
+    } else {
+        const H266RawSlice *first = fc->slices[0]->ref;
+        const H266RawSlice *slice = sc->ref;
+
+        if (slice->ph != first->ph || slice->pps != first->pps) {
+            av_log(fc->log_ctx, AV_LOG_ERROR,
+                   "Slice does not use the PH and PPS of the first slice.\n");
+            return AVERROR_INVALIDDATA;
+        }
     }
 
     ret = slice_start(sc, s, fc, unit, is_first_slice);
@@ -1130,6 +1143,8 @@ static int wait_delayed_frame(VVCContext *s, AVFrame *output, int *got_output)
 
     if (!ret) {
         ret = frame_end(s, delayed);
+        if (ret >= 0 && delayed->output_error < 0)
+            ret = delayed->output_error;
         if (ret >= 0 && delayed->output_frame->buf[0] && output) {
             av_frame_move_ref(output, delayed->output_frame);
             *got_output = 1;
@@ -1145,14 +1160,14 @@ static int submit_frame(VVCContext *s, VVCFrameContext *fc, AVFrame *output, int
     int ret;
 
     if (s->avctx->hwaccel) {
-        if (ret = FF_HW_SIMPLE_CALL(s->avctx, end_frame) < 0) {
+        if ((ret = FF_HW_SIMPLE_CALL(s->avctx, end_frame)) < 0) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "Hardware accelerator failed to decode picture\n");
             ff_vvc_unref_frame(fc, fc->ref, ~0);
             return ret;
         }
     } else {
-        if (ret = ff_vvc_frame_submit(s, fc) < 0) {
+        if ((ret = ff_vvc_frame_submit(s, fc)) < 0) {
             ff_vvc_report_frame_finished(fc->ref);
             return ret;
         }

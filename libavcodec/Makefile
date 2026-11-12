@@ -318,7 +318,7 @@ OBJS-$(CONFIG_BRENDER_PIX_DECODER)     += brenderpix.o
 OBJS-$(CONFIG_BVC2_DECODER)            += executor.o h2645data.o
 OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
-                                          cavsdata.o
+                                          cavsdata.o cavs_aec.o
 OBJS-$(CONFIG_CBD2_DPCM_DECODER)       += dpcm.o
 OBJS-$(CONFIG_CCAPTION_DECODER)        += ccaption_dec.o ass.o
 OBJS-$(CONFIG_CDGRAPHICS_DECODER)      += cdgraphics.o
@@ -529,6 +529,7 @@ OBJS-$(CONFIG_ILDA_DECODER)            += ildadec.o
 OBJS-$(CONFIG_IMC_DECODER)             += imc.o
 OBJS-$(CONFIG_IMM4_DECODER)            += imm4.o
 OBJS-$(CONFIG_IMM5_DECODER)            += imm5.o
+OBJS-$(CONFIG_IMM6_DECODER)            += imm6.o
 OBJS-$(CONFIG_INDEO2_DECODER)          += indeo2.o
 OBJS-$(CONFIG_INDEO3_DECODER)          += indeo3.o
 OBJS-$(CONFIG_INDEO4_DECODER)          += indeo4.o ivi.o
@@ -567,7 +568,7 @@ OBJS-$(CONFIG_METASOUND_DECODER)       += metasound.o twinvq.o
 OBJS-$(CONFIG_MICRODVD_DECODER)        += microdvddec.o ass.o
 OBJS-$(CONFIG_MIMIC_DECODER)           += mimic.o
 OBJS-$(CONFIG_MISC4_DECODER)           += misc4.o
-OBJS-$(CONFIG_MJPEG_DECODER)           += mjpegdec.o mjpegdec_common.o
+OBJS-$(CONFIG_MJPEG_DECODER)           += mjpegdec.o mjpegdec_common.o gain_map.o
 OBJS-$(CONFIG_MJPEG_QSV_DECODER)       += qsvdec.o
 OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpegenc_common.o \
                                           mjpegenc_huffman.o gain_map.o
@@ -738,6 +739,7 @@ OBJS-$(CONFIG_RV20_ENCODER)            += rv20enc.o
 OBJS-$(CONFIG_RV30_DECODER)            += rv30.o rv34.o rv30dsp.o
 OBJS-$(CONFIG_RV40_DECODER)            += rv40.o rv34.o rv40dsp.o
 OBJS-$(CONFIG_RV60_DECODER)            += rv60dec.o rv60dsp.o
+OBJS-$(CONFIG_RW2_DECODER)             += rw2dec.o
 OBJS-$(CONFIG_SAMI_DECODER)            += samidec.o ass.o htmlsubtitles.o
 OBJS-$(CONFIG_S302M_DECODER)           += s302m.o
 OBJS-$(CONFIG_S302M_ENCODER)           += s302menc.o
@@ -821,6 +823,7 @@ OBJS-$(CONFIG_TTML_ENCODER)            += ttmlenc.o ass_split.o
 OBJS-$(CONFIG_TTVIDEO_DECODER)         += ttvideo.o
 OBJS-$(CONFIG_TWINVQ_DECODER)          += twinvqdec.o twinvq.o
 OBJS-$(CONFIG_TXD_DECODER)             += txd.o
+OBJS-$(CONFIG_ULC_DECODER)             += ulcdec.o
 OBJS-$(CONFIG_ULTI_DECODER)            += ulti.o
 OBJS-$(CONFIG_UTK_DECODER)             += utkdec.o
 OBJS-$(CONFIG_UTK_R3_DECODER)          += utkdec.o
@@ -1410,6 +1413,7 @@ OBJS-$(CONFIG_PRORES_RAW_PARSER)       += prores_raw_parser.o
 OBJS-$(CONFIG_QOI_PARSER)              += qoi_parser.o
 OBJS-$(CONFIG_PRORES_PARSER)           += prores_parser.o
 OBJS-$(CONFIG_RV34_PARSER)             += rv34_parser.o
+OBJS-$(CONFIG_RW2_PARSER)              += rw2_parser.o
 OBJS-$(CONFIG_SBC_PARSER)              += sbc_parser.o
 OBJS-$(CONFIG_SIPR_PARSER)             += sipr_parser.o
 OBJS-$(CONFIG_SONARC_PARSER)           += sonarc_parser.o
@@ -1492,12 +1496,15 @@ TESTPROGS = avcodec                                                     \
             htmlsubtitles                                               \
             jpeg2000dwt                                                 \
             mathops                                                    \
+            packet_side_data_handle                                     \
 
 TESTPROGS-$(CONFIG_AC3DSP)                += ac3
 TESTPROGS-$(CONFIG_APV_DECODER)           += apv
 TESTPROGS-$(CONFIG_AV1_VAAPI_ENCODER)     += av1_levels
 TESTPROGS-$(CONFIG_CABAC)                 += cabac
+TESTPROGS-$(CONFIG_CAVS_DECODER)          += cavsdsp
 TESTPROGS-$(CONFIG_CELP_MATH)             += celp_math
+TESTPROGS-$(CONFIG_ENCODERS)              += hw_base_encode
 TESTPROGS-$(CONFIG_GOLOMB)                += golomb
 TESTPROGS-$(CONFIG_IDCTDSP)               += dct
 TESTPROGS-$(CONFIG_DXV_ENCODER)           += hashtable

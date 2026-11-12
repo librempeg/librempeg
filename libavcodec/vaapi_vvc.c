@@ -425,7 +425,7 @@ static int vaapi_vvc_start_frame(AVCodecContext          *avctx,
     if (!pps->pps_no_pic_partition_flag && pps->pps_rect_slice_flag && !pps->pps_single_slice_per_subpic_flag) {
         for (i = 0; i <= pps->pps_num_slices_in_pic_minus1; i++) {
             for (j = 0; j < pps->pps_num_exp_slices_in_tile[i]; j++) {
-                exp_slice_height_in_ctus[i + j] = pps->pps_exp_slice_height_in_ctus_minus1[i][j] + 1;
+                exp_slice_height_in_ctus[i + j] = pps->pps_exp_slice_height_in_ctus_minus1[i + j] + 1;
             }
         }
         for (i = 0; i <= pps->pps_num_slices_in_pic_minus1; i++) {
@@ -650,6 +650,7 @@ const FFHWAccel ff_vvc_vaapi_hwaccel = {
     .end_frame            = &vaapi_vvc_end_frame,
     .decode_slice         = &vaapi_vvc_decode_slice,
     .frame_priv_data_size = sizeof(VAAPIDecodePictureVVC),
+    .free_frame_priv      = &ff_vaapi_decode_free_frame_priv,
     .init                 = &ff_vaapi_decode_init,
     .uninit               = &ff_vaapi_decode_uninit,
     .frame_params         = &ff_vaapi_common_frame_params,

@@ -276,6 +276,9 @@ fate-hevc-extradata-reload: CMD = framemd5 -i $(TARGET_SAMPLES)/hevc/extradata-r
 fate-hevc-paired-fields: CMD = probeframes -show_entries frame=interlaced_frame,top_field_first $(TARGET_SAMPLES)/hevc/paired_fields.hevc
 FATE_HEVC_FFPROBE-$(call DEMDEC, HEVC, HEVC) += fate-hevc-paired-fields
 
+fate-hevc-atc-sei-reset: CMD = probeframes -show_entries frame=color_primaries,color_transfer,color_space $(TARGET_SAMPLES)/hevc/atc-sei-reset.hevc
+FATE_HEVC_FFPROBE-$(call PARSERDEMDEC, HEVC, HEVC, HEVC) += fate-hevc-atc-sei-reset
+
 fate-hevc-monochrome-crop: CMD = probeframes -show_entries frame=width,height:stream=width,height $(TARGET_SAMPLES)/hevc/hevc-monochrome.hevc
 FATE_HEVC_FFPROBE-$(call PARSERDEMDEC, HEVC, HEVC, HEVC) += fate-hevc-monochrome-crop
 
@@ -307,6 +310,11 @@ FATE_HEVC_FFPROBE-$(call DEMDEC, MOV, HEVC) += fate-hevc-skip-pred-pts
 fate-hevc-tiles-slice-threads: CMD = thread_type=slice threads=4 framecrc -i $(TARGET_SAMPLES)/hevc-conformance/TILES_A_Cisco_2.bit -pix_fmt yuv420p
 fate-hevc-tiles-slice-threads: REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-TILES_A_Cisco_2
 FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-tiles-slice-threads
+
+# SLICES_A conformance pictures through the parallel slice path, same output
+fate-hevc-slice-threads: CMD = thread_type=slice threads=4 framecrc -i $(TARGET_SAMPLES)/hevc-conformance/SLICES_A_Rovi_3.bit -pix_fmt yuv420p
+fate-hevc-slice-threads: REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-SLICES_A_Rovi_3
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-slice-threads
 
 # deblocking disabled + loop_filter_across_tiles: tile edges must stay unfiltered
 fate-hevc-tiles-nodeblock-slice-threads: CMD = thread_type=slice threads=4 framecrc -i $(TARGET_SAMPLES)/hevc/tiles_nodeblock.hevc
@@ -350,6 +358,23 @@ FATE_HEVC-$(call FRAMECRC, MOV, HEVC) += fate-hevc-alpha
 
 fate-hevc-color-reserved: CMD = framecrc -bsf:v hevc_metadata=colour_primaries=0:transfer_characteristics=0:matrix_coefficients=3 -i $(TARGET_SAMPLES)/hevc-conformance/AMP_A_Samsung_4.bit -vf scale,format=nv12 -frames:v 1
 FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_METADATA_BSF SCALE_FILTER) += fate-hevc-color-reserved
+
+# The tile_interleave option is forced here because FATE runs single threaded,
+# where the default of -1 keeps the tile scan order. TILES_A_Cisco_2 exercises
+# the entry-point path; TILES_B_Cisco_1 includes one-slice-per-tile pictures
+# and mixed slice layouts, exercising deferred interleaving and fallback. The
+# output is the same as in tile scan order.
+fate-hevc-tile-row-order-entry-points: CMD = framecrc -tile_interleave 1 -i $(TARGET_SAMPLES)/hevc-conformance/TILES_A_Cisco_2.bit -pix_fmt yuv420p
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-tile-row-order-entry-points
+
+fate-hevc-tile-row-order-slices: CMD = framecrc -tile_interleave 1 -i $(TARGET_SAMPLES)/hevc-conformance/TILES_B_Cisco_1.bit -pix_fmt yuv420p
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-tile-row-order-slices
+
+# One slice per tile with a suffix SEI after every picture: the deferred slices
+# are decoded once the SEI has been parsed, and nokey must still see the type
+# of the picture.
+fate-hevc-tile-row-order-nokey: CMD = framecrc -tile_interleave 1 -skip_loop_filter nokey -i $(TARGET_SAMPLES)/hevc/tile_row_order_nokey.hevc -pix_fmt yuv420p
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-tile-row-order-nokey
 
 FATE_SAMPLES_AVCONV += $(FATE_HEVC-yes)
 FATE_SAMPLES_FFPROBE += $(FATE_HEVC_FFPROBE-yes)

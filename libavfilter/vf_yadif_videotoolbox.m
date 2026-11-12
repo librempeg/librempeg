@@ -73,35 +73,34 @@ static void call_kernel(AVFilterContext *ctx,
                         int tff) API_AVAILABLE(macos(10.11), ios(8.0))
 {
     YADIFVTContext *s = ctx->priv;
-    id<MTLCommandBuffer> buffer = s->mtlQueue.commandBuffer;
-    id<MTLComputeCommandEncoder> encoder = buffer.computeCommandEncoder;
-    struct mtlYadifParams *params = (struct mtlYadifParams *)s->mtlParamsBuffer.contents;
-    *params = (struct mtlYadifParams){
-        .channels = channels,
-        .parity = parity,
-        .tff = tff,
-        .is_second_field = !(parity ^ tff),
-        .skip_spatial_check = s->yadif.mode&2,
-        .field_mode = s->yadif.current_field
-    };
+    @autoreleasepool {
+        id<MTLCommandBuffer> buffer = s->mtlQueue.commandBuffer;
+        id<MTLComputeCommandEncoder> encoder = buffer.computeCommandEncoder;
+        struct mtlYadifParams *params = (struct mtlYadifParams *)s->mtlParamsBuffer.contents;
+        *params = (struct mtlYadifParams){
+            .channels = channels,
+            .parity = parity,
+            .tff = tff,
+            .is_second_field = !(parity ^ tff),
+            .skip_spatial_check = s->yadif.mode&2,
+            .field_mode = s->yadif.current_field
+        };
 
-    [encoder setTexture:dst  atIndex:0];
-    [encoder setTexture:prev atIndex:1];
-    [encoder setTexture:cur  atIndex:2];
-    [encoder setTexture:next atIndex:3];
-    [encoder setBuffer:s->mtlParamsBuffer offset:0 atIndex:4];
-    ff_metal_compute_encoder_dispatch(s->mtlDevice, s->mtlPipeline, encoder, dst.width, dst.height);
-    [encoder endEncoding];
+        [encoder setTexture:dst  atIndex:0];
+        [encoder setTexture:prev atIndex:1];
+        [encoder setTexture:cur  atIndex:2];
+        [encoder setTexture:next atIndex:3];
+        [encoder setBuffer:s->mtlParamsBuffer offset:0 atIndex:4];
+        ff_metal_compute_encoder_dispatch(s->mtlDevice, s->mtlPipeline, encoder, dst.width, dst.height);
+        [encoder endEncoding];
 
-    [buffer commit];
-    [buffer waitUntilCompleted];
-
-    ff_objc_release(&encoder);
-    ff_objc_release(&buffer);
+        [buffer commit];
+        [buffer waitUntilCompleted];
+    }
 }
 
-static void filter(AVFilterContext *ctx, AVFrame *dst,
-                   int parity, int tff) API_AVAILABLE(macos(10.11), ios(8.0))
+static int filter(AVFilterContext *ctx, AVFrame *dst,
+                  int parity, int tff) API_AVAILABLE(macos(10.11), ios(8.0))
 {
     YADIFVTContext *s = ctx->priv;
     YADIFContext *y = &s->yadif;
@@ -123,7 +122,7 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
         channels = comp->step / pixel_size;
         if (pixel_size > 2 || channels > 2) {
             av_log(ctx, AV_LOG_ERROR, "Unsupported pixel format: %s\n", y->csp->name);
-            return;
+            return AVERROR(EINVAL);
         }
         switch (pixel_size) {
         case 1:
@@ -134,7 +133,7 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
             break;
         default:
             av_log(ctx, AV_LOG_ERROR, "Unsupported pixel format: %s\n", y->csp->name);
-            return;
+            return AVERROR(EINVAL);
         }
         av_log(ctx, AV_LOG_TRACE,
                "Deinterlacing plane %d: pixel_size: %d channels: %d\n",
@@ -151,7 +150,7 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
             if (cur)  CFRelease(cur);
             if (next) CFRelease(next);
             if (dest) CFRelease(dest);
-            return;
+            return AVERROR_EXTERNAL;
         }
 
         tex_prev = CVMetalTextureGetTexture(prev);
@@ -173,6 +172,8 @@ static void filter(AVFilterContext *ctx, AVFrame *dst,
     if (y->current_field == YADIF_FIELD_END) {
         y->current_field = YADIF_FIELD_NORMAL;
     }
+
+    return 0;
 }
 
 static av_cold void do_uninit(AVFilterContext *ctx) API_AVAILABLE(macos(10.11), ios(8.0))

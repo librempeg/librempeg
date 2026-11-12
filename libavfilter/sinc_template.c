@@ -157,6 +157,17 @@ static void fn(invert)(ftype *h, int n)
     h[(n - 1) / 2] += F(1.0);
 }
 
+static void fn(gain)(ftype *h, int n, const ftype g, const ftype G)
+{
+    for (int i = 0; i < n; i++)
+        h[i] *= g - F(1.0);
+
+    h[(n - 1) / 2] += F(1.0);
+
+    for (int i = 0; i < n; i++)
+        h[i] *= G;
+}
+
 #define SQR(a) ((a) * (a))
 
 static ftype fn(safe_log)(ftype x)
@@ -293,6 +304,7 @@ static int fn(generate)(AVFilterContext *ctx)
     SincContext *s = ctx->priv;
     ftype Fn = s->sample_rate * F(0.5);
     ftype *h[2], *coeffs;
+    ftype g = s->gain;
     int ret = 0, n, post_peak, longer;
 
     if (s->Fc0 >= Fn || s->Fc1 >= Fn) {
@@ -316,10 +328,15 @@ static int fn(generate)(AVFilterContext *ctx)
         for (int i = 0; i < s->num_taps[!longer]; i++)
             h[longer][i + (n - s->num_taps[!longer]) / 2] += h[!longer][i];
 
-        if (s->Fc0 < s->Fc1)
+        if (s->Fc0 < s->Fc1) {
             fn(invert)(h[longer], n);
+        } else if (g > F(0.0)) {
+            fn(gain)(h[longer], n, F(1.0) / g, g);
+        }
 
         av_free(h[!longer]);
+    } else if (g > F(0.0)) {
+        fn(gain)(h[longer], n, g, F(1.0));
     }
 
     if (s->phase != F(50.0)) {

@@ -1,6 +1,22 @@
+FATE_LIBAVFORMAT += fate-demux-probe
+fate-demux-probe: libavformat/tests/demux_probe$(EXESUF)
+fate-demux-probe: CMD = run libavformat/tests/demux_probe$(EXESUF)
+
 #FATE_LIBAVFORMAT-$(HAVE_PTHREADS) += fate-async
 #fate-async: libavformat/tests/async$(EXESUF)
 #fate-async: CMD = run libavformat/tests/async
+
+FATE_LIBAVFORMAT-$(CONFIG_MP3_MUXER) += fate-id3v2enc
+fate-id3v2enc: libavformat/tests/id3v2enc$(EXESUF)
+fate-id3v2enc: CMD = run libavformat/tests/id3v2enc$(EXESUF)
+
+FATE_LIBAVFORMAT-$(CONFIG_MP3_MUXER) += fate-id3v2chap
+fate-id3v2chap: libavformat/tests/id3v2chap$(EXESUF)
+fate-id3v2chap: CMD = run libavformat/tests/id3v2chap$(EXESUF)
+
+FATE_LIBAVFORMAT-$(call ALLYES, AU_MUXER AU_DEMUXER) += fate-auenc
+fate-auenc: libavformat/tests/auenc$(EXESUF)
+fate-auenc: CMD = run libavformat/tests/auenc$(EXESUF)
 
 FATE_LIBAVFORMAT += fate-mkdir
 fate-mkdir: libavformat/tests/mkdir$(EXESUF)
@@ -48,6 +64,10 @@ FATE_LIBAVFORMAT-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += fate-rtmpdh
 fate-rtmpdh: libavformat/tests/rtmpdh$(EXESUF)
 fate-rtmpdh: CMD = run libavformat/tests/rtmpdh$(EXESUF)
 
+FATE_LIBAVFORMAT-$(CONFIG_RTPDEC) += fate-rtpdec
+fate-rtpdec: libavformat/tests/rtpdec$(EXESUF)
+fate-rtpdec: CMD = run libavformat/tests/rtpdec$(EXESUF)
+
 FATE_LIBAVFORMAT-$(CONFIG_SRTP) += fate-srtp
 fate-srtp: libavformat/tests/srtp$(EXESUF)
 fate-srtp: CMD = run libavformat/tests/srtp$(EXESUF)
@@ -63,7 +83,6 @@ fate-imf: CMD = run libavformat/tests/imf$(EXESUF)
 FATE_LIBAVFORMAT += fate-seek_utils
 fate-seek_utils: libavformat/tests/seek_utils$(EXESUF)
 fate-seek_utils: CMD = run libavformat/tests/seek_utils$(EXESUF)
-fate-seek_utils: CMP = null
 
 FATE_LIBAVFORMAT += $(FATE_LIBAVFORMAT-yes)
 FATE-$(CONFIG_AVFORMAT) += $(FATE_LIBAVFORMAT)

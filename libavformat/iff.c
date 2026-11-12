@@ -601,7 +601,7 @@ static int iff_read_header(AVFormatContext *s)
                                      data_size + IFF_EXTRA_VIDEO_SIZE);
             if (res < 0)
                 return res;
-            if ((res = avio_read(pb, stv->codecpar->extradata + IFF_EXTRA_VIDEO_SIZE, data_size)) < 0) {
+            if ((res = ffio_read_size(pb, stv->codecpar->extradata + IFF_EXTRA_VIDEO_SIZE, data_size)) < 0) {
                 av_freep(&stv->codecpar->extradata);
                 stv->codecpar->extradata_size = 0;
                 return res;
@@ -646,7 +646,7 @@ static int iff_read_header(AVFormatContext *s)
                 return AVERROR_INVALIDDATA;
             if (!stv)
                 return AVERROR_INVALIDDATA;
-            if ((fmt_size = avio_read(pb, fmt, sizeof(fmt))) < 0)
+            if ((fmt_size = ffio_read_size(pb, fmt, sizeof(fmt))) < 0)
                 return fmt_size;
             if (fmt_size == sizeof(deep_rgb24) && !memcmp(fmt, deep_rgb24, sizeof(deep_rgb24)))
                 stv->codecpar->format = AV_PIX_FMT_RGB24;

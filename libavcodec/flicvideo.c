@@ -61,26 +61,38 @@
 #define FLC_MAGIC_CARPET_SYNTHETIC_TYPE_CODE (0xAF13)
 
 static inline int check_pixel_ptr(ptrdiff_t ptr, int n,
-                                  ptrdiff_t limit, int direction)
+                                  ptrdiff_t lo, ptrdiff_t hi)
 {
-    if (( direction && ptr + n > limit) ||
-        (!direction && ptr + n < limit))
+    if (ptr < lo || ptr + n > hi)
         return AVERROR_INVALIDDATA;
     return 0;
 }
 
 #define CHECK_PIXEL_PTR(n) \
 { \
-    ret = check_pixel_ptr(pixel_ptr, (n), pixel_limit, direction); \
+    ret = check_pixel_ptr(pixel_ptr, (n), pixel_lo, pixel_hi); \
     if (ret < 0) \
         return ret; \
 }
 
 #define CHECK_Y_PTR() \
 { \
-    ret = check_pixel_ptr(y_ptr, 0, pixel_limit, direction); \
+    ret = check_pixel_ptr(y_ptr, 0, pixel_lo, pixel_hi); \
     if (ret < 0) \
         return ret; \
+}
+
+static void pixel_range(const AVFrame *frame, ptrdiff_t *lo, ptrdiff_t *hi)
+{
+    ptrdiff_t linesize = frame->linesize[0];
+
+    if (linesize > 0) {
+        *lo = 0;
+        *hi = frame->height * linesize;
+    } else {
+        *lo = (frame->height - 1) * linesize;
+        *hi = -linesize;
+    }
 }
 
 typedef struct FlicDecodeContext {
@@ -178,7 +190,7 @@ static int flic_decode_frame_1BPP(AVCodecContext *avctx,
     unsigned int chunk_size;
     int chunk_type;
 
-    int i, j, ret, direction;
+    int i, j, ret;
 
     int lines;
     int compressed_lines;
@@ -189,16 +201,15 @@ static int flic_decode_frame_1BPP(AVCodecContext *avctx,
     int pixel_skip;
     int pixel_countdown;
     unsigned char *pixels;
-    ptrdiff_t pixel_limit;
+    ptrdiff_t pixel_lo, pixel_hi;
 
     bytestream2_init(&g2, buf, buf_size);
 
     if ((ret = ff_reget_buffer(avctx, s->frame, 0)) < 0)
         return ret;
 
-    direction = s->frame->linesize[0] > 0;
     pixels = s->frame->data[0];
-    pixel_limit = s->avctx->height * s->frame->linesize[0];
+    pixel_range(s->frame, &pixel_lo, &pixel_hi);
     if (buf_size < 16 || buf_size > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE)
         return AVERROR_INVALIDDATA;
     frame_size = bytestream2_get_le32(&g2);
@@ -373,7 +384,7 @@ static int flic_decode_frame_8BPP(AVCodecContext *avctx,
     unsigned int chunk_size;
     int chunk_type;
 
-    int i, j, ret, direction;
+    int i, j, ret;
 
     int color_packets;
     int color_changes;
@@ -389,16 +400,15 @@ static int flic_decode_frame_8BPP(AVCodecContext *avctx,
     int pixel_skip;
     int pixel_countdown;
     unsigned char *pixels;
-    ptrdiff_t pixel_limit;
+    ptrdiff_t pixel_lo, pixel_hi;
 
     bytestream2_init(&g2, buf, buf_size);
 
     if ((ret = ff_reget_buffer(avctx, s->frame, 0)) < 0)
         return ret;
 
-    direction = s->frame->linesize[0] > 0;
     pixels = s->frame->data[0];
-    pixel_limit = s->avctx->height * s->frame->linesize[0];
+    pixel_range(s->frame, &pixel_lo, &pixel_hi);
     if (buf_size < 16 || buf_size > INT_MAX - (3 * 256 + AV_INPUT_BUFFER_PADDING_SIZE))
         return AVERROR_INVALIDDATA;
     frame_size = bytestream2_get_le32(&g2);
@@ -642,7 +652,7 @@ static int flic_decode_frame_8BPP(AVCodecContext *avctx,
                        "has incorrect size, skipping chunk\n", chunk_size - 6);
                 bytestream2_skip(&g2, chunk_size - 6);
             } else {
-                for (y_ptr = 0; check_pixel_ptr(y_ptr, s->avctx->width, pixel_limit, direction) == 0;
+                for (y_ptr = 0; check_pixel_ptr(y_ptr, s->avctx->width, pixel_lo, pixel_hi) == 0;
                      y_ptr += s->frame->linesize[0]) {
                     bytestream2_get_buffer(&g2, &pixels[y_ptr],
                                            s->avctx->width);
@@ -711,7 +721,7 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
     unsigned int chunk_size;
     int chunk_type;
 
-    int i, j, ret, direction;
+    int i, j, ret;
 
     int lines;
     int compressed_lines;
@@ -722,16 +732,15 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
     int pixel_countdown;
     unsigned char *pixels;
     int pixel;
-    ptrdiff_t pixel_limit;
+    ptrdiff_t pixel_lo, pixel_hi;
 
     bytestream2_init(&g2, buf, buf_size);
 
     if ((ret = ff_reget_buffer(avctx, s->frame, 0)) < 0)
         return ret;
 
-    direction = s->frame->linesize[0] > 0;
     pixels = s->frame->data[0];
-    pixel_limit = s->avctx->height * s->frame->linesize[0];
+    pixel_range(s->frame, &pixel_lo, &pixel_hi);
 
     frame_size = bytestream2_get_le32(&g2);
     bytestream2_skip(&g2, 2);  /* skip the magic number */
@@ -850,7 +859,7 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
                         palette_idx1 = bytestream2_get_byte(&g2);
                         CHECK_PIXEL_PTR(byte_run);
                         for (j = 0; j < byte_run; j++) {
-                            pixels[pixel_ptr++] = palette_idx1;
+                            pixels[pixel_ptr++ ^ HAVE_BIGENDIAN] = palette_idx1;
                             pixel_countdown--;
                             if (pixel_countdown < 0)
                                 av_log(avctx, AV_LOG_ERROR, "pixel_countdown < 0 (%d) (linea%d)\n",
@@ -863,7 +872,7 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
                         CHECK_PIXEL_PTR(byte_run);
                         for (j = 0; j < byte_run; j++) {
                             palette_idx1 = bytestream2_get_byte(&g2);
-                            pixels[pixel_ptr++] = palette_idx1;
+                            pixels[pixel_ptr++ ^ HAVE_BIGENDIAN] = palette_idx1;
                             pixel_countdown--;
                             if (pixel_countdown < 0)
                                 av_log(avctx, AV_LOG_ERROR, "pixel_countdown < 0 (%d) at line %d\n",
@@ -871,20 +880,6 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
                         }
                     }
                 }
-
-                /* Now FLX is strange, in that it is "byte" as opposed to "pixel" run length compressed.
-                 * This does not give us any good opportunity to perform word endian conversion
-                 * during decompression. So if it is required (i.e., this is not a LE target, we do
-                 * a second pass over the line here, swapping the bytes.
-                 */
-#if HAVE_BIGENDIAN
-                pixel_ptr = y_ptr;
-                pixel_countdown = s->avctx->width;
-                while (pixel_countdown > 0) {
-                    *((signed short*)(&pixels[pixel_ptr])) = AV_RL16(&buf[pixel_ptr]);
-                    pixel_ptr += 2;
-                }
-#endif
                 y_ptr += s->frame->linesize[0];
             }
             break;
@@ -944,7 +939,7 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
 
                 if (bytestream2_get_bytes_left(&g2) < 2 * s->avctx->width * s->avctx->height )
                     return AVERROR_INVALIDDATA;
-                for (y_ptr = 0; check_pixel_ptr(y_ptr, 2*s->avctx->width, pixel_limit, direction) == 0;
+                for (y_ptr = 0; check_pixel_ptr(y_ptr, 2*s->avctx->width, pixel_lo, pixel_hi) == 0;
                      y_ptr += s->frame->linesize[0]) {
 
                     pixel_countdown = s->avctx->width;
@@ -1011,7 +1006,7 @@ static int flic_decode_frame_24BPP(AVCodecContext *avctx,
     unsigned int chunk_size;
     int chunk_type;
 
-    int i, j, ret, direction;
+    int i, j, ret;
 
     int lines;
     int compressed_lines;
@@ -1022,16 +1017,15 @@ static int flic_decode_frame_24BPP(AVCodecContext *avctx,
     int pixel_countdown;
     unsigned char *pixels;
     int pixel;
-    ptrdiff_t pixel_limit;
+    ptrdiff_t pixel_lo, pixel_hi;
 
     bytestream2_init(&g2, buf, buf_size);
 
     if ((ret = ff_reget_buffer(avctx, s->frame, 0)) < 0)
         return ret;
 
-    direction = s->frame->linesize[0] > 0;
     pixels = s->frame->data[0];
-    pixel_limit = s->avctx->height * s->frame->linesize[0];
+    pixel_range(s->frame, &pixel_lo, &pixel_hi);
 
     frame_size = bytestream2_get_le32(&g2);
     bytestream2_skip(&g2, 2);  /* skip the magic number */
@@ -1230,7 +1224,7 @@ static int flic_decode_frame_24BPP(AVCodecContext *avctx,
                        "bigger than image, skipping chunk\n", chunk_size - 6);
                 bytestream2_skip(&g2, chunk_size - 6);
             } else {
-                for (y_ptr = 0; check_pixel_ptr(y_ptr, 3*s->avctx->width, pixel_limit, direction) == 0;
+                for (y_ptr = 0; check_pixel_ptr(y_ptr, 3*s->avctx->width, pixel_lo, pixel_hi) == 0;
                      y_ptr += s->frame->linesize[0]) {
 
                     bytestream2_get_buffer(&g2, pixels + y_ptr, 3*s->avctx->width);

@@ -620,7 +620,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_AVS,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "avs",
-        .long_name = NULL_IF_CONFIG_SMALL("AVS (Audio Video Standard) video"),
+        .long_name = NULL_IF_CONFIG_SMALL("Argonaut Games Creature Shock video"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -655,8 +655,9 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_CAVS,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "cavs",
-        .long_name = NULL_IF_CONFIG_SMALL("Chinese AVS (Audio Video Standard) (AVS1-P2, JiZhun profile)"),
+        .long_name = NULL_IF_CONFIG_SMALL("Chinese AVS (Audio Video Standard) (AVS1-P2/P16)"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_cavs_profiles),
     },
     {
         .id        = AV_CODEC_ID_JPEG2000,
@@ -2120,6 +2121,21 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "ecm",
         .long_name = NULL_IF_CONFIG_SMALL("Eurocom Video"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_RW2,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "rw2",
+        .long_name = NULL_IF_CONFIG_SMALL("Panasonic RW2"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+        .mime_types= MT("image/x-panasonic-rw2"),
+    },
+    {
+	.id        = AV_CODEC_ID_IMM6,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "imm6",
+        .long_name = NULL_IF_CONFIG_SMALL("Infinity IMM6"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
     },
 
     /* various PCM "codecs" */
@@ -4139,6 +4155,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "compresswave",
         .long_name = NULL_IF_CONFIG_SMALL("CompressWave"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ULC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "ulc",
+        .long_name = NULL_IF_CONFIG_SMALL("ULC (Ultra-Low Complexity Codec)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

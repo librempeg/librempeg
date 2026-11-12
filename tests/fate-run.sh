@@ -690,6 +690,31 @@ concat(){
     fi
 }
 
+seek_concat(){
+    template=$1
+    sample=$2
+    shift 2
+
+    concatfile="${outdir}/${test}.ffconcat"
+    cleanfiles="$cleanfiles $concatfile"
+
+    awk "{gsub(/%SRCFILE%/, \"$sample\"); print}" $template > $concatfile
+    run libavformat/tests/seek${EXECSUF} $(target_path $concatfile) -safe 0 "$@"
+}
+
+seek_staggered(){
+    sample=$1
+    offset=$2
+    shift 2
+
+    file="${outdir}/${test}.mov"
+    cleanfiles="$cleanfiles $file"
+
+    ffmpeg -i $sample -itsoffset $offset -i $sample -map 0:a -map 1:a -c copy \
+        -fflags +bitexact -f mov -y $(target_path $file) || return
+    run libavformat/tests/seek${EXECSUF} $(target_path $file) "$@"
+}
+
 venc_data(){
     file=$1
     stream=$2
@@ -716,6 +741,9 @@ null(){
 # Disable globbing: command arguments may contain globbing characters and
 # must be kept verbatim
 set -f
+
+# A pipeline fails when any of its commands fails, if the shell supports it
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 exec 3>&2
 eval $command >"$outfile" 2>$errfile

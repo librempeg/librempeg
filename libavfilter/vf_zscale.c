@@ -208,10 +208,10 @@ static int query_formats(const AVFilterContext *ctx,
     };
     int ret;
 
-    ret = ff_formats_ref(ff_make_format_list(pixel_fmts), &cfg_in[0]->formats);
+    ret = ff_formats_ref(ff_make_pixel_format_list(pixel_fmts), &cfg_in[0]->formats);
     if (ret < 0)
         return ret;
-    ret = ff_formats_ref(ff_make_format_list(pixel_fmts), &cfg_out[0]->formats);
+    ret = ff_formats_ref(ff_make_pixel_format_list(pixel_fmts), &cfg_out[0]->formats);
     if (ret < 0)
         return ret;
 
@@ -1108,4 +1108,5 @@ const FFFilter ff_vf_zscale = {
     FILTER_OUTPUTS(zscale_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .process_command = process_command,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };

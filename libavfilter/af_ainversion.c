@@ -30,7 +30,12 @@
 typedef struct AudioInversionContext {
     const AVClass *class;
 
-    double unity, maxf;
+    double *unity;
+    unsigned nb_unity;
+
+    double *maxf;
+    unsigned nb_maxf;
+
     AVChannelLayout ch_layout;
 
     int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
@@ -38,10 +43,14 @@ typedef struct AudioInversionContext {
 
 #define OFFSET(x) offsetof(AudioInversionContext,x)
 #define AFT AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_unity = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_maxf = {.def="5",.size_min=1,.sep=' '};
 
 static const AVOption ainversion_options[] = {
-    { "unity", "set the unity amplitude", OFFSET(unity), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0, INT16_MAX, AFT },
-    { "max", "set the max output", OFFSET(maxf), AV_OPT_TYPE_DOUBLE, {.dbl=5.0}, 1.0, INT16_MAX, AFT },
+    { "unity", "set the unity amplitude", OFFSET(unity), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_unity}, 0, INT16_MAX, AFT },
+    { "max", "set the max output", OFFSET(maxf), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_maxf}, 1.0, INT16_MAX, AFT },
     { "channels", "set channels to filter", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0, 0, AFT },
     {NULL}
 };
@@ -122,13 +131,15 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 {
     const AudioInversionContext *s_src = src->priv;
     AudioInversionContext       *s_dst = dst->priv;
+    int ret;
 
     // only transfer state from main thread to workers
     if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
         return 0;
 
-    s_dst->maxf  = s_src->maxf;
-    s_dst->unity = s_src->unity;
+    ret = av_opt_copy(s_dst, s_src);
+    if (ret < 0)
+        return ret;
 
     if (av_channel_layout_compare(&s_dst->ch_layout, &s_src->ch_layout))
         return av_channel_layout_copy(&s_dst->ch_layout, &s_src->ch_layout);

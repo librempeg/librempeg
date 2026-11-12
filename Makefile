@@ -18,7 +18,7 @@ vpath %.ptx  $(SRC_PATH)
 vpath %.metal $(SRC_PATH)
 vpath %/fate_config.sh.template $(SRC_PATH)
 
-TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
+TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch amrgen apnggen
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 
 ALLFFLIBS =            \
@@ -228,5 +228,5 @@ $(sort $(OUTDIRS)):
 # so this saves some time on slow systems.
 .SUFFIXES:
 
-.PHONY: all all-yes alltools build check config testprogs
+.PHONY: all all-yes alltools build check config devprogs testprogs
 .PHONY: *clean install* uninstall*

@@ -280,7 +280,8 @@ typedef struct H266RawVPS {
     uint8_t  vps_num_ptls_minus1;
     uint8_t  vps_pt_present_flag[VVC_MAX_PTLS];
     uint8_t  vps_ptl_max_tid[VVC_MAX_PTLS];
-    H266RawProfileTierLevel vps_profile_tier_level[VVC_MAX_PTLS];
+    H266RawProfileTierLevel *vps_profile_tier_level;
+    AVBufferRef             *vps_profile_tier_level_ref;
     uint8_t  vps_ols_ptl_idx[VVC_MAX_TOTAL_NUM_OLSS];
 
     uint16_t vps_num_dpb_params_minus1;
@@ -537,7 +538,7 @@ typedef struct H266RawPPS {
     uint16_t pps_slice_width_in_tiles_minus1[VVC_MAX_SLICES];
     uint16_t pps_slice_height_in_tiles_minus1[VVC_MAX_SLICES];
     uint16_t pps_num_exp_slices_in_tile[VVC_MAX_SLICES];
-    uint16_t pps_exp_slice_height_in_ctus_minus1[VVC_MAX_SLICES][VVC_MAX_TILE_ROWS];
+    uint16_t pps_exp_slice_height_in_ctus_minus1[VVC_MAX_SLICES];
     int16_t  pps_tile_idx_delta_val[VVC_MAX_SLICES];
 
     uint8_t  pps_loop_filter_across_slices_enabled_flag;

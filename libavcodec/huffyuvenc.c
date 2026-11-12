@@ -370,6 +370,13 @@ static av_cold int encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
+    if (s->predictor == MEDIAN && s->version <= 2 &&
+        (avctx->width < 4 ||
+         AV_CEIL_RSHIFT(avctx->height, s->chroma_v_shift) < 2 + s->interlaced)) {
+        av_log(avctx, AV_LOG_ERROR, "Frame too small for the median predictor\n");
+        return AVERROR(EINVAL);
+    }
+
     avctx->extradata[0] = s->predictor | (s->decorrelate << 6);
     avctx->extradata[2] = s->interlaced ? 0x10 : 0x20;
     if (s->context)
@@ -904,7 +911,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             if (s->predictor==MEDIAN) {
                 int lefttop;
                 y = 1;
-                if (s->interlaced) {
+                if (s->interlaced && h > 1) {
                     left = sub_left_prediction(s, s->temp[0], p->data[plane] + p->linesize[plane], w , left);
 
                     encode_plane_bitstream(s, w, plane);

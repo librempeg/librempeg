@@ -182,7 +182,7 @@ static int query_formats(const AVFilterContext *ctx,
     if (s->tlut2 || !s->odepth)
         return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, all_pix_fmts);
 
-    ret = ff_formats_ref(ff_make_format_list(all_pix_fmts), &cfg_in[0]->formats);
+    ret = ff_formats_ref(ff_make_pixel_format_list(all_pix_fmts), &cfg_in[0]->formats);
     if (ret < 0)
         return ret;
 
@@ -196,7 +196,7 @@ static int query_formats(const AVFilterContext *ctx,
     default: return AVERROR_BUG;
     }
 
-    return ff_formats_ref(ff_make_format_list(pix_fmts), &cfg_out[0]->formats);
+    return ff_formats_ref(ff_make_pixel_format_list(pix_fmts), &cfg_out[0]->formats);
 }
 
 static int config_inputx(AVFilterLink *inlink)

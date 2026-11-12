@@ -158,8 +158,9 @@ static void check_compiled(const Test *test,
 
     static DECLARE_ALIGNED_64(char, src0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
     static DECLARE_ALIGNED_64(char, src1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    static DECLARE_ALIGNED_64(char, dst0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    static DECLARE_ALIGNED_64(char, dst1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    /* All output planes are stacked vertically in a single padded buffer */
+    static BUF_RECT(uint8_t, dst0, PIXELS * sizeof(uint32_t[4]), NB_PLANES * LINES);
+    static BUF_RECT(uint8_t, dst1, PIXELS * sizeof(uint32_t[4]), NB_PLANES * LINES);
 
     av_assert0(PIXELS % comp_new->block_size == 0);
     for (int p = 0; p < NB_PLANES; p++) {
@@ -186,8 +187,8 @@ static void check_compiled(const Test *test,
     }
 
     memcpy(src1, src0, sizeof(src0));
-    memset(dst0, 0, sizeof(dst0));
-    memset(dst1, 0, sizeof(dst1));
+    CLEAR_BUF_RECT(dst0);
+    CLEAR_BUF_RECT(dst1);
 
     const int read_size  = PIXELS * test->pixel_bits_in  >> 3;
     const int write_size = PIXELS * test->pixel_bits_out >> 3;
@@ -197,7 +198,7 @@ static void check_compiled(const Test *test,
     exec.height = exec.slice_h = LINES;
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in_stride[i]  = sizeof(src0[i][0]);
-        exec.out_stride[i] = sizeof(dst0[i][0]);
+        exec.out_stride[i] = dst0_stride;
         exec.in_bump[i]  = exec.in_stride[i]  - read_size;
         exec.out_bump[i] = exec.out_stride[i] - write_size;
     }
@@ -228,7 +229,7 @@ static void check_compiled(const Test *test,
 
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in[i]  = (void *) src0[i];
-        exec.out[i] = (void *) dst0[i];
+        exec.out[i] = dst0 + i * LINES * dst0_stride;
         exec.block_size_in[i]  = comp_ref->block_size * test->pixel_bits_in  >> 3;
         exec.block_size_out[i] = comp_ref->block_size * test->pixel_bits_out >> 3;
     }
@@ -236,7 +237,7 @@ static void check_compiled(const Test *test,
 
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in[i]  = (void *) src1[i];
-        exec.out[i] = (void *) dst1[i];
+        exec.out[i] = dst1 + i * LINES * dst1_stride;
         exec.block_size_in[i]  = comp_new->block_size * test->pixel_bits_in  >> 3;
         exec.block_size_out[i] = comp_new->block_size * test->pixel_bits_out >> 3;
     }
@@ -246,28 +247,41 @@ static void check_compiled(const Test *test,
         if (!SWS_COMP_TEST(test->planes_out, i))
             continue;
 
+        /* checkasm_check_padded() assumes a power of two alignment, but our
+         * overwrite may be an arbitrary number of bytes. Smooth out the
+         * difference by manually copying over the padding from the reference
+         * to the output buffer, and extending the checked padding past it. */
+        const int elem_size = ff_sws_pixel_type_size(test->type_out);
+        const int over_write = comp_new->over_write[i];
+        const int padding = (over_write + elem_size - 1) / elem_size + 8;
+        const int w = write_size / elem_size;
+        const uint8_t *out_ref = dst0 + i * LINES * dst0_stride;
+        uint8_t *out_new = exec.out[i];
+        for (int y = 0; y < LINES; y++) {
+            memcpy(&out_new[y * dst1_stride + write_size],
+                   &out_ref[y * dst0_stride + write_size], over_write);
+        }
+
         const char *desc = FMT("%s[%d]", test->name, i);
-        const int stride = sizeof(dst0[i][0]);
         switch (test->type_out) {
         case SWS_PIXEL_U8:
-            checkasm_check(uint8_t, (void *) dst0[i], stride,
-                                    (void *) dst1[i], stride,
-                                    write_size, LINES, desc);
+            checkasm_check_padded(uint8_t, out_ref, dst0_stride, out_new, dst1_stride,
+                                  w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_U16:
-            checkasm_check(uint16_t, (void *) dst0[i], stride,
-                                     (void *) dst1[i], stride,
-                                     write_size >> 1, LINES, desc);
+            checkasm_check_padded(uint16_t, (void *) out_ref, dst0_stride,
+                                            (void *) out_new, dst1_stride,
+                                            w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_U32:
-            checkasm_check(uint32_t, (void *) dst0[i], stride,
-                                     (void *) dst1[i], stride,
-                                     write_size >> 2, LINES, desc);
+            checkasm_check_padded(uint32_t, (void *) out_ref, dst0_stride,
+                                            (void *) out_new, dst1_stride,
+                                            w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_F32:
-            checkasm_check(float_ulp, (void *) dst0[i], stride,
-                                      (void *) dst1[i], stride,
-                                      write_size >> 2, LINES, desc, 0);
+            checkasm_check_padded(float_ulp, (void *) out_ref, dst0_stride,
+                                             (void *) out_new, dst1_stride,
+                                             w, LINES, desc, 0, 1, 0, padding);
             break;
         }
     }
@@ -460,16 +474,19 @@ static void check_simple(const char *name, const SwsUOp *uop)
     check_range(name, uop, NULL);
 }
 
-static void check_scalar(const char *name, SwsUOp *uop)
-{
-    uop->data.scalar = rndpx(uop->type);
-    check_simple(name, uop);
-}
-
 static void check_vec4(const char *name, SwsUOp *uop)
 {
     for (int i = 0; i < 4; i++)
         uop->data.vec4[i] = rndpx(uop->type);
+
+    check_simple(name, uop);
+}
+
+static void check_clear(const char *name, SwsUOp *uop)
+{
+    /* Clear values are always expanded to 32 bits, see SwsClearUOp */
+    for (int i = 0; i < 4; i++)
+        uop->data.vec4[i] = ff_sws_pixel_expand32(uop->type, rndpx(uop->type));
 
     check_simple(name, uop);
 }
@@ -515,7 +532,7 @@ static void check_filter(const char *name, SwsUOp *uop)
 
             char desc[256];
             snprintf(desc, sizeof(desc), "%s_%s_%d", name,
-                     uop->data.kernel->name, par.src_size);
+                     ff_sws_scaler_name(par.scaler), par.src_size);
 
             check_read(desc, uop);
             av_refstruct_unref(&uop->data.kernel);
@@ -694,14 +711,14 @@ void checkasm_check_sw_ops(void)
     CHECK_FOR(TO_U32,           check_cast);
     CHECK_FOR(TO_F32,           check_cast);
     CHECK_FOR(SCALE,            check_scale);
-    CHECK_FOR(ADD,              check_scalar);
+    CHECK_FOR(ADD,              check_vec4);
     CHECK_FOR(MIN,              check_vec4);
     CHECK_FOR(MAX,              check_vec4);
     CHECK_FOR(UNPACK,           check_unpack);
     CHECK_FOR(PACK,             check_pack);
     CHECK_FOR(LSHIFT,           check_simple);
     CHECK_FOR(RSHIFT,           check_simple);
-    CHECK_FOR(CLEAR,            check_vec4);
+    CHECK_FOR(CLEAR,            check_clear);
     CHECK_FOR(LINEAR,           check_linear);
     CHECK_FOR(DITHER,           check_dither);
     CHECK_FOR(LUT_3D,           check_lut_3d);

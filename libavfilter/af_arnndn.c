@@ -217,8 +217,8 @@ static int rnnoise_model_from_file(FILE *f, RNNModel **rnn)
     ALLOC_LAYER(DenseLayer, denoise_output);
     ALLOC_LAYER(DenseLayer, vad_output);
 
-#define INPUT_VAL(name) do { \
-    if (fscanf(f, "%d", &in) != 1 || in < 0 || in > 128) { \
+#define INPUT_VAL(name, min) do { \
+    if (fscanf(f, "%d", &in) != 1 || in < (min) || in > 128) { \
         rnnoise_model_free(ret); \
         return AVERROR(EINVAL); \
     } \
@@ -227,7 +227,7 @@ static int rnnoise_model_from_file(FILE *f, RNNModel **rnn)
 
 #define INPUT_ACTIVATION(name) do { \
     int activation; \
-    INPUT_VAL(activation); \
+    INPUT_VAL(activation, 0); \
     switch (activation) { \
     case F_ACTIVATION_SIGMOID: \
         name = ACTIVATION_SIGMOID; \
@@ -285,8 +285,8 @@ static int rnnoise_model_from_file(FILE *f, RNNModel **rnn)
     } while (0)
 
 #define INPUT_DENSE(name) do { \
-    INPUT_VAL(name->nb_inputs); \
-    INPUT_VAL(name->nb_neurons); \
+    INPUT_VAL(name->nb_inputs, 1); \
+    INPUT_VAL(name->nb_neurons, 1); \
     ret->name ## _size = name->nb_neurons; \
     INPUT_ACTIVATION(name->activation); \
     NEW_LINE(); \
@@ -297,8 +297,8 @@ static int rnnoise_model_from_file(FILE *f, RNNModel **rnn)
     } while (0)
 
 #define INPUT_GRU(name) do { \
-    INPUT_VAL(name->nb_inputs); \
-    INPUT_VAL(name->nb_neurons); \
+    INPUT_VAL(name->nb_inputs, 1); \
+    INPUT_VAL(name->nb_neurons, 1); \
     ret->name ## _size = name->nb_neurons; \
     INPUT_ACTIVATION(name->activation); \
     NEW_LINE(); \
@@ -317,7 +317,14 @@ static int rnnoise_model_from_file(FILE *f, RNNModel **rnn)
     INPUT_DENSE(denoise_output);
     INPUT_DENSE(vad_output);
 
-    if (vad_output->nb_neurons != 1) {
+    if (input_dense->nb_inputs    != NB_FEATURES ||
+        vad_gru->nb_inputs        != input_dense->nb_neurons ||
+        noise_gru->nb_inputs      != input_dense->nb_neurons + vad_gru->nb_neurons + NB_FEATURES ||
+        denoise_gru->nb_inputs    != vad_gru->nb_neurons + noise_gru->nb_neurons + NB_FEATURES ||
+        denoise_output->nb_inputs != denoise_gru->nb_neurons ||
+        denoise_output->nb_neurons != NB_BANDS ||
+        vad_output->nb_inputs     != vad_gru->nb_neurons ||
+        vad_output->nb_neurons    != 1) {
         rnnoise_model_free(ret);
         return AVERROR(EINVAL);
     }
@@ -1329,14 +1336,15 @@ static void compute_gru(AudioRNNContext *s, const GRULayer *gru, float *state, c
     RNN_COPY(state, h, N);
 }
 
-#define INPUT_SIZE 42
-
 static void compute_rnn(AudioRNNContext *s, RNNState *rnn, float *gains, float *vad, const float *input)
 {
     LOCAL_ALIGNED_32(float, dense_out,     [MAX_NEURONS]);
     LOCAL_ALIGNED_32(float, noise_input,   [MAX_NEURONS * 3]);
     LOCAL_ALIGNED_32(float, denoise_input, [MAX_NEURONS * 3]);
 
+    memset(dense_out,     0, MAX_NEURONS     * sizeof(float));
+    memset(noise_input,   0, MAX_NEURONS * 3 * sizeof(float));
+    memset(denoise_input, 0, MAX_NEURONS * 3 * sizeof(float));
     compute_dense(rnn->model->input_dense, dense_out, input);
     compute_gru(s, rnn->model->vad_gru, rnn->vad_gru_state, dense_out);
     compute_dense(rnn->model->vad_output, vad, rnn->vad_gru_state);
@@ -1345,7 +1353,7 @@ static void compute_rnn(AudioRNNContext *s, RNNState *rnn, float *gains, float *
     memcpy(noise_input + rnn->model->input_dense_size,
            rnn->vad_gru_state, rnn->model->vad_gru_size * sizeof(float));
     memcpy(noise_input + rnn->model->input_dense_size + rnn->model->vad_gru_size,
-           input, INPUT_SIZE * sizeof(float));
+           input, NB_FEATURES * sizeof(float));
 
     compute_gru(s, rnn->model->noise_gru, rnn->noise_gru_state, noise_input);
 
@@ -1353,7 +1361,7 @@ static void compute_rnn(AudioRNNContext *s, RNNState *rnn, float *gains, float *
     memcpy(denoise_input + rnn->model->vad_gru_size,
            rnn->noise_gru_state, rnn->model->noise_gru_size * sizeof(float));
     memcpy(denoise_input + rnn->model->vad_gru_size + rnn->model->noise_gru_size,
-           input, INPUT_SIZE * sizeof(float));
+           input, NB_FEATURES * sizeof(float));
 
     compute_gru(s, rnn->model->denoise_gru, rnn->denoise_gru_state, denoise_input);
     compute_dense(rnn->model->denoise_output, gains, rnn->denoise_gru_state);

@@ -1,0 +1,82 @@
+/*
+ * This file is part of Librempeg
+ *
+ * Librempeg is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Librempeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with Librempeg; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
+#ifndef AVUTIL_FRAMEPOOL_H
+#define AVUTIL_FRAMEPOOL_H
+
+#include "buffer.h"
+#include "frame.h"
+#include "internal.h"
+#include "thread.h"
+
+#include "ffframepool.h"
+#include "libavfilter/avfilter_internal.h"
+
+/**
+ * Recreate the video frame pool if its current configuration differs from the
+ * provided configuration. If initialization fails, the old pool is kept
+ * unchanged.
+ *
+ * @param pool pointer to the frame pool to be (re)initialized
+ * @param width width of each frame in this pool
+ * @param height height of each frame in this pool
+ * @param format format of each frame in this pool
+ * @param align buffers alignment of each frame in this pool
+ * @return 0 on success, a negative AVERROR otherwise.
+ */
+int ff_frame_pool_video_reinit(FFFramePool *pool,
+                               int width,
+                               int height,
+                               enum AVPixelFormat format,
+                               int align);
+
+/**
+ * Recreate the audio frame pool if its current configuration differs from the
+ * provided configuration. If initialization fails, the old pool is kept
+ * unchanged.
+ *
+ * @param pool pointer to the frame pool to be (re)initialized
+ * @param channels channels of each frame in this pool
+ * @param nb_samples number of samples of each frame in this pool
+ * @param format format of each frame in this pool
+ * @param align buffers alignment of each frame in this pool
+ * @return 0 on success, a negative AVERROR otherwise.
+ */
+int ff_frame_pool_audio_reinit(FFFramePool *pool,
+                               int channels,
+                               int nb_samples,
+                               enum AVSampleFormat format,
+                               int align);
+
+/**
+ * Deallocate the frame pool. It is safe to call this function while
+ * some of the allocated frame are still in use.
+ *
+ * @param pool pointer to the frame pool to be uninitialized
+ */
+void ff_frame_pool_uninit(FFFramePool *pool);
+
+/**
+ * Allocate a new AVFrame, reusing old buffers from the pool when available.
+ * This function may be called simultaneously from multiple threads.
+ *
+ * @return a new AVFrame on success, NULL on error.
+ */
+AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames, AVMutex *fifo_lock);
+
+#endif /* AVUTIL_FRAMEPOOL_H */

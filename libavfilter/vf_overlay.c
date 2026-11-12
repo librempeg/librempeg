@@ -278,12 +278,12 @@ static int query_formats(const AVFilterContext *ctx,
         av_assert0(0);
     }
 
-    formats = ff_make_format_list(main_formats);
+    formats = ff_make_pixel_format_list(main_formats);
     if ((ret = ff_formats_ref(formats, &cfg_in[MAIN]->formats)) < 0 ||
         (ret = ff_formats_ref(formats, &cfg_out[MAIN]->formats)) < 0)
         return ret;
 
-    return ff_formats_ref(ff_make_format_list(overlay_formats),
+    return ff_formats_ref(ff_make_pixel_format_list(overlay_formats),
                           &cfg_in[OVERLAY]->formats);
 }
 
@@ -976,4 +976,5 @@ const FFFilter ff_vf_overlay = {
     FILTER_QUERY_FUNC2(query_formats),
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };
