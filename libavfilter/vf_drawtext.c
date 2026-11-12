@@ -1255,6 +1255,7 @@ static int command(AVFilterContext *ctx, const char *cmd, const char *arg)
 
 fail:
     av_log(ctx, AV_LOG_ERROR, "Failed to process command. Continuing with existing parameters.\n");
+    av_opt_free(new);
     av_freep(&new);
     return ret;
 }
