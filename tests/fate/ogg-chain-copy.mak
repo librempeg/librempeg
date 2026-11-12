@@ -52,7 +52,7 @@ OGG_CHAIN_COPY_FILES = .1.ogg .2.ogg .ogg .copy.ogg .copy.ogg.pages .cut.ogg .cu
                        .ogg.crc .2.ogg.crc .copy.ogg.crc .cut.ogg.crc \
                        .headers .copy.headers .cut.headers .2.headers .pcm .copy.pcm
 
-OGG_CHAIN_COPY_DEPS = OGG_MUXER OGG_DEMUXER LAVFI_INDEV SINE_FILTER ARESAMPLE_FILTER \
+OGG_CHAIN_COPY_DEPS = OGG_MUXER OGG_DEMUXER LAVFI_INDEV SINE_FILTER ASF2SF_FILTER \
                       PCM_S16LE_DECODER PCM_S16LE_ENCODER PCM_S16LE_MUXER FRAMECRC_MUXER FILE_PROTOCOL
 
 OGG_CHAIN_COPY_VORBIS = tests/data/fate/ogg-vorbis-copy-chained.links

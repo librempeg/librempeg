@@ -184,7 +184,7 @@ fate-acodec: $(FATE_ACODEC)
 AUDIO_ENCODER_BOUNDARY_DEPS = LAVFI_INDEV SINE_FILTER ATRIM_FILTER \
                               PCM_S16LE_DECODER FRAMECRC_MUXER PIPE_PROTOCOL
 
-FATE_AUDIO_ENCODER_BOUNDARY-$(call ALLYES, $(AUDIO_ENCODER_BOUNDARY_DEPS) PCM_DVD_ENCODER ARESAMPLE_FILTER) += fate-audio-enc-pcm-dvd-short-tail
+FATE_AUDIO_ENCODER_BOUNDARY-$(call ALLYES, $(AUDIO_ENCODER_BOUNDARY_DEPS) PCM_DVD_ENCODER ASF2SF_FILTER) += fate-audio-enc-pcm-dvd-short-tail
 fate-audio-enc-pcm-dvd-short-tail: CMD = framecrc -auto_conversion_filters -f lavfi -i sine=r=48000 -af atrim=end_sample=171 -c:a pcm_dvd -sample_fmt s32
 
 FATE_AUDIO_ENCODER_BOUNDARY-$(call ALLYES, $(AUDIO_ENCODER_BOUNDARY_DEPS) TTA_ENCODER) += fate-audio-enc-tta-one-sample

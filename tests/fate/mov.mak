@@ -417,7 +417,7 @@ fate-mov-vfr: REF = 1558b4a9398d8635783c93f84eb5a60d
 
 # The QuickTime user data list has to carry the composer atom the demuxer
 # already reads: without it a mov to mov remux dropped the tag.
-FATE_MOV_FFMPEG_FFPROBE-$(call TRANSCODE, PCM_S16LE, MOV, WAV_DEMUXER ARESAMPLE_FILTER) += fate-mov-composer-metadata
+FATE_MOV_FFMPEG_FFPROBE-$(call TRANSCODE, PCM_S16LE, MOV, WAV_DEMUXER ASF2SF_FILTER) += fate-mov-composer-metadata
 fate-mov-composer-metadata: tests/data/asynth-44100-2.wav
 fate-mov-composer-metadata: CMD = transcode wav ./tests/data/asynth-44100-2.wav mov \
     "-af aresample -c:a pcm_s16le -t 0.05 -metadata composer=Bach" \

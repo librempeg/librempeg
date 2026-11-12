@@ -29,7 +29,7 @@ OGG_OPUS_CHAINED = \
     $(call OGG_OPUS_CHAIN_DECODE,$(1))
 
 OGG_OPUS_CHAINED_RESET_LINKS = tests/data/fate/ogg-opus-chained-reset.links
-FATE_OGG_OPUS_CHAIN-$(call TRANSCODE, OPUS, OGG, LAVFI_INDEV SINE_FILTER ARESAMPLE_FILTER PCM_S16LE_DECODER PCM_S16LE_MUXER FD_PROTOCOL) += fate-ogg-opus-chained-reset
+FATE_OGG_OPUS_CHAIN-$(call TRANSCODE, OPUS, OGG, LAVFI_INDEV SINE_FILTER ASF2SF_FILTER PCM_S16LE_DECODER PCM_S16LE_MUXER FD_PROTOCOL) += fate-ogg-opus-chained-reset
 fate-ogg-opus-chained-reset: CMD = $(call OGG_OPUS_CHAINED,$(OGG_OPUS_CHAINED_RESET_LINKS),)
 fate-ogg-opus-chained-reset: REF = $(OGG_OPUS_CHAINED_RESET_LINKS).pcm
 fate-ogg-opus-chained-reset: CLEANFILES = $(addprefix $(OGG_OPUS_CHAINED_RESET_LINKS),.1.ogg .2.ogg .pcm)
@@ -39,7 +39,7 @@ fate-ogg-opus-chained-reset: FUZZ = 0
 
 # The second link sets an output gain of -6 dB, which the first one does not.
 OGG_OPUS_CHAINED_GAIN_LINKS = tests/data/fate/ogg-opus-chained-gain.links
-FATE_OGG_OPUS_CHAIN-$(call TRANSCODE, OPUS, OGG, LAVFI_INDEV SINE_FILTER ARESAMPLE_FILTER PCM_S16LE_DECODER PCM_S16LE_MUXER FD_PROTOCOL OPUS_METADATA_BSF) += fate-ogg-opus-chained-gain
+FATE_OGG_OPUS_CHAIN-$(call TRANSCODE, OPUS, OGG, LAVFI_INDEV SINE_FILTER ASF2SF_FILTER PCM_S16LE_DECODER PCM_S16LE_MUXER FD_PROTOCOL OPUS_METADATA_BSF) += fate-ogg-opus-chained-gain
 fate-ogg-opus-chained-gain: CMD = $(call OGG_OPUS_CHAINED,$(OGG_OPUS_CHAINED_GAIN_LINKS),-bsf:a opus_metadata=gain=-1536)
 fate-ogg-opus-chained-gain: REF = $(OGG_OPUS_CHAINED_GAIN_LINKS).pcm
 fate-ogg-opus-chained-gain: CLEANFILES = $(addprefix $(OGG_OPUS_CHAINED_GAIN_LINKS),.1.ogg .2.ogg .pcm)
@@ -51,7 +51,7 @@ fate-ogg-opus-chained-gain: FUZZ = 0
 # buffered in the decoder.
 OGG_OPUS_REMUX = ffmpeg -i $(TARGET_SAMPLES)/opus/$(1).mka -c copy $(2) -f ogg -y $(3)
 OGG_OPUS_CHAINED_SILK_LINKS = tests/data/fate/ogg-opus-chained-silk.links
-FATE_OGG_OPUS_CHAIN_SAMPLES-$(call DEMMUX, MATROSKA, OGG, OGG_DEMUXER OPUS_DECODER ARESAMPLE_FILTER PCM_S16LE_ENCODER PCM_S16LE_MUXER FD_PROTOCOL PIPE_PROTOCOL) += fate-ogg-opus-chained-silk
+FATE_OGG_OPUS_CHAIN_SAMPLES-$(call DEMMUX, MATROSKA, OGG, OGG_DEMUXER OPUS_DECODER ASF2SF_FILTER PCM_S16LE_ENCODER PCM_S16LE_MUXER FD_PROTOCOL PIPE_PROTOCOL) += fate-ogg-opus-chained-silk
 fate-ogg-opus-chained-silk: CMD = \
     $(call OGG_OPUS_REMUX,testvector02,,$(OGG_OPUS_CHAINED_SILK_LINKS).1.ogg) && \
     $(call OGG_OPUS_REMUX,testvector03,-serial_offset 1,$(OGG_OPUS_CHAINED_SILK_LINKS).2.ogg) && \

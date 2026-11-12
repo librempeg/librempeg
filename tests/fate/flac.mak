@@ -56,7 +56,7 @@ fate-flac-midstream-blocksize-frame-threads: REF = $(SRC_PATH)/tests/ref/fate/fl
 fate-flac-midstream-blocksize-frame-threads: THREADS = 2
 fate-flac-midstream-blocksize-frame-threads: THREAD_TYPE = frame
 
-FATE_FLAC_MIDSTREAM-$(call TRANSCODE, FLAC, FLAC, LAVFI_INDEV SINE_FILTER ATRIM_FILTER FLAC_PARSER ARESAMPLE_FILTER PCM_S32LE_ENCODER FD_PROTOCOL PCM_S16LE_DECODER) += fate-flac-midstream-bps fate-flac-midstream-bps-frame-threads
+FATE_FLAC_MIDSTREAM-$(call TRANSCODE, FLAC, FLAC, LAVFI_INDEV SINE_FILTER ATRIM_FILTER FLAC_PARSER ASF2SF_FILTER PCM_S32LE_ENCODER FD_PROTOCOL PCM_S16LE_DECODER) += fate-flac-midstream-bps fate-flac-midstream-bps-frame-threads
 fate-flac-midstream-bps: CMD = $(FLAC_MIDSTREAM_BPS)
 fate-flac-midstream-bps-frame-threads: CMD = $(FLAC_MIDSTREAM_BPS)
 fate-flac-midstream-bps-frame-threads: REF = $(SRC_PATH)/tests/ref/fate/flac-midstream-bps

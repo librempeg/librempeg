@@ -41,7 +41,7 @@ fate-ogg-flac-chained-blocksize-frame-threads: REF = $(SRC_PATH)/tests/ref/fate/
 fate-ogg-flac-chained-blocksize-frame-threads: THREADS = 2
 fate-ogg-flac-chained-blocksize-frame-threads: THREAD_TYPE = frame
 
-FATE_OGG_FLAC_CHAIN-$(call TRANSCODE, FLAC, OGG, LAVFI_INDEV SINE_FILTER FLAC_PARSER ARESAMPLE_FILTER PCM_S32LE_ENCODER FD_PROTOCOL PCM_S16LE_DECODER) += fate-ogg-flac-chained-bps fate-ogg-flac-chained-bps-frame-threads
+FATE_OGG_FLAC_CHAIN-$(call TRANSCODE, FLAC, OGG, LAVFI_INDEV SINE_FILTER FLAC_PARSER ASF2SF_FILTER PCM_S32LE_ENCODER FD_PROTOCOL PCM_S16LE_DECODER) += fate-ogg-flac-chained-bps fate-ogg-flac-chained-bps-frame-threads
 fate-ogg-flac-chained-bps: CMD = $(OGG_FLAC_CHAINED_BPS)
 fate-ogg-flac-chained-bps-frame-threads: CMD = $(OGG_FLAC_CHAINED_BPS)
 fate-ogg-flac-chained-bps-frame-threads: REF = $(SRC_PATH)/tests/ref/fate/ogg-flac-chained-bps
