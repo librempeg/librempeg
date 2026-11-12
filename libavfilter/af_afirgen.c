@@ -351,7 +351,7 @@ static const AVFilterPad outputs[] = {
 
 const FFFilter ff_af_afirgen = {
     .p.name        = "afirgen",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate FIR coefficients from magnitude (dB) and unwrapped phase (rad) streams."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate Finite Impulse Response coefficients from magnitude (dB) and unwrapped phase (rad) streams."),
     .p.priv_class  = &afirgen_class,
     .priv_size     = sizeof(AFIRGenContext),
     .init          = init,

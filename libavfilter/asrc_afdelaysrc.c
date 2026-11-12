@@ -164,7 +164,7 @@ AVFILTER_DEFINE_CLASS(afdelaysrc);
 
 const FFFilter ff_asrc_afdelaysrc = {
     .p.name        = "afdelaysrc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a Fractional delay FIR coefficients."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a Fractional delay Finite Impulse Response coefficients."),
     .p.priv_class  = &afdelaysrc_class,
     .priv_size     = sizeof(AFDelaySrcContext),
     .activate      = activate,

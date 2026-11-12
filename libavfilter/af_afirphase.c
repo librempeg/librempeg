@@ -160,7 +160,7 @@ static const AVFilterPad inputs[] = {
 
 const FFFilter ff_af_afirphase = {
     .p.name          = "afirphase",
-    .p.description   = NULL_IF_CONFIG_SMALL("Adjust FIR filter phase."),
+    .p.description   = NULL_IF_CONFIG_SMALL("Adjust Finite Impulse Response filter phase."),
     .p.priv_class    = &afirphase_class,
     .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AudioFIRPhaseContext),

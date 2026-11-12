@@ -264,7 +264,7 @@ static const AVFilterPad afirsrc_outputs[] = {
 
 const FFFilter ff_asrc_afirsrc = {
     .p.name        = "afirsrc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a FIR coefficients audio stream."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a Finite Impulse Response coefficients audio stream."),
     .p.priv_class  = &afirsrc_class,
     .init          = init,
     .uninit        = uninit,

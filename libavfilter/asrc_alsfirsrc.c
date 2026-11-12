@@ -409,7 +409,7 @@ static const AVFilterPad alsfirsrc_outputs[] = {
 
 const FFFilter ff_asrc_alsfirsrc = {
     .p.name        = "alsfirsrc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a FIR coefficients audio stream with Least-Squares method."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a Finite Impulse Response coefficients audio stream with Least-Squares method."),
     .p.priv_class  = &alsfirsrc_class,
     .uninit        = uninit,
     .activate      = activate,

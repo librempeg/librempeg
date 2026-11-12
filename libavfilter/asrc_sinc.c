@@ -170,7 +170,7 @@ AVFILTER_DEFINE_CLASS(sinc);
 
 const FFFilter ff_asrc_sinc = {
     .p.name        = "sinc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, band-stop, low-shelf, high-shelf or peaking FIR coefficients."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, band-stop, low-shelf, high-shelf or peaking Finite Impulse Response coefficients."),
     .p.priv_class  = &sinc_class,
     .priv_size     = sizeof(SincContext),
     .uninit        = uninit,
