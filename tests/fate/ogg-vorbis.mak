@@ -7,6 +7,32 @@ fate-ogg-vorbis-copy-chained-meta: $(APITESTSDIR)/api-dump-stream-meta-test$(EXE
 fate-ogg-vorbis-copy-chained-meta: REF = $(SRC_PATH)/tests/ref/fate/ogg-vorbis-chained-meta.txt
 fate-ogg-vorbis-copy-chained-meta: CMD = run_with_temp "$(FFMPEG) -nostdin -hide_banner -loglevel quiet -i $(TARGET_SAMPLES)/ogg-vorbis/chained-meta.ogg -c copy -f ogg -y" "$(APITESTSDIR)/api-dump-stream-meta-test$(EXESUF)" ogg
 
+# Chain two streams cut from the same sample, the second one with a comment
+# header larger than 64 KiB (as with embedded cover art).
+FATE_OGG_COPY_VORBIS-$(call FRAMECRC, OGG, VORBIS, OGG_MUXER) += fate-ogg-vorbis-chained-large-comment
+fate-ogg-vorbis-chained-large-comment: CMD = \
+    { ffmpeg -i $(TARGET_SAMPLES)/vorbis/moog_small.ogg -c copy -t 0.5 -fflags +bitexact -f ogg - && \
+      printf "comment=%070000d" 0 | ffmpeg -i $(TARGET_SAMPLES)/vorbis/moog_small.ogg -/metadata pipe: \
+        -c copy -t 0.5 -fflags +bitexact -serial_offset 1 -f ogg -; } | \
+    framecrc -i pipe: -c copy
+
+# Splice pages of a single-chain sample: comment and setup headers without
+# identification header, then an identification header followed by audio,
+# then the complete sample again to check recovery.
+# The byte ranges are page boundaries of the sample.
+MOOG_SMALL_PAGES = dd if=$(SAMPLES)/vorbis/moog_small.ogg bs=1 skip=$(1) count=$$(($(2) - $(1))) 2>/dev/null
+FATE_OGG_VORBIS_PROBE-$(call DEMDEC, OGG, VORBIS, PIPE_PROTOCOL) += fate-ogg-vorbis-chained-misplaced-headers
+fate-ogg-vorbis-chained-misplaced-headers: CMD = \
+    { $(call MOOG_SMALL_PAGES,0,33991) && \
+      $(call MOOG_SMALL_PAGES,58,12762) && \
+      $(call MOOG_SMALL_PAGES,0,58) && \
+      $(call MOOG_SMALL_PAGES,12762,33991) && \
+      $(call MOOG_SMALL_PAGES,58,12762) && \
+      $(call MOOG_SMALL_PAGES,12762,33991) && \
+      $(call MOOG_SMALL_PAGES,0,12762) && \
+      $(call MOOG_SMALL_PAGES,12762,33991); } | \
+    probe -show_entries packet=pts:packet_tags:packet_side_data=side_data_type -of compact pipe:
+
 FATE_OGG_VORBIS_PROBE-$(call DEMDEC, OGG, VORBIS) += fate-ogg-vorbis-initial-padding-chained
 fate-ogg-vorbis-initial-padding-chained: CMD = ffprobe_demux -of default -show_entries stream=codec_name,initial_padding $(TARGET_SAMPLES)/ogg-vorbis/chained-meta.ogg
 
@@ -16,6 +42,9 @@ fate-ogg-vorbis-ts-offset: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_frames -o
 
 FATE_OGG_VORBIS_PROBE-$(call DEMDEC, OGG, VORBIS) += fate-ogg-vorbis-ts-seek
 fate-ogg-vorbis-ts-seek: CMD = ffprobe_demux -of default -bitexact -select_streams a -read_intervals 2.5%+\#5 -show_packets -show_entries packet=pts,dts,duration,flags -show_entries stream=codec_name,initial_padding $(TARGET_SAMPLES)/ogg-vorbis/tos.ogg
+
+FATE_OGG_VORBIS_PROBE-$(call DEMDEC, OGG, VORBIS) += fate-ogg-vorbis-ts-seek-1.5s
+fate-ogg-vorbis-ts-seek-1.5s: CMD = ffprobe_demux -of default -bitexact -select_streams a -read_intervals 1.5%+\#5 -show_packets -show_entries packet=pts,dts,duration,flags -show_entries stream=codec_name,initial_padding $(TARGET_SAMPLES)/ogg-vorbis/tos.ogg
 
 # Regression test for files with granule=0 on audio pages
 # See https://trac.ffmpeg.org/ticket/3710
@@ -27,6 +56,18 @@ fate-ogg-vorbis-libvorbis-1s: CMD = run_with_temp "$(FFMPEG) -nostdin -hide_bann
 
 FATE_OGG_VORBIS_ENCODE_PROBE-$(call ENCDEC, LIBVORBIS VORBIS, OGG, LAVFI_INDEV SINE_FILTER) += fate-ogg-vorbis-libvorbis-30s
 fate-ogg-vorbis-libvorbis-30s: CMD = run_with_temp "$(FFMPEG) -nostdin -hide_banner -loglevel quiet -f lavfi -i sine=frequency=440:duration=30:sample_rate=44100 -c:a libvorbis -bitexact -f ogg -y" "ffprobe$(PROGSSUF)$(EXESUF) -print_filename $$test -of default -bitexact -threads 1 -read_intervals %+\#5 -show_entries stream=codec_name,initial_padding:packet=pts,pts_time,dts,dts_time,duration,duration_time,flags:packet_side_data_list:format=filename,nb_streams,nb_programs,nb_stream_groups,format_name,start_time,duration,probe_score" ogg
+
+# Two links encoded at different qualities, so each has its own codebooks.
+# Decoded floats differ across platforms, so the output is the level of each
+# half second, in whole decibels.
+FATE_OGG_VORBIS_CHAIN-$(call TRANSCODE, LIBVORBIS VORBIS, OGG, FD_PROTOCOL PCM_S16LE_DECODER LAVFI_INDEV SINE_FILTER ARESAMPLE_FILTER ASETNSAMPLES_FILTER ASTATS_FILTER AMETADATA_FILTER NULL_MUXER) += fate-ogg-vorbis-chained-setup
+fate-ogg-vorbis-chained-setup: CMD = \
+    { ffmpeg -auto_conversion_filters -f lavfi -i sine=frequency=440:duration=1 -c:a libvorbis -q:a 1 \
+        -flags +bitexact -fflags +bitexact -f ogg - && \
+      ffmpeg -auto_conversion_filters -f lavfi -i sine=frequency=660:duration=1 -c:a libvorbis -q:a 9 \
+        -flags +bitexact -fflags +bitexact -serial_offset 1 -f ogg -; } | \
+    ffmpeg -auto_conversion_filters -i - -af asetnsamples=n=22050:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=- \
+        -f null - | awk -F= "/RMS_level/ { printf \"%.0f\\n\", \$$2 }"
 
 FATE_OGG_VORBIS-$(call DEMDEC, OGG, VORBIS) += $(FATE_OGG_VORBIS)
 
@@ -40,4 +81,6 @@ FATE_SAMPLES_FFPROBE += $(FATE_OGG_VORBIS_PROBE-yes)
 
 FATE_FFMPEG_FFPROBE += $(FATE_OGG_VORBIS_ENCODE_PROBE-yes)
 
-fate-ogg-vorbis: $(FATE_OGG_VORBIS-yes) $(FATE_OGG_COPY_VORBIS-yes) $(FATE_OGG_VORBIS_PROBE-yes) $(FATE_OGG_VORBIS_ENCODE_PROBE-yes)
+FATE_FFMPEG += $(FATE_OGG_VORBIS_CHAIN-yes)
+
+fate-ogg-vorbis: $(FATE_OGG_VORBIS-yes) $(FATE_OGG_COPY_VORBIS-yes) $(FATE_OGG_VORBIS_PROBE-yes) $(FATE_OGG_VORBIS_ENCODE_PROBE-yes) $(FATE_OGG_VORBIS_CHAIN-yes)

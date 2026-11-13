@@ -527,6 +527,10 @@ static int submit_packet(PerThreadContext *p, AVCodecContext *user_avctx,
             (codec->capabilities & AV_CODEC_CAP_DELAY)) {
             ret = update_context_from_thread(p->avctx, prev_thread->avctx, 0);
             if (ret) {
+                /* No packet was submitted and the thread indices did not advance,
+                 * so retrying the drain packet can repeat this error forever. */
+                if (user_avctx->internal->draining)
+                    user_avctx->internal->draining_done = 1;
                 pthread_mutex_unlock(&p->mutex);
                 return ret;
             }
@@ -559,6 +563,11 @@ int ff_thread_receive_frame(AVCodecContext *avctx, AVFrame *frame, unsigned flag
     /* release the async lock, permitting blocked hwaccel threads to
      * go forward while we are in this function */
     async_unlock(fctx);
+
+    if (avctx->internal->draining_done) {
+        ret = AVERROR_EOF;
+        goto finish;
+    }
 
     /* submit packets to threads while there are no buffered results to return */
     while (!fctx->df.nb_f && !fctx->result) {
@@ -787,6 +796,7 @@ av_cold void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
         ff_pthread_free(p, per_thread_offsets);
         av_packet_free(&p->avpkt);
 
+        av_channel_layout_uninit(&ctx->ch_layout);
         av_freep(&p->avctx);
     }
 
@@ -818,9 +828,11 @@ static av_cold int init_thread(PerThreadContext *p, int *threads_to_free,
     copy = av_memdup(avctx, sizeof(*avctx));
     if (!copy)
         return AVERROR(ENOMEM);
+    copy->internal = NULL;
     copy->priv_data = NULL;
     copy->decoded_side_data = NULL;
     copy->nb_decoded_side_data = 0;
+    copy->ch_layout = (AVChannelLayout){ 0 };
 
     /* From now on, this PerThreadContext will be cleaned up by
      * ff_frame_thread_free in case of errors. */
@@ -828,6 +840,10 @@ static av_cold int init_thread(PerThreadContext *p, int *threads_to_free,
 
     p->parent = fctx;
     p->avctx  = copy;
+
+    err = av_channel_layout_copy(&copy->ch_layout, &avctx->ch_layout);
+    if (err < 0)
+        return err;
 
     copy->internal = ff_decode_internal_alloc();
     if (!copy->internal)
@@ -879,8 +895,11 @@ static av_cold int init_thread(PerThreadContext *p, int *threads_to_free,
     }
     p->thread_init = NEEDS_CLOSE;
 
-    if (first)
-        update_context_from_thread(avctx, copy, 1);
+    if (first) {
+        err = update_context_from_thread(avctx, copy, 1);
+        if (err < 0)
+            return err;
+    }
 
     const AVCodecContext *src = first ? copy : avctx;
     AVCodecContext       *dst = first ? avctx : copy;

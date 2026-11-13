@@ -435,8 +435,8 @@ static int warp##ws##_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
         const int width = s->planewidth[plane];                                         \
         const int height = s->planeheight[plane];                                       \
                                                                                         \
-        const int slice_start = (height *  jobnr     ) / nb_jobs;                       \
-        const int slice_end   = (height * (jobnr + 1)) / nb_jobs;                       \
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);                   \
+        const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);                   \
                                                                                         \
         for (int y = slice_start; y < slice_end; y++) {                                 \
             const int16_t *const u = s->u[p] + y * uv_linesize * ws * ws;               \

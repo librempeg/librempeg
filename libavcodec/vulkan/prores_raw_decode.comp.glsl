@@ -23,13 +23,16 @@
 #pragma shader_stage(compute)
 #extension GL_GOOGLE_include_directive : require
 
-#define GET_BITS_SMEM 4
+/* Bitstream prefetch depth in 16-byte lines, set by the host */
+layout (constant_id = 0) const uint smem_lines = 4;
+#define GET_BITS_SMEM smem_lines
 #include "common.glsl"
 
 struct TileData {
    ivec2 pos;
    uint offset;
    uint size;
+   uint log2_nb_blocks;
 };
 
 layout (set = 0, binding = 0, r16ui) uniform writeonly uimage2D dst;
@@ -39,7 +42,6 @@ layout (set = 0, binding = 1, scalar) readonly buffer frame_data_buf {
 
 layout (push_constant, scalar) uniform pushConstants {
    u8buf pkt_data;
-   ivec2 tile_size;
 };
 
 #define COMP_ID (gl_LocalInvocationID.y)
@@ -87,25 +89,47 @@ const int16_t ln_cb[LN_CB_MAX + 1] = {
     I16( 51)
 };
 
+/* Decodes a symbol from the next 32 bits, zero-filled past the end of the
+ * data. Returns a negative value once those are all zero, which is where
+ * the reference decoder stops decoding a component. */
 int get_value(int16_t codebook)
 {
     const int switch_bits = int(codebook >> 8);
     const int rice_order  = int(codebook & I16(0xf));
     const int exp_order   = int((codebook >> 4) & I16(0xf));
+    int left = left_bits(gb);
+    uint b;
+    int q, bits;
 
-    uint32_t b = show_bits(gb, 32);
-    if (expectEXT(b == 0, false))
-        return 0;
-    int q = 31 - findMSB(b);
+    b = show_bits(gb, 32);
+    if (expectEXT(left < 32, false)) {
+        /* The reader has read past the end of the data; mask that off */
+        if (left <= 0)
+            return -1;
+        b &= 0xFFFFFFFFu << (32 - left);
+    }
+    if (expectEXT(b == 0u, false))
+        return -1;
+
+    q = 31 - findMSB(b);
+
+    /* No symbol is longer than the 32 bits show_bits() just made valid */
+    if ((b & 0x80000000u) != 0u) {
+        skip_bits_unchecked(gb, 1 + rice_order);
+        return int((b & 0x7FFFFFFFu) >> (31 - rice_order));
+    }
 
     if (q <= switch_bits) {
-        skip_bits_unchecked(gb, q + rice_order + 1);
+        skip_bits_unchecked(gb, 1 + rice_order + q);
         return int((q << rice_order) +
                    (((b << (q + 1)) >> 1) >> (31 - rice_order)));
     }
 
-    int bits = exp_order + (q << 1) - switch_bits;
-    skip_bits(gb, bits);
+    /* No valid code is longer than the window */
+    bits = exp_order + (q << 1) - switch_bits;
+    if (expectEXT(bits > 32, false))
+        return -1;
+    skip_bits_unchecked(gb, bits);
     return int((b >> (32 - bits)) +
                ((switch_bits + 1) << rice_order) -
                (1 << exp_order));
@@ -119,7 +143,8 @@ void store_val(ivec2 offs, int blk, int c, int16_t v)
                ivec4(v & 0xFFFF));
 }
 
-void read_dc_vals(ivec2 offs, int nb_blocks)
+/* Returns true if the decoding of the component ended */
+bool read_dc_vals(ivec2 offs, int nb_blocks)
 {
     int dc;
     int dc_add;
@@ -128,13 +153,12 @@ void read_dc_vals(ivec2 offs, int nb_blocks)
 
     /* Special handling for first block */
     dc = get_value(I16(700));
+    if (dc < 0)
+        return true;
     prev_dc = (dc >> 1) ^ -(dc & 1);
     store_val(offs, 0, 0, I16(prev_dc));
 
     for (int n = 1; n < nb_blocks; n++) {
-        if (expectEXT(left_bits(gb) <= 0, false))
-            break;
-
         int16_t dc_codebook;
         if ((n & 15) == 1)
             dc_codebook = I16(100);
@@ -142,6 +166,8 @@ void read_dc_vals(ivec2 offs, int nb_blocks)
             dc_codebook = I16(dc_cb[min(TODCCODEBOOK(dc), 13 - 1)]);
 
         dc = get_value(dc_codebook);
+        if (dc < 0)
+            return true;
 
         sign ^= dc & 1;
         dc_add = (-sign ^ TODCCODEBOOK(dc)) + sign;
@@ -150,6 +176,8 @@ void read_dc_vals(ivec2 offs, int nb_blocks)
 
         store_val(offs, n, 0, I16(prev_dc));
     }
+
+    return false;
 }
 
 void read_ac_vals(ivec2 offs, int nb_blocks)
@@ -165,47 +193,43 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
     int sign;
     int16_t val;
 
-    for (int n = nb_blocks; n <= nb_codes;) {
-        if (expectEXT(left_bits(gb) <= 0, false))
-            break;
-
+    for (int n = nb_blocks; n < nb_codes;) {
         ln = get_value(ln_codebook);
-        int loop_end = min(ln, nb_codes - n);
-        for (int i = 0; i < loop_end; i++) {
-            if (expectEXT(left_bits(gb) <= 0, false))
-                break;
+        if (ln < 0)
+            return;
 
+        for (int i = 0; i < ln; i++) {
             ac = get_value(ac_codebook);
+            if (ac < 0)
+                return;
             ac_codebook = ac_cb[min(ac, 95 - 1)];
             sign = -int(get_bit(gb));
 
             val = I16(((ac + 1) ^ sign) - sign);
             store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
 
-            n++;
+            if (++n == nb_codes)
+                return;
         }
 
-        if (expectEXT(n >= nb_codes, false))
-            break;
-
         rn = get_value(rn_codebook);
+        if (rn < 0)
+            return;
         rn_codebook = rn_cb[min(rn, 28 - 1)];
 
         n += rn + 1;
-        if (expectEXT(n >= nb_codes, false))
-            break;
-
-        if (expectEXT(left_bits(gb) <= 0, false))
-            break;
+        if (n >= nb_codes)
+            return;
 
         ac = get_value(ac_codebook);
+        if (ac < 0)
+            return;
+        ac_codebook = ac_cb[min(ac, 95 - 1)];
+        ln_codebook = ln_cb[min(ac, 15 - 1)];
         sign = -int(get_bit(gb));
 
         val = I16(((ac + 1) ^ sign) - sign);
         store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
-
-        ac_codebook = ac_cb[min(ac, 95 - 1)];
-        ln_codebook = ln_cb[min(ac, 15 - 1)];
 
         n++;
     }
@@ -215,10 +239,6 @@ void main(void)
 {
     const uint tile_idx = gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x;
     TileData td = tile_data[tile_idx];
-
-    int width = imageSize(dst).x;
-    if (expectEXT(td.pos.x >= width, false))
-        return;
 
     uint64_t pkt_offset = uint64_t(pkt_data) + td.offset;
     u8vec2buf hdr_data = u8vec2buf(pkt_offset);
@@ -233,8 +253,7 @@ void main(void)
         return;
 
     const ivec2 offs = td.pos + ivec2(COMP_ID & 1, COMP_ID >> 1);
-    const int w = min(tile_size.x, width - td.pos.x) >> 1;
-    const int nb_blocks = w >> 3;
+    const int nb_blocks = 1 << td.log2_nb_blocks;
 
     const ivec4 comp_offset = ivec4(size[2] + size[1] + size[3],
                                     size[2],
@@ -244,6 +263,6 @@ void main(void)
     init_get_bits(gb, u8buf(pkt_offset + header_len + comp_offset[COMP_ID]),
                   size[COMP_ID]);
 
-    read_dc_vals(offs, nb_blocks);
-    read_ac_vals(offs, nb_blocks);
+    if (!read_dc_vals(offs, nb_blocks))
+        read_ac_vals(offs, nb_blocks);
 }

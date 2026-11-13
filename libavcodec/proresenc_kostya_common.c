@@ -24,6 +24,7 @@
 #include "libavutil/pixdesc.h"
 #include "avcodec.h"
 #include "bytestream.h"
+#include "encode.h"
 #include "proresdata.h"
 #include <sys/types.h>
 #include "proresenc_kostya_common.h"
@@ -283,19 +284,27 @@ av_cold int ff_prores_kostya_encode_init(AVCodecContext *avctx, ProresContext *c
             ctx->bits_per_mb += ls_chroma * 4;
     }
 
-    ctx->frame_size_upper_bound = (ctx->pictures_per_frame *
+    int64_t frame_size_upper_bound = (int64_t)(ctx->pictures_per_frame *
                                    ctx->slices_per_picture + 1) *
                                   (2 + 2 * ctx->num_planes +
                                    (mps * ctx->bits_per_mb) / 8)
                                   + 200;
+    ctx->slice_size_upper_bound = mps * (ctx->chroma_factor == CFACTOR_Y444 ? 768 : 512) * 8;
 
     if (ctx->alpha_bits) {
          // The alpha plane is run-coded and might exceed the bit budget.
-         ctx->frame_size_upper_bound += (ctx->pictures_per_frame *
-                                         ctx->slices_per_picture + 1) *
-         /* num pixels per slice */     (ctx->mbs_per_slice * 256 *
-         /* bits per pixel */            (1 + ctx->alpha_bits + 1) + 7 >> 3);
+         int alpha_slice_size = /* num pixels per slice */ mps * 256 *
+                                /* bits per pixel */       (1 + ctx->alpha_bits + 1) + 7 >> 3;
+         frame_size_upper_bound += (int64_t)(ctx->pictures_per_frame *
+                                             ctx->slices_per_picture + 1) * alpha_slice_size;
+         ctx->slice_size_upper_bound += alpha_slice_size;
     }
+
+    if (frame_size_upper_bound + ctx->slice_size_upper_bound + FF_INPUT_BUFFER_MIN_SIZE > INT_MAX) {
+        av_log(avctx, AV_LOG_ERROR, "Frame too large to encode\n");
+        return AVERROR(EINVAL);
+    }
+    ctx->frame_size_upper_bound = frame_size_upper_bound;
 
     avctx->codec_tag   = ctx->profile_info->tag;
     avctx->profile = ctx->profile;
@@ -338,9 +347,9 @@ uint8_t *ff_prores_kostya_write_frame_header(AVCodecContext *avctx, ProresContex
     bytestream_put_byte  (&buf, frame_flags);
 
     bytestream_put_byte  (&buf, 0);             // reserved
-    bytestream_put_byte  (&buf, color_primaries);
-    bytestream_put_byte  (&buf, color_trc);
-    bytestream_put_byte  (&buf, colorspace);
+    bytestream_put_byte  (&buf, ff_prores_color_primaries(color_primaries));
+    bytestream_put_byte  (&buf, ff_prores_color_trc(color_trc));
+    bytestream_put_byte  (&buf, ff_prores_colorspace(colorspace));
     bytestream_put_byte  (&buf, ctx->alpha_bits >> 3);
     bytestream_put_byte  (&buf, 0);             // reserved
     if (ctx->quant_sel != QUANT_MAT_DEFAULT) {

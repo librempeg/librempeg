@@ -37,16 +37,19 @@
  *
  * One workgroup per segment. Inputs: the sparse slot buffer, the per-segment
  * sizes, and the slot stride.
+ *
+ * The last workgroup writes the packed size after the segment sizes.
  */
 
-layout (set = 0, binding = 0, scalar) readonly buffer sizes_buf {
+layout (set = 0, binding = 0, scalar) buffer sizes_buf {
     uint32_t seg_sizes[];
 };
 
 layout (push_constant, scalar) uniform pushConstants {
-    u8buf sparse;       /* one slot per segment       */
-    u8buf compacted;    /* contiguous output          */
-    uint  slot_size;    /* stride between sparse slots */
+    u8buf    sparse;      /* one slot per segment        */
+    u8buf    compacted;   /* contiguous output           */
+    uint64_t offset_addr; /* extra output offset, or 0   */
+    uint     slot_size;   /* stride between sparse slots */
 };
 
 shared uint s_dst_off;
@@ -108,7 +111,8 @@ void main(void)
     const uint n = seg_sizes[seg];
 
     const uint64_t src_base = uint64_t(sparse)    + seg * slot_size;
-    const uint64_t dst_base = uint64_t(compacted) + s_dst_off;
+    const uint base = offset_addr != 0ul ? u32buf(offset_addr).v : 0u;
+    const uint64_t dst_base = uint64_t(compacted) + base + s_dst_off;
 
     u8buf src8 = u8buf(src_base);
     u8buf dst8 = u8buf(dst_base);
@@ -141,4 +145,7 @@ void main(void)
 
     for (uint i = head + (nsafe << 4u) + b; i < n; i += wg)
         dst8[i].v = src8[i].v;
+
+    if (seg == gl_NumWorkGroups.x - 1u && b == 0u)
+        seg_sizes[gl_NumWorkGroups.x] = s_dst_off + n;
 }

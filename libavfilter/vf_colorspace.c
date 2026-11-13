@@ -316,7 +316,8 @@ static int convert(AVFilterContext *ctx, void *data, int job_nr, int n_jobs)
     uint8_t *in_data[3], *out_data[3];
     int16_t *rgb[3];
     int h_in = (td->in->height + 1) >> 1;
-    int h1 = 2 * (job_nr * h_in / n_jobs), h2 = 2 * ((job_nr + 1) * h_in / n_jobs);
+    int h1 = 2 * ff_slice_pos(h_in, job_nr, n_jobs);
+    int h2 = 2 * ff_slice_pos(h_in, job_nr+1, n_jobs);
     int w = td->in->width, h = h2 - h1;
 
     in_data[0]  = td->in->data[0]  + td->in_linesize[0]  *  h1;
@@ -481,7 +482,7 @@ static int create_filtergraph(AVFilterContext *ctx,
         }
         s->lrgb2lrgb_passthrough = !memcmp(s->in_primaries, s->out_primaries,
                                            sizeof(*s->in_primaries));
-        if (!s->lrgb2lrgb_passthrough) {
+        if (!s->lrgb2lrgb_passthrough && !s->fast_mode) {
             double rgb2xyz[3][3], xyz2rgb[3][3], rgb2rgb[3][3];
             const AVWhitepointCoefficients *wp_out, *wp_in;
 
@@ -503,7 +504,18 @@ static int create_filtergraph(AVFilterContext *ctx,
             }
             for (m = 0; m < 3; m++)
                 for (n = 0; n < 3; n++) {
-                    s->lrgb2lrgb_coeffs[m][n][0] = lrint(16384.0 * rgb2rgb[m][n]);
+                    long coeff = lrint(16384.0 * rgb2rgb[m][n]);
+                    if (coeff < INT16_MIN || coeff > INT16_MAX) {
+                        av_log(ctx, AV_LOG_ERROR,
+                               "Conversion from %s to %s primaries does not fit "
+                               "the fixed point range of the filter\n",
+                               av_color_primaries_name(s->in_prm),
+                               av_color_primaries_name(s->out_prm));
+                        s->in_primaries  = NULL;
+                        s->out_primaries = NULL;
+                        return AVERROR(EINVAL);
+                    }
+                    s->lrgb2lrgb_coeffs[m][n][0] = coeff;
                     for (o = 1; o < 8; o++)
                         s->lrgb2lrgb_coeffs[m][n][o] = s->lrgb2lrgb_coeffs[m][n][0];
                 }
@@ -874,7 +886,7 @@ static int query_formats(const AVFilterContext *ctx,
             return res;
     }
 
-    formats = ff_make_format_list(pix_fmts);
+    formats = ff_make_pixel_format_list(pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
     if (s->user_format == AV_PIX_FMT_NONE)

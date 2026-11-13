@@ -713,42 +713,10 @@ static void output_segment_list(OutputStream *os, AVIOContext *out, AVFormatCont
 }
 
 static char *xmlescape(const char *str) {
-    int outlen = strlen(str)*3/2 + 6;
-    char *out = av_realloc(NULL, outlen + 1);
-    int pos = 0;
-    if (!out)
+    char *out;
+    if (av_escape(&out, str, NULL, AV_ESCAPE_MODE_XML,
+                  AV_ESCAPE_FLAG_XML_SINGLE_QUOTES | AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES) < 0)
         return NULL;
-    for (; *str; str++) {
-        if (pos + 6 > outlen) {
-            char *tmp;
-            outlen = 2 * outlen + 6;
-            tmp = av_realloc(out, outlen + 1);
-            if (!tmp) {
-                av_free(out);
-                return NULL;
-            }
-            out = tmp;
-        }
-        if (*str == '&') {
-            memcpy(&out[pos], "&amp;", 5);
-            pos += 5;
-        } else if (*str == '<') {
-            memcpy(&out[pos], "&lt;", 4);
-            pos += 4;
-        } else if (*str == '>') {
-            memcpy(&out[pos], "&gt;", 4);
-            pos += 4;
-        } else if (*str == '\'') {
-            memcpy(&out[pos], "&apos;", 6);
-            pos += 6;
-        } else if (*str == '\"') {
-            memcpy(&out[pos], "&quot;", 6);
-            pos += 6;
-        } else {
-            out[pos++] = *str;
-        }
-    }
-    out[pos] = '\0';
     return out;
 }
 
@@ -805,8 +773,13 @@ static int write_adaptation_set(AVFormatContext *s, AVIOContext *out, int as_ind
         avio_printf(out, " par=\"%d:%d\"", as->par.num, as->par.den);
     }
     lang = av_dict_get(as->metadata, "language", NULL, 0);
-    if (lang)
-        avio_printf(out, " lang=\"%s\"", lang->value);
+    if (lang) {
+        char *escaped = xmlescape(lang->value);
+        if (!escaped)
+            return AVERROR(ENOMEM);
+        avio_printf(out, " lang=\"%s\"", escaped);
+        av_free(escaped);
+    }
     avio_printf(out, ">\n");
 
     if (!final && c->ldash && as->max_frag_duration && !(c->profile & MPD_PROFILE_DVB))
@@ -814,8 +787,13 @@ static int write_adaptation_set(AVFormatContext *s, AVIOContext *out, int as_ind
     if (as->trick_idx >= 0)
         avio_printf(out, "\t\t\t<EssentialProperty id=\"%d\" schemeIdUri=\"http://dashif.org/guidelines/trickmode\" value=\"%d\"/>\n", as->id, as->trick_idx);
     role = av_dict_get(as->metadata, "role", NULL, 0);
-    if (role)
-        avio_printf(out, "\t\t\t<Role schemeIdUri=\"urn:mpeg:dash:role:2011\" value=\"%s\"/>\n", role->value);
+    if (role) {
+        char *escaped = xmlescape(role->value);
+        if (!escaped)
+            return AVERROR(ENOMEM);
+        avio_printf(out, "\t\t\t<Role schemeIdUri=\"urn:mpeg:dash:role:2011\" value=\"%s\"/>\n", escaped);
+        av_free(escaped);
+    }
     if (as->descriptor)
         avio_printf(out, "\t\t\t%s\n", as->descriptor);
     for (i = 0; i < s->nb_streams; i++) {
@@ -829,7 +807,9 @@ static int write_adaptation_set(AVFormatContext *s, AVIOContext *out, int as_ind
         if (os->bit_rate > 0)
             snprintf(bandwidth_str, sizeof(bandwidth_str), " bandwidth=\"%d\"", os->bit_rate);
         else if (final) {
-            int average_bit_rate = os->pos * 8 * AV_TIME_BASE / c->total_duration;
+            int average_bit_rate = 0;
+            if (c->total_duration > 0)
+                average_bit_rate = os->pos * 8 * AV_TIME_BASE / c->total_duration;
             snprintf(bandwidth_str, sizeof(bandwidth_str), " bandwidth=\"%d\"", average_bit_rate);
         } else if (os->first_segment_bit_rate > 0)
             snprintf(bandwidth_str, sizeof(bandwidth_str), " bandwidth=\"%d\"", os->first_segment_bit_rate);
@@ -1225,8 +1205,10 @@ static int write_manifest(AVFormatContext *s, int final)
     }
 
     for (i = 0; i < c->nb_as; i++) {
-        if ((ret = write_adaptation_set(s, out, i, final)) < 0)
+        if ((ret = write_adaptation_set(s, out, i, final)) < 0) {
+            dashenc_io_close(s, &c->mpd_out, temp_filename);
             return ret;
+        }
     }
     avio_printf(out, "\t</Period>\n");
 

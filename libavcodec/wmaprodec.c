@@ -1829,38 +1829,91 @@ static int wmapro_decode_packet(AVCodecContext *avctx, AVFrame *frame,
     return decode_packet(avctx, s, frame, got_frame_ptr, avpkt);
 }
 
+static int xma_queue_frame(XMADecodeCtx *s, int stream_index)
+{
+    AVFrame *frame = s->frames[stream_index];
+    const int nb_samples = frame->nb_samples;
+    void *left[1] = { frame->extended_data[0] };
+    int ret;
+
+    ret = av_audio_fifo_write(s->samples[0][stream_index], left, nb_samples);
+    if (ret != nb_samples)
+        return ret < 0 ? ret : AVERROR_BUG;
+
+    if (s->xma[stream_index].nb_channels > 1) {
+        void *right[1] = { frame->extended_data[1] };
+
+        ret = av_audio_fifo_write(s->samples[1][stream_index], right,
+                                  nb_samples);
+        if (ret != nb_samples)
+            return ret < 0 ? ret : AVERROR_BUG;
+    }
+
+    return 0;
+}
+
+static int xma_get_frame_buffer(AVCodecContext *avctx, XMADecodeCtx *s,
+                                int stream_index)
+{
+    AVFrame *frame = s->frames[stream_index];
+
+    if (frame->data[0] && frame->nb_samples == 512)
+        return 0;
+
+    avctx->internal->skip_samples = 64;
+    av_frame_unref(frame);
+    frame->nb_samples = 512;
+    return ff_get_buffer(avctx, frame, 0);
+}
+
 static int xma_decode_packet(AVCodecContext *avctx, AVFrame *frame,
                              int *got_frame_ptr, AVPacket *avpkt)
 {
     XMADecodeCtx *s = avctx->priv_data;
-    int got_stream_frame_ptr = 0;
     int i, ret = 0, eof = 0;
 
-    if (!s->frames[s->current_stream]->data[0]) {
-        avctx->internal->skip_samples = 64;
-        s->frames[s->current_stream]->nb_samples = 512;
-        if ((ret = ff_get_buffer(avctx, s->frames[s->current_stream], 0)) < 0)
-            return ret;
-    } else if (s->frames[s->current_stream]->nb_samples != 512) {
-        avctx->internal->skip_samples = 64;
-        av_frame_unref(s->frames[s->current_stream]);
-        s->frames[s->current_stream]->nb_samples = 512;
-        if ((ret = ff_get_buffer(avctx, s->frames[s->current_stream], 0)) < 0)
-            return ret;
-    }
-    /* decode current stream packet */
-    if (!s->xma[s->current_stream].eof_done) {
-        ret = decode_packet(avctx, &s->xma[s->current_stream], s->frames[s->current_stream],
-                            &got_stream_frame_ptr, avpkt);
-    }
+    if (avpkt->size) {
+        int got_stream_frame_ptr = 0;
 
-    if (!avpkt->size) {
+        ret = xma_get_frame_buffer(avctx, s, s->current_stream);
+        if (ret < 0)
+            return ret;
+
+        /* decode current stream packet */
+        if (!s->xma[s->current_stream].eof_done) {
+            ret = decode_packet(avctx, &s->xma[s->current_stream],
+                                s->frames[s->current_stream],
+                                &got_stream_frame_ptr, avpkt);
+        }
+
+        if (got_stream_frame_ptr) {
+            int bret = xma_queue_frame(s, s->current_stream);
+
+            if (bret < 0)
+                return bret;
+        } else if (ret < 0) {
+            s->current_stream = 0;
+            return ret;
+        }
+    } else {
         eof = 1;
 
         for (i = 0; i < s->num_streams; i++) {
-            if (!s->xma[i].eof_done && s->frames[i]->data[0]) {
+            if (!s->xma[i].eof_done) {
+                int got_stream_frame_ptr = 0;
+
+                ret = xma_get_frame_buffer(avctx, s, i);
+                if (ret < 0)
+                    return ret;
                 ret = decode_packet(avctx, &s->xma[i], s->frames[i],
                                     &got_stream_frame_ptr, avpkt);
+                if (ret < 0)
+                    return ret;
+                if (got_stream_frame_ptr) {
+                    ret = xma_queue_frame(s, i);
+                    if (ret < 0)
+                        return ret;
+                }
             }
 
             eof &= s->xma[i].eof_done;
@@ -1871,20 +1924,6 @@ static int xma_decode_packet(AVCodecContext *avctx, AVFrame *frame,
         s->trim_start = s->xma[0].trim_start;
     if (s->xma[0].trim_end)
         s->trim_end = s->xma[0].trim_end;
-
-    /* copy stream samples (1/2ch) to sample buffer (Nch) */
-    if (got_stream_frame_ptr) {
-        const int nb_samples = s->frames[s->current_stream]->nb_samples;
-        void *left[1] = { s->frames[s->current_stream]->extended_data[0] };
-        void *right[1] = { s->frames[s->current_stream]->extended_data[1] };
-
-        av_audio_fifo_write(s->samples[0][s->current_stream], left, nb_samples);
-        if (s->xma[s->current_stream].nb_channels > 1)
-            av_audio_fifo_write(s->samples[1][s->current_stream], right, nb_samples);
-    } else if (ret < 0) {
-        s->current_stream = 0;
-        return ret;
-    }
 
     /* find next XMA packet's owner stream, and update.
      * XMA streams find their packets following packet_skips

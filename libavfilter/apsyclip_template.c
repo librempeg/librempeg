@@ -377,6 +377,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     const ftype clip_level_inv = F(1.0) / s->clip_level;
     const ftype level_out = s->level_out;
     ftype orig_peak = F(0.0), peak;
+    const int nb_bins = s->nb_bins;
 
     // shift in/out buffers
     memmove(in_frame, &in_frame[overlap], offset * sizeof(*in_frame));
@@ -450,7 +451,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
         // Be less strict in the next iteration.
         // This helps with peak control.
-        for (int j = 0; j < fft_size / 2 + 1; j++)
+        for (int j = 0; j < nb_bins; j++)
             mask_curve[j] *= mask_curve_shift;
     }
 

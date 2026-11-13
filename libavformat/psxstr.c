@@ -1,5 +1,5 @@
 /*
- * Sony Playstation (PSX) STR File Demuxer
+ * Sony PlayStation (PSX) STR File Demuxer
  * Copyright (c) 2003 The FFmpeg project
  *
  * This file is part of Librempeg
@@ -23,7 +23,7 @@
  * @file
  * PSX STR file demuxer
  * by Mike Melanson (melanson@pcisys.net)
- * This module handles streams that have been ripped from Sony Playstation
+ * This module handles streams that have been ripped from Sony PlayStation
  * CD games. This demuxer can handle either raw STR files (which are just
  * concatenations of raw compact disc sectors) or STR files with 0x2C-byte
  * RIFF headers, followed by CD sectors.
@@ -43,7 +43,7 @@
 #define RAW_CD_SECTOR_SIZE      2352
 #define RAW_CD_SECTOR_DATA_SIZE 2304
 #define RAW_DATA_SIZE           2048
-#define VIDEO_DATA_CHUNK_SIZE   0x7E0
+#define VIDEO_DATA_CHUNK_SIZE   2016
 #define VIDEO_DATA_HEADER_SIZE  0x38
 #define RIFF_HEADER_SIZE        0x2C
 
@@ -260,7 +260,7 @@ static int str_read_packet(AVFormatContext *s,
             if (sector[0x12] == CDXA_TYPE_AUDIO) // guess stereo
                 sector[0x13] |= 1;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
-            audio_packet_size = (split_index > 0) ? split_index : 2304;
+            audio_packet_size = (split_index > 0) ? split_index : RAW_DATA_SIZE;
             if (split_index > 0)
                 avio_seek(pb, -(RAW_DATA_SIZE - split_index), SEEK_CUR);
         } else if (str->mode == 1 || str->mode < 0) {
@@ -417,7 +417,7 @@ static int str_read_close(AVFormatContext *s)
 
 const FFInputFormat ff_str_demuxer = {
     .p.name         = "psxstr",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sony Playstation STR"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PlayStation STR"),
     .p.flags        = AVFMT_NO_BYTE_SEEK | AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(StrDemuxContext),
     .read_probe     = str_probe,

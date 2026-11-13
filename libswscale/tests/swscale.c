@@ -29,10 +29,15 @@
 #undef HAVE_AV_CONFIG_H
 #include "libavutil/cpu.h"
 #include "libavutil/avstring.h"
+#include "libavutil/bprint.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/lfg.h"
+#include "libavutil/md5.h"
 #include "libavutil/sfc64.h"
+#include "libavutil/slicethread.h"
+#include "libavutil/thread.h"
+#include "libavutil/threadmessage.h"
 #include "libavutil/frame.h"
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
@@ -43,9 +48,16 @@
 
 #include "libswscale/swscale.h"
 #include "libswscale/format.h"
+#include "libswscale/swscale_internal.h"
 
 #define IMPL_NEW    0
 #define IMPL_LEGACY 1
+
+/* Settings used for auxiliary conversions */
+enum {
+    AUX_BACKENDS = SWS_BACKEND_ALL,
+    AUX_FLAGS    = SWS_BILINEAR | SWS_BITEXACT | SWS_ACCURATE_RND,
+};
 
 struct options {
     enum AVPixelFormat src_fmt;
@@ -55,6 +67,7 @@ struct options {
     int dst_w;
     int dst_h;
     int threads;
+    int runners;
     int iters;
     int bench;
     int flags;
@@ -66,6 +79,7 @@ struct options {
     int api;
     int pretty;
     int backends;
+    int coverage;
 };
 
 struct mode {
@@ -82,6 +96,23 @@ struct test_results {
     int iters;
 };
 
+struct runner {
+    /* reused between tests for efficiency */
+    SwsContext *sws_ref_src;
+    SwsContext *sws_src_dst;
+    SwsContext *sws_dst_out;
+    AVFrame *src;
+};
+
+struct test_case {
+    enum AVPixelFormat src_fmt;
+    enum AVPixelFormat dst_fmt;
+    int dst_w, dst_h;
+    struct mode mode;
+    int has_ref;
+    struct test_results ref_r;
+};
+
 const SwsFlags flags[] = {
     0, // test defaults
     SWS_FAST_BILINEAR,
@@ -93,20 +124,32 @@ const SwsFlags flags[] = {
     SWS_BICUBIC | SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP,
 };
 
-static FFSFC64 prng_state;
+static struct {
+    FFSFC64 prng_state;
 
-/* reused between tests for efficiency */
-static SwsContext *sws_ref_src;
-static SwsContext *sws_src_dst;
-static SwsContext *sws_dst_out;
+    AVBufferRef *hw_device_ctx;
+    AVHWFramesConstraints *hw_device_constr;
 
-static AVBufferRef *hw_device_ctx = NULL;
-static AVHWFramesConstraints *hw_device_constr = NULL;
+    AVMutex speedup_lock;
+    double speedup_logavg;
+    double speedup_min;
+    double speedup_max;
+    int speedup_count;
 
-static double speedup_logavg;
-static double speedup_min = 1e10;
-static double speedup_max = 0;
-static int speedup_count;
+    int coverage_total;
+    int coverage_supported;
+    struct AVMD5 *coverage_md5;
+
+    struct runner *runners;
+    AVFrame *ref;
+    FILE *fp;
+
+    /* Tests waiting for a runner, if running concurrently */
+    AVThreadMessageQueue *queue;
+} state = {
+    .speedup_lock = AV_MUTEX_INITIALIZER,
+    .speedup_min  = 1e10,
+};
 
 static const char *speedup_color(double ratio)
 {
@@ -121,11 +164,11 @@ static const char *speedup_color(double ratio)
 
 static void exit_handler(int sig)
 {
-    if (speedup_count) {
-        double ratio = exp(speedup_logavg / speedup_count);
+    if (state.speedup_count) {
+        double ratio = exp(state.speedup_logavg / state.speedup_count);
         fprintf(stderr, "Overall speedup=%.3fx %s%s\033[0m, min=%.3fx max=%.3fx\n", ratio,
                 speedup_color(ratio), ratio >= 1.0 ? "faster" : "slower",
-                speedup_min, speedup_max);
+                state.speedup_min, state.speedup_max);
     }
 
     exit(sig);
@@ -235,6 +278,26 @@ static void unref_buffers(AVFrame *frame)
     memset(frame->linesize, 0, sizeof(frame->linesize));
 }
 
+/* A negative alignment allocates a vertically flipped (negative stride) frame */
+static int get_buffer(AVFrame *frame, int align)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    int ret = av_frame_get_buffer(frame, FFABS(align));
+    if (ret < 0 || align >= 0)
+        return ret;
+
+    const int nb_planes = av_pix_fmt_count_planes(frame->format);
+    for (int p = 0; p < nb_planes; p++) {
+        const int is_chroma = p == 1 || p == 2;
+        const int h = is_chroma ? AV_CEIL_RSHIFT(frame->height, desc->log2_chroma_h)
+                                : frame->height;
+        frame->data[p] += (h - 1) * frame->linesize[p];
+        frame->linesize[p] = -frame->linesize[p];
+    }
+
+    return 0;
+}
+
 static int checked_sws_scale_frame(SwsContext *c, AVFrame *dst, const AVFrame *src)
 {
     int ret = sws_scale_frame(c, dst, src);
@@ -245,10 +308,11 @@ static int checked_sws_scale_frame(SwsContext *c, AVFrame *dst, const AVFrame *s
     return ret;
 }
 
-static int scale_new(AVFrame *dst, const AVFrame *src,
+static int scale_new(struct runner *runner, AVFrame *dst, const AVFrame *src,
                      const struct mode *mode, const struct options *opts,
                      int64_t *out_time)
 {
+    SwsContext *sws_src_dst = runner->sws_src_dst;
     sws_src_dst->flags      = mode->flags;
     sws_src_dst->dither     = mode->dither;
     sws_src_dst->scaler     = mode->scaler;
@@ -267,7 +331,7 @@ static int scale_new(AVFrame *dst, const AVFrame *src,
     for (int i = 0; ret >= 0 && i < opts->iters; i++) {
         unref_buffers(dst);
         if (opts->align_dst) {
-            ret = av_frame_get_buffer(dst, opts->align_dst);
+            ret = get_buffer(dst, opts->align_dst);
             if (ret < 0)
                 return ret;
         }
@@ -306,7 +370,7 @@ static int scale_legacy(AVFrame *dst, const AVFrame *src,
     dst->width  = sws_legacy->dst_w;
     dst->height = sws_legacy->dst_h;
     dst->format = sws_legacy->dst_format;
-    ret = av_frame_get_buffer(dst, opts->align_dst);
+    ret = get_buffer(dst, opts->align_dst);
     if (ret < 0)
         goto error;
 
@@ -337,19 +401,20 @@ static int scale_hw(AVFrame *dst, const AVFrame *src,
     AVFrame *out_f = NULL;
     int ret;
 
-    if (src->format == dst->format)
-        return AVERROR(ENOTSUP);
-
     sws_hw = sws_alloc_context();
     if (!sws_hw) {
         ret = AVERROR(ENOMEM);
         goto error;
     }
 
-    sws_hw->flags  = mode->flags;
-    sws_hw->dither = mode->dither;
+    sws_hw->flags      = mode->flags;
+    sws_hw->dither     = mode->dither;
+    sws_hw->scaler     = mode->scaler;
+    sws_hw->scaler_sub = mode->scaler_sub;
+    sws_hw->threads    = opts->threads;
+    sws_hw->backends   = opts->backends;
 
-    in_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+    in_ref = av_hwframe_ctx_alloc(state.hw_device_ctx);
     if (!in_ref) {
         ret = AVERROR(ENOMEM);
         goto error;
@@ -368,7 +433,7 @@ static int scale_hw(AVFrame *dst, const AVFrame *src,
         goto error;
     }
 
-    out_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+    out_ref = av_hwframe_ctx_alloc(state.hw_device_ctx);
     if (!out_ref) {
         ret = AVERROR(ENOMEM);
         goto error;
@@ -450,22 +515,22 @@ error:
     return ret;
 }
 
-static void print_test_params(char *buf, size_t buf_size,
+static void print_test_params(AVBPrint *bp,
                               const AVFrame *src, const AVFrame *dst,
                               const struct mode *mode, const struct options *opts)
 {
-    snprintf(buf, buf_size,
-             "%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u scaler=%d/%d",
-             opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
-             opts->pretty ?  4 : 0, src->width,
-             opts->pretty ?  4 : 0, src->height,
-             opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
-             opts->pretty ?  4 : 0, dst->width,
-             opts->pretty ?  4 : 0, dst->height,
-             opts->pretty ?  8 : 0, mode->flags,
-             mode->dither,
-             mode->scaler,
-             mode->scaler_sub);
+    av_bprintf(bp,
+               "%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u scaler=%d/%d",
+               opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
+               opts->pretty ?  4 : 0, src->width,
+               opts->pretty ?  4 : 0, src->height,
+               opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
+               opts->pretty ?  4 : 0, dst->width,
+               opts->pretty ?  4 : 0, dst->height,
+               opts->pretty ?  8 : 0, mode->flags,
+               mode->dither,
+               mode->scaler,
+               mode->scaler_sub);
 }
 
 static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame *dst,
@@ -475,55 +540,62 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
                           const struct test_results *ref_r,
                           float expected_loss)
 {
-    char buf[128];
+    AVBPrint bprint, *bp = &bprint;
+    av_bprint_init(bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
     if (av_log_get_level() >= AV_LOG_INFO) {
-        print_test_params(buf, sizeof(buf), src, dst, mode, opts);
-        printf("%s", buf);
+        print_test_params(bp, src, dst, mode, opts);
 
         if (!opts->bench || !ref_r) {
-            printf(", SSIM={Y=%f U=%f V=%f A=%f} loss=%e",
-                   r->ssim[0], r->ssim[1], r->ssim[2], r->ssim[3],
-                   r->loss);
+            av_bprintf(bp, ", SSIM={Y=%f U=%f V=%f A=%f} loss=%e",
+                       r->ssim[0], r->ssim[1], r->ssim[2], r->ssim[3],
+                       r->loss);
             if (ref_r)
-                printf(" (ref=%e)", ref_r->loss);
+                av_bprintf(bp, " (ref=%e)", ref_r->loss);
         }
 
         if (opts->bench) {
-            printf(", time=%*"PRId64"/%u us",
-                   opts->pretty ? 7 : 0, r->time, opts->iters);
+            av_bprintf(bp, ", time=%*"PRId64"/%u us",
+                       opts->pretty ? 7 : 0, r->time, opts->iters);
             if (ref_r) {
                 double ratio = ((double) ref_r->time / ref_r->iters)
                              / ((double) r->time / opts->iters);
                 if (FFMIN(r->time, ref_r->time) > 100 /* don't pollute stats with low precision */) {
-                    speedup_min = FFMIN(speedup_min, ratio);
-                    speedup_max = FFMAX(speedup_max, ratio);
-                    speedup_logavg += log(ratio);
-                    speedup_count++;
+                    ff_mutex_lock(&state.speedup_lock);
+                    state.speedup_min = FFMIN(state.speedup_min, ratio);
+                    state.speedup_max = FFMAX(state.speedup_max, ratio);
+                    state.speedup_logavg += log(ratio);
+                    state.speedup_count++;
+                    ff_mutex_unlock(&state.speedup_lock);
                 }
 
-                printf(" (ref=%*"PRId64"/%u us), speedup=%*.3fx %s%s\033[0m",
-                       opts->pretty ? 7 : 0, ref_r->time, ref_r->iters,
-                       opts->pretty ? 6 : 0, ratio,
-                       speedup_color(ratio), ratio >= 1.0 ? "faster" : "slower");
+                av_bprintf(bp, " (ref=%*"PRId64"/%u us), speedup=%*.3fx %s%s\033[0m",
+                           opts->pretty ? 7 : 0, ref_r->time, ref_r->iters,
+                           opts->pretty ? 6 : 0, ratio,
+                           speedup_color(ratio), ratio >= 1.0 ? "faster" : "slower");
             }
         }
-        printf("\n");
+        av_bprintf(bp, "\n");
 
-        fflush(stdout);
+        if (av_bprint_is_complete(bp)) {
+            fputs(bp->str, stdout);
+            fflush(stdout);
+        }
     }
 
     if (r->loss - expected_loss > 1e-4 && dst_w >= ref->width && dst_h >= ref->height) {
         const int bad = r->loss - expected_loss > 1e-2;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        av_bprint_clear(bp);
         if (bad) {
-            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
-            av_log(NULL, level, "%s\n", buf);
+            print_test_params(bp, src, dst, mode, opts);
+            av_bprintf(bp, "\n");
         }
-        av_log(NULL, level,
-               "  loss %e is %s by %e, expected loss %e\n",
-               r->loss, worse_str, r->loss - expected_loss, expected_loss);
+        av_bprintf(bp, "  loss %e is %s by %e, expected loss %e\n",
+                   r->loss, worse_str, r->loss - expected_loss, expected_loss);
+        if (av_bprint_is_complete(bp))
+            av_log(NULL, level, "%s", bp->str);
     }
 
     if (ref_r && r->loss - ref_r->loss > 1e-4) {
@@ -539,14 +611,16 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
         const int bad = r->loss - ref_r->loss > 1e-2 && dst_bits > 1;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        av_bprint_clear(bp);
         if (bad) {
-            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
-            av_log(NULL, level, "%s\n", buf);
+            print_test_params(bp, src, dst, mode, opts);
+            av_bprintf(bp, "\n");
         }
-        av_log(NULL, level,
-               "  loss %e is %s by %e, ref loss %e SSIM={Y=%f U=%f V=%f A=%f}\n",
-               r->loss, worse_str, r->loss - ref_r->loss, ref_r->loss,
-               ref_r->ssim[0], ref_r->ssim[1], ref_r->ssim[2], ref_r->ssim[3]);
+        av_bprintf(bp, "  loss %e is %s by %e, ref loss %e SSIM={Y=%f U=%f V=%f A=%f}\n",
+                   r->loss, worse_str, r->loss - ref_r->loss, ref_r->loss,
+                   ref_r->ssim[0], ref_r->ssim[1], ref_r->ssim[2], ref_r->ssim[3]);
+        if (av_bprint_is_complete(bp))
+            av_log(NULL, level, "%s", bp->str);
     }
 }
 
@@ -564,23 +638,155 @@ static int init_frame(AVFrame **pframe, const AVFrame *ref,
     return 0;
 }
 
-/* Runs a series of ref -> src -> dst -> out, and compares out vs ref */
-static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
-                    int dst_w, int dst_h,
-                    const struct mode *mode, const struct options *opts,
-                    const AVFrame *ref, AVFrame **psrc,
-                    const struct test_results *ref_r)
+static const char *backend_name(SwsBackend backend)
 {
-    AVFrame *src = *psrc;
+    switch (backend) {
+    case SWS_BACKEND_LEGACY:  return "legacy";
+    case SWS_BACKEND_C:       return "c";
+    case SWS_BACKEND_MEMCPY:  return "memcpy";
+    case SWS_BACKEND_X86:     return "x86";
+    case SWS_BACKEND_AARCH64: return "aarch64";
+    case SWS_BACKEND_SPIRV:   return "spirv";
+    default:                  return "unknown";
+    }
+}
+
+static void describe_passes(AVBPrint *bp, const SwsGraph *graph)
+{
+    if (graph->noop) {
+        av_bprintf(bp, "noop");
+        return;
+    }
+
+    for (int i = 0; i < graph->num_passes; i++) {
+        const SwsPass *pass = graph->passes[i];
+        av_bprintf(bp, "%s%s", i ? ", " : "", backend_name(pass->backend));
+        if (pass->cpu_flags)
+            av_bprintf(bp, "/0x%x", pass->cpu_flags);
+    }
+}
+
+static void print_coverage_result(const AVFrame *src, const AVFrame *dst,
+                                  const struct mode *mode,
+                                  const struct options *opts,
+                                  const SwsGraph *graph)
+{
+    AVBPrint bp;
+
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    print_test_params(&bp, src, dst, mode, opts);
+    av_bprintf(&bp, ", ");
+    if (graph) {
+        describe_passes(&bp, graph);
+    } else {
+        av_bprintf(&bp, "unsupported");
+    }
+    av_bprintf(&bp, "\n");
+
+    av_md5_update(state.coverage_md5, (const uint8_t *) bp.str, strlen(bp.str));
+
+    if (av_log_get_level() >= AV_LOG_INFO) {
+        fputs(bp.str, stdout);
+        fflush(stdout);
+    }
+}
+
+/* Sets up the src -> dst conversion without running it, and records whether
+ * the selected backends support it and which passes they use */
+static int check_coverage(struct runner *runner, const struct test_case *t,
+                          const struct mode *mode, const struct options *opts)
+{
+    const AVFrame *ref = state.ref;
+    SwsContext *sws_src_dst = runner->sws_src_dst;
+    AVFrame *src = NULL;
+    AVFrame *dst = NULL;
+    const SwsGraph *graph = NULL;
+    int ret;
+
+    ret = init_frame(&src, ref, ref->width, ref->height, t->src_fmt);
+    if (ret < 0)
+        goto error;
+    ret = init_frame(&dst, ref, t->dst_w, t->dst_h, t->dst_fmt);
+    if (ret < 0)
+        goto error;
+
+    sws_src_dst->flags      = mode->flags;
+    sws_src_dst->dither     = mode->dither;
+    sws_src_dst->scaler     = mode->scaler;
+    sws_src_dst->scaler_sub = mode->scaler_sub;
+    sws_src_dst->threads    = opts->threads;
+    sws_src_dst->backends   = opts->backends;
+
+    ret = sws_frame_setup(sws_src_dst, dst, src);
+    if (ret < 0 && ret != AVERROR(ENOTSUP))
+        goto error;
+
+    state.coverage_total++;
+    if (ret >= 0) {
+        graph = sws_internal(sws_src_dst)->graph[0];
+        state.coverage_supported++;
+    }
+
+    print_coverage_result(src, dst, mode, opts, graph);
+
+    ret = 0;
+
+error:
+    av_frame_free(&src);
+    av_frame_free(&dst);
+    return ret;
+}
+
+static const SwsFlags coverage_flags[] = {
+    0,
+    SWS_ACCURATE_RND,
+    SWS_BITEXACT,
+    SWS_ACCURATE_RND | SWS_BITEXACT,
+};
+
+static int run_coverage(struct runner *runner, const struct test_case *t,
+                        const struct options *opts)
+{
+    if (opts->flags >= 0)
+        return check_coverage(runner, t, &t->mode, opts);
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(coverage_flags); i++) {
+        struct mode flags_mode = t->mode;
+        flags_mode.flags |= coverage_flags[i];
+        int ret = check_coverage(runner, t, &flags_mode, opts);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
+static void print_coverage_summary(void)
+{
+    uint8_t md5[16];
+
+    av_md5_final(state.coverage_md5, md5);
+    for (int i = 0; i < sizeof(md5); i++)
+        printf("%02x", md5[i]);
+    printf(" %d/%d\n", state.coverage_supported, state.coverage_total);
+}
+
+/* Runs a series of ref -> src -> dst -> out, and compares out vs ref */
+static int run_test(struct runner *runner, const struct test_case *t,
+                    const struct options *opts)
+{
+    const AVFrame *ref = state.ref;
+    const struct test_results *ref_r = t->has_ref ? &t->ref_r : NULL;
+    AVFrame *src = runner->src;
     AVFrame *dst = NULL, *out = NULL;
-    const int comps = fmt_comps(src_fmt) & fmt_comps(dst_fmt);
+    const int comps = fmt_comps(t->src_fmt) & fmt_comps(t->dst_fmt);
     int ret;
 
     /* Estimate the expected amount of loss from bit depth reduction */
     const float c1 = 0.01 * 0.01; /* stabilization constant */
     const float ref_var = 1.0 / 12.0; /* uniformly distributed signal */
-    const float src_var = estimate_quantization_noise(src_fmt);
-    const float dst_var = estimate_quantization_noise(dst_fmt);
+    const float src_var = estimate_quantization_noise(t->src_fmt);
+    const float dst_var = estimate_quantization_noise(t->dst_fmt);
     const float out_var = estimate_quantization_noise(ref->format);
     const float total_var = src_var + dst_var + out_var;
     const float ssim_luma = (2 * ref_var + c1) / (2 * ref_var + total_var + c1);
@@ -589,30 +795,34 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
 
     struct test_results r = { 0 };
 
-    if (!src || src->format != src_fmt) {
-        av_frame_free(psrc);
-        ret = init_frame(&src, ref, ref->width, ref->height, src_fmt);
+    if (!src || src->format != t->src_fmt) {
+        av_frame_free(&runner->src);
+        ret = init_frame(&src, ref, ref->width, ref->height, t->src_fmt);
         if (ret < 0)
             goto error;
         if (opts->align_src) {
-            ret = av_frame_get_buffer(src, opts->align_src);
-            if (ret < 0)
+            ret = get_buffer(src, opts->align_src);
+            if (ret < 0) {
+                av_frame_free(&src);
                 goto error;
+            }
         }
 
-        ret = checked_sws_scale_frame(sws_ref_src, src, ref);
-        if (ret < 0)
+        ret = checked_sws_scale_frame(runner->sws_ref_src, src, ref);
+        if (ret < 0) {
+            av_frame_free(&src);
             goto error;
-        *psrc = src;
+        }
+        runner->src = src;
     }
 
-    ret = init_frame(&dst, ref, dst_w, dst_h, dst_fmt);
+    ret = init_frame(&dst, ref, t->dst_w, t->dst_h, t->dst_fmt);
     if (ret < 0)
         goto error;
 
-    ret = (opts->api == IMPL_LEGACY) ? scale_legacy(dst, src, mode, opts, &r.time)
-        : hw_device_ctx              ? scale_hw(dst, src, mode, opts, &r.time)
-        :                              scale_new(dst, src, mode, opts, &r.time);
+    ret = (opts->api == IMPL_LEGACY) ? scale_legacy(dst, src, &t->mode, opts, &r.time)
+        : state.hw_device_ctx        ? scale_hw(dst, src, &t->mode, opts, &r.time)
+        :                              scale_new(runner, dst, src, &t->mode, opts, &r.time);
     if (ret < 0) {
         if (ret == AVERROR(ENOTSUP))
             ret = 0;
@@ -623,7 +833,7 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
     if (ret < 0)
         goto error;
 
-    ret = checked_sws_scale_frame(sws_dst_out, out, dst);
+    ret = checked_sws_scale_frame(runner->sws_dst_out, out, dst);
     if (ret < 0)
         goto error;
 
@@ -643,7 +853,7 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
     }
 
     r.loss = get_loss(r.ssim);
-    if ((opts->api != IMPL_LEGACY) && r.loss - expected_loss > 1e-2 && dst_w >= ref->width && dst_h >= ref->height) {
+    if ((opts->api != IMPL_LEGACY) && r.loss - expected_loss > 1e-2 && t->dst_w >= ref->width && t->dst_h >= ref->height) {
         ret = -1;
         goto bad_loss;
     }
@@ -657,8 +867,8 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
 
 bad_loss:
     print_results(ref, src, dst,
-                  dst_w, dst_h,
-                  mode, opts,
+                  t->dst_w, t->dst_h,
+                  &t->mode, opts,
                   &r, ref_r,
                   expected_loss);
 
@@ -682,8 +892,8 @@ static inline int fmt_is_supported_by_hw(enum AVPixelFormat fmt)
         fmt == AV_PIX_FMT_P412 || fmt == AV_PIX_FMT_P416)
         return 0;
     for (int i = 0;
-         hw_device_constr->valid_sw_formats[i] != AV_PIX_FMT_NONE; i++) {
-        if (hw_device_constr->valid_sw_formats[i] == fmt)
+         state.hw_device_constr->valid_sw_formats[i] != AV_PIX_FMT_NONE; i++) {
+        if (state.hw_device_constr->valid_sw_formats[i] == fmt)
             return 1;
     }
     return 0;
@@ -692,7 +902,7 @@ static inline int fmt_is_supported_by_hw(enum AVPixelFormat fmt)
 static inline int fmt_disabled(const struct options *opts, enum AVPixelFormat fmt)
 {
     const int scaler_sub = opts->scaler_sub ? opts->scaler_sub : opts->scaler;
-    return (hw_device_constr && !fmt_is_supported_by_hw(fmt)) ||
+    return (state.hw_device_constr && !fmt_is_supported_by_hw(fmt)) ||
            (scaler_sub < 0 && fmt_is_subsampled(fmt));
 }
 
@@ -700,8 +910,8 @@ static inline int test_formats(const struct options *opts,
                                enum AVPixelFormat src, enum AVPixelFormat dst)
 {
     /* Test auxiliary conversions */
-    if (!ff_sws_test_pixfmt_backend(sws_ref_src->backends, src, 1) ||
-        !ff_sws_test_pixfmt_backend(sws_dst_out->backends, dst, 0))
+    if (!ff_sws_test_pixfmt_backend(AUX_BACKENDS, src, 1) ||
+        !ff_sws_test_pixfmt_backend(AUX_BACKENDS, dst, 0))
         return 0;
 
     /* Test main conversion */
@@ -712,7 +922,16 @@ static inline int test_formats(const struct options *opts,
            ff_sws_test_pixfmt_backend(backend, dst, 1);
 }
 
-static int run_self_tests(const AVFrame *ref, const struct options *opts)
+static int push_test(const struct test_case *t, const struct options *opts)
+{
+    if (state.queue)
+        return av_thread_message_queue_send(state.queue, (void *) t, 0);
+    if (opts->coverage)
+        return run_coverage(&state.runners[0], t, opts);
+    return run_test(&state.runners[0], t, opts);
+}
+
+static int run_self_tests(const struct options *opts)
 {
     const int dst_w_values[] = { opts->w, opts->w - opts->w / 3, opts->w + opts->w / 3 };
     const int dst_h_values[] = { opts->h, opts->h - opts->h / 3, opts->h + opts->h / 3 };
@@ -722,8 +941,6 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
                        dst_fmt_min = 0,
                        src_fmt_max = AV_PIX_FMT_NB - 1,
                        dst_fmt_max = AV_PIX_FMT_NB - 1;
-
-    AVFrame *src = NULL;
 
     int ret = 0;
 
@@ -752,12 +969,19 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
                         int dst_w = (opts->dst_w >= 0) ? opts->dst_w : dst_w_values[w];
                         int dst_h = (opts->dst_h >= 0) ? opts->dst_h : dst_h_values[h];
 
-                        if (opts->scaler >= 0 && opts->w == dst_w && opts->h == dst_h)
+                        if (opts->scaler > SWS_SCALE_AUTO && opts->w == dst_w && opts->h == dst_h)
                             continue;
 
-                        if (ff_sfc64_get(&prng_state) <= UINT64_MAX * opts->prob) {
-                            ret = run_test(src_fmt, dst_fmt, dst_w, dst_h,
-                                           &mode, opts, ref, &src, NULL);
+                        if (ff_sfc64_get(&state.prng_state) <= UINT64_MAX * opts->prob) {
+                            const struct test_case test = {
+                                .src_fmt = src_fmt,
+                                .dst_fmt = dst_fmt,
+                                .dst_w   = dst_w,
+                                .dst_h   = dst_h,
+                                .mode    = mode,
+                            };
+
+                            ret = push_test(&test, opts);
                             if (ret < 0)
                                 goto error;
                         }
@@ -781,16 +1005,15 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
     ret = 0;
 
 error:
-    av_frame_free(&src);
     return ret;
 }
 
-static int run_file_tests(const AVFrame *ref, FILE *fp, const struct options *opts)
+static int run_file_tests(const struct options *opts)
 {
+    const AVFrame *ref = state.ref;
+    FILE *fp = state.fp;
     char buf[256];
     int ret = 0;
-
-    AVFrame *src = NULL;
 
     for (int line = 1; fgets(buf, sizeof(buf), fp); line++) {
         char src_fmt_str[21], dst_fmt_str[21];
@@ -846,7 +1069,17 @@ static int run_file_tests(const AVFrame *ref, FILE *fp, const struct options *op
             opts->dst_fmt != AV_PIX_FMT_NONE && dst_fmt != opts->dst_fmt)
             continue;
 
-        ret = run_test(src_fmt, dst_fmt, dw, dh, &mode, opts, ref, &src, &r);
+        const struct test_case test = {
+            .src_fmt = src_fmt,
+            .dst_fmt = dst_fmt,
+            .dst_w   = dw,
+            .dst_h   = dh,
+            .mode    = mode,
+            .has_ref = 1,
+            .ref_r   = r,
+        };
+
+        ret = push_test(&test, opts);
         if (ret < 0)
             goto error;
     }
@@ -854,8 +1087,63 @@ static int run_file_tests(const AVFrame *ref, FILE *fp, const struct options *op
     ret = 0;
 
 error:
-    av_frame_free(&src);
     return ret;
+}
+
+static int runner_init(struct runner *runner)
+{
+    runner->sws_ref_src = sws_alloc_context();
+    runner->sws_src_dst = sws_alloc_context();
+    runner->sws_dst_out = sws_alloc_context();
+    if (!runner->sws_ref_src || !runner->sws_src_dst || !runner->sws_dst_out)
+        return AVERROR(ENOMEM);
+    runner->sws_ref_src->flags = AUX_FLAGS;
+    runner->sws_dst_out->flags = AUX_FLAGS;
+    runner->sws_ref_src->backends = AUX_BACKENDS;
+    runner->sws_dst_out->backends = AUX_BACKENDS;
+    return 0;
+}
+
+static void runner_free(struct runner *runner)
+{
+    sws_free_context(&runner->sws_ref_src);
+    sws_free_context(&runner->sws_src_dst);
+    sws_free_context(&runner->sws_dst_out);
+    av_frame_free(&runner->src);
+}
+
+static int run_tests(const struct options *opts)
+{
+    return state.fp ? run_file_tests(opts) : run_self_tests(opts);
+}
+
+static int run_producer(void *priv)
+{
+    const struct options *opts = priv;
+    int ret = run_tests(opts);
+    /* Let the runners finish all remaining tests */
+    av_thread_message_queue_set_err_recv(state.queue, AVERROR_EOF);
+    return ret;
+}
+
+static int run_runner(void *priv, int jobnr, int threadnr, int nb_jobs, int nb_threads)
+{
+    const struct options *opts = priv;
+    struct runner *runner = &state.runners[jobnr];
+    struct test_case test;
+
+    while (!av_thread_message_queue_recv(state.queue, &test, 0)) {
+        int ret = run_test(runner, &test, opts);
+        if (ret < 0) {
+            /* Stop the producer and all other runners */
+            av_thread_message_queue_set_err_send(state.queue, ret);
+            av_thread_message_queue_set_err_recv(state.queue, ret);
+            av_thread_message_flush(state.queue);
+            return ret;
+        }
+    }
+
+    return 0;
 }
 
 static int init_ref(AVFrame *ref, const struct options *opts)
@@ -916,6 +1204,27 @@ static int parse_size(struct options *opts, const char *str, char **pbuf)
     return ret;
 }
 
+/* Parses [threads][:runners] */
+static int parse_threads(struct options *opts, const char *str)
+{
+    const char *sep = strchr(str, ':');
+    const char *str_threads = sep == str ? NULL : str;
+    const char *str_runners = sep ? sep + 1 : NULL;
+    int threads = str_threads ? atoi(str_threads) : 1;
+    int runners = str_runners ? atoi(str_runners) : 1;
+    if (threads < 0 || runners < 0)
+        return AVERROR(EINVAL);
+
+    if (!runners) {
+        runners = av_cpu_count();
+        runners = FFMAX(runners, 1);
+    }
+
+    opts->threads = threads;
+    opts->runners = runners;
+    return 0;
+}
+
 static int parse_implementation(const char *str)
 {
     if (!strcmp(str, "legacy"))
@@ -964,18 +1273,28 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
                     "       Test with a specified scaler algorithm for chroma planes\n"
                     "   -align_src <alignment>\n"
                     "       If nonzero, allocate source buffers with a custom stride alignment\n"
+                    "       If negative, the buffers are also vertically flipped (negative stride)\n"
                     "   -align_dst <alignment>\n"
                     "       If nonzero, allocate destination buffers with a custom stride alignment\n"
+                    "       If negative, the buffers are also vertically flipped (negative stride)\n"
                     "   -api <new or legacy>\n"
                     "       Use selected swscale API for the main conversion (default: new)\n"
                     "   -hw <device>\n"
                     "       Use Vulkan hardware acceleration on the specified device for the main conversion\n"
-                    "   -threads <threads>\n"
-                    "       Use the specified number of threads\n"
+                    "       If 'default', use the default device, and skip all tests if none is available\n"
+                    "   -threads [<threads>][:<runners>]\n"
+                    "       Use the specified number of threads per conversion (default: 1)\n"
+                    "       Optionally run multiple tests concurrently on <runners> threads (default: 1)\n"
+                    "       A value of 0 picks the number of threads automatically\n"
+                    "       Benchmark results may be skewed when using multiple runners\n"
                     "   -cpuflags <cpuflags>\n"
                     "       Uses the specified cpuflags in the tests\n"
                     "   -pretty <1 or 0>\n"
                     "       Align fields while printing results\n"
+                    "   -coverage <1 or 0>\n"
+                    "       Set up each conversion without running it, and print the backend and\n"
+                    "       CPU flags of each of its passes. Also print a summary with how many\n"
+                    "       conversions are supported and an MD5 of the per-conversion lines.\n"
                     "   -v <level>\n"
                     "       Enable log verbosity at given level\n"
             );
@@ -1057,13 +1376,15 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
             }
         } else if (!strcmp(argv[i], "-align_src")) {
             opts->align_src = atoi(argv[i + 1]);
-            if (opts->align_src < 0 || (opts->align_src & (opts->align_src - 1))) {
+            const unsigned align = FFABSU(opts->align_src);
+            if (align > INT_MAX || (align & (align - 1))) {
                 fprintf(stderr, "invalid alignment %s\n", argv[i + 1]);
                 return -1;
             }
         } else if (!strcmp(argv[i], "-align_dst")) {
             opts->align_dst = atoi(argv[i + 1]);
-            if (opts->align_dst < 0 || (opts->align_dst & (opts->align_dst - 1))) {
+            const unsigned align = FFABSU(opts->align_dst);
+            if (align > INT_MAX || (align & (align - 1))) {
                 fprintf(stderr, "invalid alignment %s\n", argv[i + 1]);
                 return -1;
             }
@@ -1075,28 +1396,40 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
             }
             opts->api = ret;
         } else if (!strcmp(argv[i], "-hw")) {
-            ret = av_hwdevice_ctx_create(&hw_device_ctx,
+            const int hw_default = !strcmp(argv[i + 1], "default");
+            ret = av_hwdevice_ctx_create(&state.hw_device_ctx,
                                          AV_HWDEVICE_TYPE_VULKAN,
-                                         argv[i + 1], NULL, 0);
+                                         hw_default ? NULL : argv[i + 1], NULL, 0);
             if (ret < 0) {
-                fprintf(stderr, "Failed to create Vulkan device '%s'\n",
-                        argv[i + 1]);
+                if (hw_default) {
+                    fprintf(stderr, "No Vulkan device available, skipping.\n");
+                    ret = AVERROR(ENOTSUP);
+                } else {
+                    fprintf(stderr, "Failed to create Vulkan device '%s'\n",
+                            argv[i + 1]);
+                }
                 goto end;
             }
-            hw_device_constr = av_hwdevice_get_hwframe_constraints(hw_device_ctx,
-                                                                   NULL);
-            if (!hw_device_constr) {
+            state.hw_device_constr =
+                av_hwdevice_get_hwframe_constraints(state.hw_device_ctx, NULL);
+            if (!state.hw_device_constr) {
                 fprintf(stderr, "Failed to retrieve Vulkan device constraints '%s'\n",
                         argv[i + 1]);
                 ret = AVERROR(ENOMEM);
                 goto end;
             }
         } else if (!strcmp(argv[i], "-threads")) {
-            opts->threads = atoi(argv[i + 1]);
+            ret = parse_threads(opts, argv[i + 1]);
+            if (ret < 0) {
+                fprintf(stderr, "invalid thread count %s\n", argv[i + 1]);
+                goto end;
+            }
         } else if (!strcmp(argv[i], "-p")) {
             opts->prob = atof(argv[i + 1]);
         } else if (!strcmp(argv[i], "-pretty")) {
             opts->pretty = atoi(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-coverage")) {
+            opts->coverage = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-v")) {
             av_log_set_level(atoi(argv[i + 1]));
         } else {
@@ -1105,6 +1438,13 @@ bad_option:
             ret = AVERROR(EINVAL);
             goto end;
         }
+    }
+
+    if (opts->coverage &&
+        (state.hw_device_ctx || opts->api == IMPL_LEGACY || opts->runners > 1)) {
+        fprintf(stderr, "-coverage is not supported with -hw, -api legacy or multiple runners\n");
+        ret = AVERROR(EINVAL);
+        goto end;
     }
 
     if (opts->w < 0 || opts->h < 0) {
@@ -1130,6 +1470,7 @@ int main(int argc, char **argv)
         .dst_w      = -1,
         .dst_h      = -1,
         .threads    = 1,
+        .runners    = 1,
         .iters      = 1,
         .prob       = 1.0,
         .flags      = -1,
@@ -1138,49 +1479,86 @@ int main(int argc, char **argv)
         .scaler_sub = SWS_SCALE_AUTO,
     };
 
-    AVFrame *ref = NULL;
-    FILE *fp = NULL;
-    int ret = -1;
+    AVSliceThread *slicethread = NULL;
 
-    if (parse_options(argc, argv, &opts, &fp) < 0)
+    int ret = parse_options(argc, argv, &opts, &state.fp);
+    if (ret == AVERROR(ENOTSUP)) {
+        ret = 0;
         goto error;
-
-    ff_sfc64_init(&prng_state, 0, 0, 0, 12);
-    signal(SIGINT, exit_handler);
-
-    sws_ref_src = sws_alloc_context();
-    sws_src_dst = sws_alloc_context();
-    sws_dst_out = sws_alloc_context();
-    if (!sws_ref_src || !sws_src_dst || !sws_dst_out)
-        goto error;
-    sws_ref_src->flags = SWS_BILINEAR | SWS_BITEXACT | SWS_ACCURATE_RND;
-    sws_dst_out->flags = SWS_BILINEAR | SWS_BITEXACT | SWS_ACCURATE_RND;
-    sws_ref_src->backends = SWS_BACKEND_ALL;
-    sws_dst_out->backends = SWS_BACKEND_ALL;
-
-    ref = av_frame_alloc();
-    if (!ref)
-        goto error;
-    ref->width  = opts.w;
-    ref->height = opts.h;
-    ref->format = AV_PIX_FMT_YUVA444P;
-
-    ret = init_ref(ref, &opts);
+    }
     if (ret < 0)
         goto error;
 
-    ret = fp ? run_file_tests(ref, fp, &opts)
-             : run_self_tests(ref, &opts);
+    ff_sfc64_init(&state.prng_state, 0, 0, 0, 12);
+    signal(SIGINT, exit_handler);
+
+    state.runners = av_calloc(opts.runners, sizeof(*state.runners));
+    if (!state.runners) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+
+    for (int i = 0; i < opts.runners; i++) {
+        ret = runner_init(&state.runners[i]);
+        if (ret < 0)
+            goto error;
+    }
+
+    state.ref = av_frame_alloc();
+    if (!state.ref) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+    state.ref->width  = opts.w;
+    state.ref->height = opts.h;
+    state.ref->format = AV_PIX_FMT_YUVA444P;
+
+    if (opts.coverage) {
+        state.coverage_md5 = av_md5_alloc();
+        if (!state.coverage_md5) {
+            ret = AVERROR(ENOMEM);
+            goto error;
+        }
+        av_md5_init(state.coverage_md5);
+    } else {
+        ret = init_ref(state.ref, &opts);
+        if (ret < 0)
+            goto error;
+    }
+
+    if (opts.runners > 1) {
+        ret = av_thread_message_queue_alloc(&state.queue, opts.runners,
+                                            sizeof(struct test_case));
+        if (ret < 0)
+            goto error;
+
+        ret = avpriv_slicethread_create2(&slicethread, &opts, run_runner,
+                                         run_producer, opts.runners);
+        if (ret < 0) {
+            fprintf(stderr, "Failed to create %d runner threads: %s\n",
+                    opts.runners, av_err2str(ret));
+            goto error;
+        }
+        ret = avpriv_slicethread_execute2(slicethread, opts.runners, 1);
+    } else {
+        ret = run_tests(&opts);
+    }
+
+    if (opts.coverage && ret >= 0)
+        print_coverage_summary();
 
     /* fall through */
 error:
-    sws_free_context(&sws_ref_src);
-    sws_free_context(&sws_src_dst);
-    sws_free_context(&sws_dst_out);
-    av_buffer_unref(&hw_device_ctx);
-    av_hwframe_constraints_free(&hw_device_constr);
-    av_frame_free(&ref);
-    if (fp)
-        fclose(fp);
+    avpriv_slicethread_free(&slicethread);
+    av_thread_message_queue_free(&state.queue);
+    for (int i = 0; state.runners && i < opts.runners; i++)
+        runner_free(&state.runners[i]);
+    av_freep(&state.runners);
+    av_buffer_unref(&state.hw_device_ctx);
+    av_hwframe_constraints_free(&state.hw_device_constr);
+    av_frame_free(&state.ref);
+    av_freep(&state.coverage_md5);
+    if (state.fp)
+        fclose(state.fp);
     exit_handler(ret);
 }

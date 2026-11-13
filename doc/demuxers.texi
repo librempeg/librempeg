@@ -66,6 +66,13 @@ This demuxer is used to demux ASF files and MMS network streams.
 Do not try to resynchronize by looking for a certain optional start code.
 @end table
 
+@section astc
+
+ASTC (Adaptive Scalable Texture Compression) demuxer.
+
+This demuxer reads the 16-byte @file{.astc} header, hands it to the decoder as
+extradata, and emits the compressed image as a single packet.
+
 @anchor{concat}
 @section concat
 
@@ -233,6 +240,15 @@ If set to 1, every packet will contain the @var{lavf.concat.start_time} and the
 the duration of the respective file segments in the concatenated output
 expressed in microseconds. The duration metadata is only set if it is known
 based on the concat file.
+The default is 0.
+
+@item chapter_per_file
+If set to 1, add a chapter for each file, named after the @code{title}
+metadata of the file or, failing that, its file name, and carrying the rest
+of the file's metadata. The files are opened in order when the script is read
+to learn their durations, stopping after the first file whose duration is
+unknown, which gets the last chapter; when all durations are known, this also
+makes the total duration known and the output seekable.
 The default is 0.
 
 @end table
@@ -554,7 +570,9 @@ The id field is set to the bitrate variant index number. By setting
 the discard flags on AVStreams (by pressing 'a' or 'v' in ffplay),
 the caller can decide which variant streams to actually receive.
 The total bitrate of the variant that the stream belongs to is
-available in a metadata key named "variant_bitrate".
+available in a metadata key named "variant_bitrate". It is unset when
+the stream is shared by variants with different bitrates. The value is
+always available in the corresponding program's metadata.
 
 It accepts the following options:
 
@@ -727,6 +745,39 @@ terminating with the ".png" suffix:
 ffmpeg -framerate 10 -pattern_type glob -i "*.png" out.mkv
 @end example
 @end itemize
+
+@section jpeg_mpf
+
+JPEG Multi-Picture Format demuxer.
+
+Exposes each JPEG image stored in a CIPA DC-007 MP file as a separate stream,
+in the order of the MP Entries, with the First Individual Image flagged as the
+default stream. If the file contains an ISO 21496-1 gain map, as is the case
+for JPEG Ultra HDR, the primary image and the gain map are linked by a
+@samp{gain_map} stream group, and the gain map parameters are exported as
+frame side data by the decoder.
+
+Images of any other type (e.g. large thumbnails or multi-view images) are
+exposed as additional streams.
+
+This demuxer accepts the following options, which behave like the options of
+the same name of the @samp{image2} demuxer:
+@table @option
+@item framerate
+Set the frame rate of the video streams. The default is 25.
+@item loop
+If set to 1, loop over the images in the file. The default is 0. This requires
+seekable input.
+@end table
+
+@section ktx
+
+Khronos Texture 1.0 demuxer for ASTC textures.
+
+This demuxer reads the KTX 1.0 header and maps the ASTC GL internal format to
+the block footprint the decoder needs, so only files using the ASTC formats
+are accepted. A @code{KTXorientation} key is preserved as stream display
+metadata, and the texture is emitted as a single packet.
 
 @section libgme
 

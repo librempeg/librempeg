@@ -225,8 +225,6 @@ typedef struct FFVulkanShader {
     /* Creation info */
     VkPipelineShaderStageRequiredSubgroupSizeCreateInfo subgroup_info;
 
-    /* Base shader object */
-    VkShaderEXT object;
     VkPipeline pipeline;
 
     /* Pipeline layout */
@@ -329,6 +327,9 @@ typedef struct FFVulkanContext {
     VkPhysicalDeviceVulkan12Features feats_12;
 #ifdef VK_KHR_unified_image_layouts
     VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unified_layout_feats;
+#endif
+#ifdef VK_KHR_maintenance11
+    VkPhysicalDeviceMaintenance11FeaturesKHR maintenance_11_feats;
 #endif
     VkPhysicalDeviceFeatures2 feats;
 
@@ -448,6 +449,12 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
                                  enum FFVkShaderRepFormat rep_fmt);
 
 /**
+ * Returns the view format for the given representation of fmt, or
+ * VK_FORMAT_UNDEFINED if there is none.
+ */
+VkFormat ff_vk_map_fmt_to_rep(VkFormat fmt, enum FFVkShaderRepFormat rep_fmt);
+
+/**
  * Loads props/mprops/driver_props
  */
 int ff_vk_load_props(FFVulkanContext *s);
@@ -525,6 +532,9 @@ void ff_vk_exec_add_dep_obj(FFVulkanContext *s, FFVkExecContext *e,
 void ff_vk_exec_add_dep_wait_sem(FFVulkanContext *s, FFVkExecContext *e,
                                  VkSemaphore sem, uint64_t val,
                                  VkPipelineStageFlagBits2 stage);
+void ff_vk_exec_add_dep_signal_sem(FFVulkanContext *s, FFVkExecContext *e,
+                                   VkSemaphore sem, uint64_t val,
+                                   VkPipelineStageFlagBits2 stage);
 void ff_vk_exec_add_dep_bool_sem(FFVulkanContext *s, FFVkExecContext *e,
                                  VkSemaphore *sem, int nb,
                                  VkPipelineStageFlagBits2 stage,
@@ -571,6 +581,15 @@ FFVkImageViews *ff_vk_imageviews_alloc(FFVulkanContext *s, int nb_views);
 int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
                             VkImageView views[AV_NUM_DATA_POINTERS],
                             AVFrame *f, enum FFVkShaderRepFormat rep_fmt);
+
+/**
+ * Same as ff_vk_create_imageviews(), but with an explicit view format for
+ * each plane, which must be compatible with the format of the image.
+ */
+int ff_vk_create_imageviews_fmt(FFVulkanContext *s, FFVkExecContext *e,
+                                VkImageView views[AV_NUM_DATA_POINTERS],
+                                AVFrame *f,
+                                const VkFormat fmts[AV_NUM_DATA_POINTERS]);
 
 #define ff_vk_buf_barrier(dst, vkb, s_stage, s_access, s_access2,              \
                           d_stage, d_access, d_access2, offs, bsz)             \

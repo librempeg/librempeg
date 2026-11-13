@@ -177,6 +177,7 @@ static av_cold int apv_decode_close(AVCodecContext *avctx)
 {
     APVDecodeContext *apv = avctx->priv_data;
 
+    av_refstruct_unref(&apv->hwaccel_picture_private);
     ff_cbs_fragment_free(&apv->au);
     ff_cbs_close(&apv->cbc);
 
@@ -188,23 +189,22 @@ static int apv_decode_block(AVCodecContext *avctx,
                             ptrdiff_t pitch,
                             GetBitContext *gbc,
                             APVEntropyState *entropy_state,
-                            int bit_depth,
-                            int qp_shift,
-                            const uint16_t *qmatrix)
+                            const void *constants)
 {
     APVDecodeContext *apv = avctx->priv_data;
     int err;
 
-    LOCAL_ALIGNED_32(int16_t, coeff, [64]);
+    // Aligned for SIMD use in transquant.
+    LOCAL_ALIGNED_32(int16_t, coeff, [APV_ENTROPY_COEFF_SIZE]);
+    // Zero only the used entries, padding entries may be written but
+    // are never read.
     memset(coeff, 0, 64 * sizeof(int16_t));
 
     err = ff_apv_entropy_decode_block(coeff, gbc, entropy_state);
     if (err < 0)
         return err;
 
-    apv->dsp.decode_transquant(output, pitch,
-                               coeff, qmatrix,
-                               bit_depth, qp_shift);
+    apv->dsp.decode_transquant(output, pitch, coeff, constants);
 
     return 0;
 }
@@ -242,9 +242,7 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
     int blk_mb_width  = 2 >> sub_w_shift;
     int blk_mb_height = 2 >> sub_h_shift;
 
-    int bit_depth;
-    int qp_shift;
-    LOCAL_ALIGNED_32(uint16_t, qmatrix_scaled, [64]);
+    LOCAL_ALIGNED_32(uint8_t, constants, [APV_DSP_CONSTANTS_SIZE]);
 
     GetBitContext gbc;
 
@@ -265,20 +263,24 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
 
     // Combine the bitstream quantisation matrix with the qp scaling
     // in advance.  (Including qp_shift as well would overflow 16 bits.)
-    // Fix the row ordering at the same time.
+    // Fix the row ordering at the same time.  Everything else which
+    // is constant for the tile component is derived from this by the
+    // DSP code.
     {
         static const uint8_t apv_level_scale[6] = { 40, 45, 51, 57, 64, 71 };
         int qp = tile->tile_header.tile_qp[comp_index];
         int level_scale = apv_level_scale[qp % 6];
-
-        bit_depth = input->frame_header.frame_info.bit_depth_minus8 + 8;
-        qp_shift  = qp / 6;
+        int bit_depth = input->frame_header.frame_info.bit_depth_minus8 + 8;
+        int16_t qmatrix_scaled[64];
 
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++)
                 qmatrix_scaled[y * 8 + x] = level_scale *
                     input->frame_header.quantization_matrix.q_matrix[comp_index][x][y];
         }
+
+        apv->dsp.prepare_constants(constants, qmatrix_scaled,
+                                   bit_depth, qp / 6);
     }
 
     for (int mb_y = 0; mb_y < tile_mb_height; mb_y++) {
@@ -299,9 +301,7 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
                     err = apv_decode_block(avctx,
                                            block_start, frame_pitch,
                                            &gbc, &entropy_state,
-                                           bit_depth,
-                                           qp_shift,
-                                           qmatrix_scaled);
+                                           constants);
                     if (err < 0) {
                         // Error in block decode means entropy desync,
                         // so this is not recoverable.
@@ -383,11 +383,10 @@ static int apv_decode(AVCodecContext *avctx, AVFrame *output,
 
     apv_derive_tile_info(tile_info, &input->frame_header);
 
-    if (avctx->hwaccel) {
-        err = ff_hwaccel_frame_priv_alloc(avctx, &apv->hwaccel_picture_private);
-        if (err < 0)
-            return err;
-    }
+    av_refstruct_unref(&apv->hwaccel_picture_private);
+    err = ff_hwaccel_frame_priv_alloc(avctx, &apv->hwaccel_picture_private);
+    if (err < 0)
+        return err;
 
     ff_thread_finish_setup(avctx);
 
@@ -515,6 +514,7 @@ static int apv_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         switch (pbu->type) {
         case APV_PBU_PRIMARY_FRAME:
             err = apv_decode(avctx, frame, pbu->content);
+            frame->pkt_dts = apv->pkt->dts;
             i++;
             goto end;
         case APV_PBU_METADATA:

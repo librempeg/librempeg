@@ -438,6 +438,512 @@ endfunc
 FFT16_FN float,    0
 FFT16_FN ns_float, 1
 
+const tab_15pt, align=4
+        .float           1.0,  1.0, -1.0,  -1.0
+endconst
+
+// Tab_53 twiddles (v28..v30) duplicated/pre-signed once, instead of per
+// transform: v8/v9 = -+tab[8,9]/[10,11], v25/v28/v29 = tab[0,1]/[2,3]/[4,5],
+// v10 = +-tab[6,7]. v30 keeps tab[8..11]. Callers preserve d8-d10.
+.macro FFT15_DERIVE_CONSTS
+        dup             v8.2d,  v30.d[0]
+        dup             v9.2d,  v30.d[1]
+        dup             v10.2d, v29.d[1]
+        dup             v25.2d, v28.d[0]
+        dup             v28.2d, v28.d[1]
+        dup             v29.2d, v29.d[0]
+        fmul            v8.4s,  v8.4s,  v31.4s
+        fmul            v9.4s,  v9.4s,  v31.4s
+        fmul            v10.4s, v10.4s, v24.4s
+.endm
+
+.macro FFT15_LOAD no_perm, advance=0
+.if \no_perm == 1
+        // Writebacks leave x2 a whole transform (120B) ahead for the PFA loop
+        ld1             { v0.4s },                [x2], #16   // in[0,1]
+        ld1r            { v1.2d },                [x2], #8    // in[2] duplicated
+        ld1             { v2.4s, v3.4s, v4.4s },  [x2], #48   // in[3..8]
+        ld1             { v5.4s, v6.4s, v7.4s },  [x2], #48   // in[9..14]
+.else
+        ldp             w10, w11, [x4]          // lut[0,1]
+        ldr             w12, [x4, #8]           // lut[2]
+        ldp             w13, w14, [x4, #12]     // lut[3,4]
+        ldp             w15, w16, [x4, #20]     // lut[5,6]
+
+        ldr             d0, [x2, x10, lsl #3]
+        add             x10, x2, x11, lsl #3
+        add             x12, x2, x12, lsl #3
+        ld1             { v0.d }[1], [x10]
+        ld1r            { v1.2d }, [x12]
+
+        ldr             d2, [x2, x13, lsl #3]
+        add             x13, x2, x14, lsl #3
+        ldr             d3, [x2, x15, lsl #3]
+        add             x15, x2, x16, lsl #3
+        ld1             { v2.d }[1], [x13]
+        ld1             { v3.d }[1], [x15]
+
+        ldp             w10, w11, [x4, #28]     // lut[7,8]
+        ldp             w12, w13, [x4, #36]     // lut[9,10]
+        ldp             w14, w15, [x4, #44]     // lut[11,12]
+        ldp             w16, w17, [x4, #52]     // lut[13,14]
+.if \advance == 1
+        add             x4, x4, #60
+.endif
+
+        ldr             d4, [x2, x10, lsl #3]
+        add             x10, x2, x11, lsl #3
+        ldr             d5, [x2, x12, lsl #3]
+        add             x12, x2, x13, lsl #3
+        ldr             d6, [x2, x14, lsl #3]
+        add             x14, x2, x15, lsl #3
+        ldr             d7, [x2, x16, lsl #3]
+        add             x16, x2, x17, lsl #3
+        ld1             { v4.d }[1], [x10]
+        ld1             { v5.d }[1], [x12]
+        ld1             { v6.d }[1], [x14]
+        ld1             { v7.d }[1], [x16]
+.endif
+.endm
+
+// Single 15-point FFT (see doc/transforms.md and the AVX2 FFT15); each ymm
+// becomes a pair of quads holding 2 complex each. Uses the derived constants
+// and tab_15pt in v24 (dc fold sign); with hoist_strides=1 the caller
+// provides x6/x7 = stride*3/*5.
+.macro FFT15_CORE hoist_strides=0
+.if \hoist_strides == 0
+        add             x6, x3, x3, lsl #1                  // stride*3
+        add             x7, x3, x3, lsl #2                  // stride*5
+.endif
+        add             x8, x1, x7                          // &out[5]
+        add             x9, x8, x7                          // &out[10]
+
+        // 4x parallel 3pt over in[3..14] (the in[11..14] -+ signs are folded
+        // into the twiddles: k = in[11..14] + Q4 -+ Q0), interleaved with the
+        // dc 3pt over in[0..2] ([dc] tagged, v0 = dc[0] dup, v1 = dc[1,2])
+        fsub            v16.4s,  v2.4s,  v4.4s              // q[0,1]raw = in[3,4]-in[7,8]
+        ext             v26.16b, v0.16b, v0.16b, #8         // [dc] (in1, in0)
+        fsub            v17.4s,  v3.4s,  v5.4s              // q[2,3]raw = in[5,6]-in[9,10]
+        fadd            v27.4s,  v0.4s,  v26.4s             // [dc] pc[1]raw = in0+in1
+        fadd            v2.4s,   v2.4s,  v4.4s              // q[4,5]raw
+        fsub            v20.4s,  v0.4s,  v26.4s             // [dc] (in0-in1, in1-in0)
+        fadd            v3.4s,   v3.4s,  v5.4s              // q[6,7]raw
+        rev64           v20.4s,  v20.4s                     // [dc] pc[0]raw in hi half
+        rev64           v16.4s,  v16.4s                     // q[0,1]raw re/im-swapped
+        ext             v21.16b, v20.16b, v27.16b, #8       // [dc] (pc[0], pc[1])
+        rev64           v17.4s,  v17.4s                     // q[2,3]raw re/im-swapped
+        fadd            v0.4s,   v1.4s,  v27.4s             // [dc] dc[0] = in2 + pc[1]raw (dup)
+        fadd            v22.4s,  v6.4s,  v2.4s              // y[0,1] = in[11,12] + q[4,5]
+        fmul            v21.4s,  v21.4s, v30.4s             // [dc] pc[0,1] scaled by tab[8..11]
+        fadd            v23.4s,  v7.4s,  v3.4s              // y[2,3] = in[13,14] + q[6,7]
+        fmul            v16.4s,  v16.4s, v8.4s              // Q0[0,1]
+        ext             v26.16b, v21.16b, v21.16b, #8       // [dc] (pc[1], pc[0])
+        fmul            v17.4s,  v17.4s, v8.4s              // Q0[2,3]
+        fmla            v21.4s,  v26.4s, v24.4s             // [dc] (dc[1]_int, dc[2]_int)
+        fmla            v6.4s,   v2.4s,  v9.4s              // M[0,1] = in[11,12] + q*Q4mult
+        fmla            v7.4s,   v3.4s,  v9.4s              // M[2,3] = in[13,14] + q*Q4mult
+        fmla            v1.4s,   v21.4s, v31.4s             // [dc] v1 = (dc[1], dc[2])  — DC done
+        fsub            v4.4s,   v6.4s,  v16.4s             // k[0,1] = M[0,1] - Q0[0,1]
+        fsub            v5.4s,   v7.4s,  v17.4s             // k[2,3] = M[2,3] - Q0[2,3]
+        fadd            v2.4s,   v6.4s,  v16.4s             // k[4,5] = M[0,1] + Q0[0,1]
+        fadd            v3.4s,   v7.4s,  v17.4s             // k[6,7] = M[2,3] + Q0[2,3]
+
+        // 4pt butterflies on y (v22,v23), k[0..3] (v4,v5), k[4..7] (v2,v3);
+        // one shared swapped operand per pair leaves the hi t's half-swapped,
+        // which the dup-symmetric twiddles absorb and the output stage uses
+        ext             v16.16b, v23.16b, v23.16b, #8        // (y3, y2)
+        ext             v17.16b, v5.16b,  v5.16b,  #8        // (k3, k2)
+        ext             v20.16b, v3.16b,  v3.16b,  #8        // (k7, k6)
+        fsub            v21.4s, v22.4s, v16.4s               // (t3, t2)
+        fadd            v22.4s, v22.4s, v16.4s               // (t0, t1)
+        fsub            v26.4s, v4.4s,  v17.4s               // (t7, t6)
+        fadd            v4.4s,  v4.4s,  v17.4s               // (t4, t5)
+        fsub            v27.4s, v2.4s,  v20.4s               // (t11, t10)
+        fadd            v2.4s,  v2.4s,  v20.4s               // (t8, t9)
+
+        // the 3 direct outputs: out[0,10,5] = dc[0,1,2] + t[0,4,8] + t[1,5,9]
+        ext             v16.16b, v22.16b, v22.16b, #8        // (t1, t0)
+        zip1            v17.2d, v4.2d, v2.2d                  // (t4, t8)
+        zip2            v20.2d, v4.2d, v2.2d                  // (t5, t9)
+        fadd            v16.4s, v16.4s, v22.4s                // t[0]+t[1]
+        fadd            v17.4s, v17.4s, v20.4s                // (t[4]+t[5], t[8]+t[9])
+        fadd            v16.4s, v16.4s, v0.4s                 // out[0]
+        fadd            v17.4s, v17.4s, v1.4s                 // (out[10], out[5])
+        st1             { v16.d }[0], [x1]
+        st1             { v17.d }[1], [x8]
+        st1             { v17.d }[0], [x9]
+
+        // twiddles; swap(t * tab) = swap(t) * tab as every multiplier is
+        // dup-symmetric. lo chunks seed the accumulator with dc[] (= the
+        // output stage's dc preadd): m = dc + t*v25 - swap(t)*v28; hi chunks
+        // r = t*v29 + swap(t)*v10, v10's +- giving r[3] += t[2]/r[2] -= t[3]
+        // in half-swapped order. Accumulates are spread out for the A53
+        ext             v16.16b, v22.16b, v22.16b, #8         // (t1, t0)
+        mov             v6.16b,  v0.16b                       // m0 = dc[0]
+        ext             v17.16b, v21.16b, v21.16b, #8         // (t2, t3)
+        fmul            v7.4s,  v21.4s, v29.4s                // (r3, r2)
+        fmla            v6.4s,  v22.4s, v25.4s                // m0 += t[0,1]*r_lo
+        dup             v18.2d, v1.d[0]                       // m1 = dc[1]
+        fmla            v18.4s, v4.4s,  v25.4s                // m1 += t[4,5]*r_lo
+        fmls            v6.4s,  v16.4s, v28.4s                // m0 -= swap*nt_lo
+        ext             v16.16b, v4.16b,  v4.16b,  #8         // (t5, t4)
+        fmla            v7.4s,  v17.4s, v10.4s                // (r3, r2) += swap*nt_hi
+        ext             v17.16b, v26.16b, v26.16b, #8         // (t6, t7)
+        fmls            v18.4s, v16.4s, v28.4s                // m1 -= swap*nt_lo
+        fmul            v23.4s, v26.4s, v29.4s                // (r7, r6)
+        dup             v19.2d, v1.d[1]                       // m2 = dc[2]
+        fmla            v19.4s, v2.4s,  v25.4s                // m2 += t[8,9]*r_lo
+        ext             v16.16b, v2.16b,  v2.16b,  #8         // (t9, t8)
+        fmla            v23.4s, v17.4s, v10.4s                // (r7, r6)
+        ext             v17.16b, v27.16b, v27.16b, #8         // (t10, t11)
+        fmul            v5.4s,  v27.4s, v29.4s                // (r11, r10)
+        fmls            v19.4s, v16.4s, v28.4s                // m2 -= swap*nt_lo
+        fmla            v5.4s,  v17.4s, v10.4s                // (r11, r10)
+
+        // output butterflies around rot(x) = (x.im, -x.re): out = m +- rot(r_hi).
+        // The half-swap makes rev(r_hi) a plain rev64, and u = rev*v31 is
+        // exact (+-1.0), so each +-rot pair is one non-destructive fsub/fadd
+        rev64           v16.4s, v7.4s                         // (r3.im, r3.re, r2.im, r2.re)
+        rev64           v17.4s, v23.4s                        // (r7.im, r7.re, r6.im, r6.re)
+        rev64           v20.4s, v5.4s                         // (r11.im, ..., r10.re)
+        fmul            v16.4s, v16.4s, v31.4s                // u0
+        fmul            v17.4s, v17.4s, v31.4s                // u1
+        fmul            v20.4s, v20.4s, v31.4s                // u2
+        fsub            v7.4s,  v6.4s,  v16.4s                // (out6, out3)   = m0 + rot
+        fadd            v6.4s,  v6.4s,  v16.4s                // (out9, out12)  = m0 - rot
+        fsub            v23.4s, v18.4s, v17.4s                // (out1, out13)
+        fadd            v22.4s, v18.4s, v17.4s                // (out4, out7)
+        fsub            v5.4s,  v19.4s, v20.4s                // (out11, out8)
+        fadd            v4.4s,  v19.4s, v20.4s                // (out14, out2)
+
+        add             x10, x1, x6, lsl #1                   // &out[6]
+        add             x11, x1, x6                           // &out[3]
+        st1             { v7.d }[0], [x10]
+        st1             { v7.d }[1], [x11]
+        add             x12, x8, x3, lsl #2                   // &out[9]
+        add             x13, x1, x6, lsl #2                   // &out[12]
+        st1             { v6.d }[0], [x12]
+        st1             { v6.d }[1], [x13]
+        add             x10, x1, x3                           // &out[1]
+        add             x11, x9, x6                           // &out[13]
+        st1             { v23.d }[0], [x10]
+        st1             { v23.d }[1], [x11]
+        add             x12, x1, x3, lsl #2                   // &out[4]
+        add             x13, x8, x3, lsl #1                   // &out[7]
+        st1             { v22.d }[0], [x12]
+        st1             { v22.d }[1], [x13]
+        add             x10, x9, x3                           // &out[11]
+        add             x11, x1, x3, lsl #3                   // &out[8]
+        st1             { v5.d }[0], [x10]
+        st1             { v5.d }[1], [x11]
+        add             x12, x9, x3, lsl #2                   // &out[14]
+        add             x13, x1, x3, lsl #1                   // &out[2]
+        st1             { v4.d }[0], [x12]
+        st1             { v4.d }[1], [x13]
+.endm
+
+.macro FFT15_FN name, no_perm
+function ff_tx_fft15_\name\()_neon, export=1
+        stp             d8,  d9,  [sp, #-32]!
+        str             d10, [sp, #16]
+
+        SETUP_LUT       \no_perm
+
+        movrel          x5, X(ff_tx_tab_53_float)
+        ld1             { v28.4s, v29.4s, v30.4s }, [x5]    // 5pt cos, 5pt sin, 3pt
+
+        movrel          x5, tab_15pt
+        ld1             { v24.4s }, [x5]                    // sign mask
+
+        LOAD_SUBADD
+        FFT15_DERIVE_CONSTS
+
+        FFT15_LOAD      \no_perm
+
+        FFT15_CORE
+
+        ldr             d10, [sp, #16]
+        ldp             d8,  d9,  [sp], #32
+        ret
+endfunc
+.endm
+
+FFT15_FN float,    0
+FFT15_FN ns_float, 1
+
+// 15xM PFA (len = 15*M, M a power of two), like the x86 fft_pfa_15xM:
+// dim1 = M 15pt transforms scattered into s->tmp at sub_map[i], spaced M
+// apart; dim2 = 15 in-place M-pt subtransforms (plain blr, the uniform ABI
+// needs no asm-call variant); post = out[i*stride] = s->tmp[out_map[i]].
+// AVTXContext offsets: len=0, map=8, tmp=24, sub=32, fn[0]=40.
+.macro PFA_15_FN name, no_perm
+function ff_tx_fft_pfa_15xM_\name\()_neon, export=1
+        AARCH64_SIGN_LINK_REGISTER
+        stp             x29, x30, [sp, #-128]!
+        mov             x29, sp
+        stp             x19, x20, [sp, #16]
+        stp             x21, x22, [sp, #32]
+        stp             x23, x24, [sp, #48]
+        stp             x25, x26, [sp, #64]
+        stp             x27, x28, [sp, #80]
+        stp             d8,  d9,  [sp, #96]
+        str             d10, [sp, #112]
+
+        mov             x25, x0                     // root context
+        mov             x26, x1                     // user out
+        mov             x27, x3                     // user stride (bytes)
+
+        ldr             w19, [x0, #0]               // len = 15*M
+        ldr             x20, [x0, #24]              // s->tmp
+        ldr             x23, [x0, #32]              // s->sub
+        ldr             w24, [x23, #0]              // M
+        ldr             x28, [x23, #8]              // sub_map
+        lsl             x3,  x24, #3                // M*8 = 15pt output stride
+.if \no_perm == 0
+        ldr             x4,  [x0, #8]               // in_map, advanced by the loads
+.endif
+
+        movrel          x5, X(ff_tx_tab_53_float)
+        ld1             { v28.4s, v29.4s, v30.4s }, [x5]
+        movrel          x5, tab_15pt
+        ld1             { v24.4s }, [x5]
+        LOAD_SUBADD
+        FFT15_DERIVE_CONSTS
+        add             x6,  x3, x3, lsl #1         // stride*3
+        add             x7,  x3, x3, lsl #2         // stride*5
+1:
+        ldr             w10, [x28], #4              // sub_map[i]
+        add             x1,  x20, x10, lsl #3
+        FFT15_LOAD      \no_perm, advance=1
+        FFT15_CORE      hoist_strides=1
+        subs            w19, w19, #15
+        b.gt            1b
+
+        ldr             x28, [x25, #40]             // ctx->fn[0]
+        mov             x21, x20                    // column base
+        mov             w19, #15
+2:
+        mov             x0,  x23
+        mov             x1,  x21
+        mov             x2,  x21
+        mov             x3,  #8
+        blr             x28                         // M-point FFT, in-place
+        add             x21, x21, x24, lsl #3
+        subs            w19, w19, #1
+        b.gt            2b
+
+        // out[i*stride] = s->tmp[out_map[i]], unrolled by 4 (len % 60 == 0)
+        ldr             w19, [x25, #0]              // len
+        ldr             x22, [x25, #8]              // s->map
+        add             x22, x22, x19, lsl #2       // out_map = map + len
+        mov             x10, x26
+        lsl             x11, x27, #1                // 2*stride
+        add             x12, x27, x11               // 3*stride
+3:
+        ldp             w13, w14, [x22], #8         // out_map[i,   i+1]
+        ldp             w15, w16, [x22], #8         // out_map[i+2, i+3]
+        ldr             d0,  [x20, x13, lsl #3]
+        ldr             d1,  [x20, x14, lsl #3]
+        ldr             d2,  [x20, x15, lsl #3]
+        ldr             d3,  [x20, x16, lsl #3]
+        str             d0,  [x10]
+        str             d1,  [x10, x27]
+        str             d2,  [x10, x11]
+        str             d3,  [x10, x12]
+        add             x10, x10, x11, lsl #1
+        subs            w19, w19, #4
+        b.gt            3b
+
+        ldp             x19, x20, [sp, #16]
+        ldp             x21, x22, [sp, #32]
+        ldp             x23, x24, [sp, #48]
+        ldp             x25, x26, [sp, #64]
+        ldp             x27, x28, [sp, #80]
+        ldp             d8,  d9,  [sp, #96]
+        ldr             d10, [sp, #112]
+        ldp             x29, x30, [sp], #128
+        AARCH64_VALIDATE_LINK_REGISTER
+        ret
+endfunc
+.endm
+
+PFA_15_FN float,    0
+PFA_15_FN ns_float, 1
+
+// Inverse MDCT (see ff_tx_mdct_inv): pre-rotation, in-place N/2pt FFT,
+// post-rotation. out is the N/2-complex buffer z, in the N-real input.
+// Where ld2 can split the re/im planes the multiplies are planar and fused
+// (fmul + fmls/fmla); the gather and the odd tail use interleaved pairs
+// (trn1/trn2 broadcast, rev64 swap, the v31 fmla).
+// AVTXContext offsets: len=0, map=8 (doubled in init), exp=16, sub=32, fn=40.
+function ff_tx_mdct_inv_float_neon, export=1
+        AARCH64_SIGN_LINK_REGISTER
+        stp             x29, x30, [sp, #-48]!
+        mov             x29, sp
+        stp             x19, x20, [sp, #16]
+        stp             x21, x22, [sp, #32]
+
+        mov             x19, x1                     // z
+        mov             x20, x0                     // ctx
+        ldr             w21, [x0, #0]               // N
+        ldr             x22, [x0, #16]              // exp
+        ldr             x4,  [x0, #8]               // map (doubled)
+
+        LOAD_SUBADD
+
+        sub             x5,  x21, #1
+        madd            x14, x5,  x3,  x2           // in2 = in + (N-1)*stride
+        lsr             w7,  w21, #1                // len2
+
+        cmp             x3,  #4                     // contiguous input and
+        b.ne            6f                          // len2 % 4 == 0 takes the
+        tst             w21, #7                     // single-sweep path
+        b.eq            3f
+
+6:
+        // pre-rotation via gather: z[i] = (in2[-k], in1[k])*exp[i], 2 cx/iter
+        mov             x13, x19
+        mov             x15, x22
+1:
+        ldp             w5,  w6,  [x4], #8          // k0, k1
+        madd            x8,  x5,  x3,  x2           // &in[k0]      (im0)
+        msub            x9,  x5,  x3,  x14          // &in2[-k0]    (re0)
+        madd            x10, x6,  x3,  x2           // &in[k1]      (im1)
+        msub            x11, x6,  x3,  x14          // &in2[-k1]    (re1)
+        ldr             s0,  [x9]
+        ld1             { v0.s }[1], [x8]
+        ld1             { v0.s }[2], [x11]
+        ld1             { v0.s }[3], [x10]          // (re0, im0, re1, im1) = tmp
+        ld1             { v1.4s }, [x15], #16        // exp[i,i+1]
+        trn1            v2.4s, v0.4s, v0.4s         // re dup
+        trn2            v3.4s, v0.4s, v0.4s         // im dup
+        rev64           v4.4s, v1.4s                // exp swapped
+        fmul            v5.4s, v2.4s, v1.4s
+        fmul            v6.4s, v3.4s, v4.4s
+        fmla            v5.4s, v6.4s, v31.4s        // z = tmp*exp
+        st1             { v5.4s }, [x13], #16
+        subs            w7,  w7,  #2
+        b.gt            1b
+        b               4f
+
+        // pre-rotation, contiguous: the input is effectively (im, re, im, ...)
+        // interleaved, so sweep it once from both ends with the planes
+        // ld2-split: low ims pair with high res (outputs p, p+1) and high ims
+        // with low res (outputs p'-1, p', p' = len2-1-p), scattered through
+        // the inverse map (2nd half of s->map) with the natural twiddles
+3:
+        add             x15, x22, x21, lsl #2       // exp + len2          (asc)
+        add             x4,  x4,  x21, lsl #1       // map + len2          (asc)
+        sub             x10, x14, #12               // &in[N-4]            (desc)
+        add             x12, x15, x21, lsl #2
+        sub             x12, x12, #16               // exp + (N-2)         (desc)
+        add             x13, x4,  x21, lsl #1
+        sub             x13, x13, #8                // map + (N-2)         (desc)
+5:
+        ld2             { v6.2s, v7.2s }, [x2], #16  // (im_p, im_p1) (re_p', re_p'm1)
+        ld2             { v16.2s, v17.2s }, [x10]    // (im_p'm1, im_p') (re_p1, re_p)
+        sub             x10, x10, #16
+        rev64           v17.2s, v17.2s              // (re_p, re_p1)
+        ld2             { v1.2s, v2.2s }, [x15], #16 // A: er, ei
+        rev64           v7.2s, v7.2s                // (re_p'm1, re_p')
+        ld2             { v3.2s, v4.2s }, [x12]      // B: er, ei
+        sub             x12, x12, #16
+        fmul            v5.2s,  v17.2s, v1.2s       // A: re*er
+        fmul            v18.2s, v17.2s, v2.2s       // A: re*ei
+        fmul            v19.2s, v7.2s,  v3.2s       // B: re*er
+        fmul            v20.2s, v7.2s,  v4.2s       // B: re*ei
+        fmls            v5.2s,  v6.2s,  v2.2s       // A: z.re plane
+        fmla            v18.2s, v6.2s,  v1.2s       // A: z.im plane
+        fmls            v19.2s, v16.2s, v4.2s       // B: z.re plane
+        fmla            v20.2s, v16.2s, v3.2s       // B: z.im plane
+        ldp             w16, w17, [x4], #8          // inv_map[p, p+1]
+        zip1            v0.2s,  v5.2s,  v18.2s      // z_p
+        zip2            v1.2s,  v5.2s,  v18.2s      // z_p1
+        str             d0,  [x19, w16, uxtw #3]
+        str             d1,  [x19, w17, uxtw #3]
+        ldp             w16, w17, [x13]             // inv_map[p'-1, p']
+        sub             x13, x13, #8
+        zip1            v2.2s,  v19.2s, v20.2s      // z_p'm1
+        zip2            v3.2s,  v19.2s, v20.2s      // z_p'
+        str             d2,  [x19, w16, uxtw #3]
+        str             d3,  [x19, w17, uxtw #3]
+        subs            w7,  w7,  #4
+        b.gt            5b
+
+4:
+        ldr             x5,  [x20, #40]             // fn[0]
+        ldr             x0,  [x20, #32]             // sub[0]
+        mov             x1,  x19
+        mov             x2,  x19
+        mov             x3,  #8
+        blr             x5                          // N/2pt FFT, in-place
+
+        // post-rotation over symmetric pairs (i0 = len4+i, i1 = len4-1-i),
+        // 2 pairs/iter, planes ld2-split: r = swap(z)*swap(e), the im parts
+        // crossing partners (z[i0] = (r_i0.re, r_i1.im) and vice versa), so
+        // each side stores its re plane zipped with the other's reversed ims
+        add             x15, x22, x21, lsl #2       // exp_post = exp + len2
+        add             x8,  x19, x21, lsl #1       // p_i0 = z + len4
+        sub             x9,  x8,  #16               // p_i1 = z + len4 - 2
+        add             x10, x15, x21, lsl #1       // e_i0 = exp_post + len4
+        sub             x11, x10, #16               // e_i1 = exp_post + len4 - 2
+        lsr             w7,  w21, #2                // len4
+        lsr             w6,  w7,  #1                // pairs of pairs
+        cbz             w6,  8f                     // N == 4: lone middle pair
+2:
+        ld2             { v0.2s, v1.2s }, [x8]       // z asc (i0, i0+1): re, im planes
+        ld2             { v2.2s, v3.2s }, [x9]       // z desc (i1-1, i1)
+        ld2             { v4.2s, v5.2s }, [x10], #16 // e asc: er, ei
+        ld2             { v6.2s, v7.2s }, [x11]      // e desc
+        sub             x11, x11, #16
+        fmul            v16.2s, v1.2s, v5.2s        // asc:  z.im*e.im
+        fmul            v18.2s, v1.2s, v4.2s        // asc:  z.im*e.re
+        fmul            v20.2s, v3.2s, v7.2s        // desc: z.im*e.im
+        fmul            v22.2s, v3.2s, v6.2s        // desc: z.im*e.re
+        fmls            v16.2s, v0.2s, v4.2s        // re plane (r_i0,   r_i0+1)
+        fmla            v18.2s, v0.2s, v5.2s        // im plane (r_i0,   r_i0+1)
+        fmls            v20.2s, v2.2s, v6.2s        // re plane (r_i1-1, r_i1)
+        fmla            v22.2s, v2.2s, v7.2s        // im plane (r_i1-1, r_i1)
+        rev64           v22.2s, v22.2s              // (r_i1.im,   r_i1-1.im)
+        rev64           v18.2s, v18.2s              // (r_i0+1.im, r_i0.im)
+        zip1            v0.4s, v16.4s, v22.4s       // (z[i0], z[i0+1])
+        zip1            v2.4s, v20.4s, v18.4s       // (z[i1-1], z[i1])
+        st1             { v0.4s }, [x8], #16
+        st1             { v2.4s }, [x9]
+        sub             x9,  x9,  #16
+        subs            w6,  w6,  #1
+        b.gt            2b
+8:
+        // odd len4 (N % 8 == 4): one leftover pair, (i0, i1) = (len2-1, 0).
+        // x8/x10 already point at it; x9/x11 sit one complex below their slot.
+        tbz             w7,  #0, 9f
+        LOAD_SUBADD     // v31 (clobbered by the FFT)
+        add             x9,  x9,  #8
+        add             x11, x11, #8
+        ldr             d0,  [x8]                   // z[i0]
+        ld1             { v0.d }[1], [x9]           // v0 = (z[i0], z[i1])
+        ldr             d1,  [x10]                  // exp[i0]
+        ld1             { v1.d }[1], [x11]          // v1 = (exp[i0], exp[i1])
+        rev64           v2.4s, v0.4s                // swap(z)   = a
+        rev64           v3.4s, v1.4s                // swap(exp) = b
+        trn1            v4.4s, v2.4s, v2.4s         // a.re dup
+        trn2            v5.4s, v2.4s, v2.4s         // a.im dup
+        fmul            v6.4s, v4.4s, v3.4s         // a.re*b
+        fmul            v7.4s, v5.4s, v1.4s         // a.im*b_swap (b_swap = orig exp)
+        fmla            v6.4s, v7.4s, v31.4s        // v6 = (r0.re, r0.im, r1.re, r1.im)
+        mov             v16.16b, v6.16b
+        ins             v16.s[1], v6.s[3]           // (r0.re, r1.im, r1.re, r1.im)
+        ins             v16.s[3], v6.s[1]           // (r0.re, r1.im, r1.re, r0.im)
+        st1             { v16.d }[0], [x8]          // z[i0] = (r0.re, r1.im)
+        st1             { v16.d }[1], [x9]          // z[i1] = (r1.re, r0.im)
+9:
+        ldp             x19, x20, [sp, #16]
+        ldp             x21, x22, [sp, #32]
+        ldp             x29, x30, [sp], #48
+        AARCH64_VALIDATE_LINK_REGISTER
+        ret
+endfunc
+
 .macro SETUP_SR_RECOMB len, re, im, dec
         ldr             w5, =(\len - 4*7)
         movrel          \re, X(ff_tx_tab_\len\()_float)

@@ -239,7 +239,7 @@ static const AVOption astatespace_options[] = {
     { "e", "equalizer", 0, AV_OPT_TYPE_CONST, {.i64 = equalizer }, 0, 0, AF, .unit = "type" },
     { "o", "set the filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=2}, 1, 2, AF },
     { "f", "set the filter central frequency", OFFSET(fc), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 1, INT_MAX, AFR },
-    { "g", "set the filter gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, 0, INT16_MAX, AFR },
+    { "g", "set the filter gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=1}, 0.0000000001, INT16_MAX, AFR },
     { "s", "set the filter sigma", OFFSET(S), AV_OPT_TYPE_DOUBLE, {.dbl=0}, 0, 2, AFR },
     { "z", "set the filter damping", OFFSET(zeta), AV_OPT_TYPE_DOUBLE, {.dbl=0.71}, 0, INT_MAX, AFR },
     {NULL}

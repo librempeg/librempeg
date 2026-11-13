@@ -18,7 +18,7 @@ vpath %.ptx  $(SRC_PATH)
 vpath %.metal $(SRC_PATH)
 vpath %/fate_config.sh.template $(SRC_PATH)
 
-TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
+TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch amrgen apnggen
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 
 ALLFFLIBS =            \
@@ -28,14 +28,12 @@ ALLFFLIBS =            \
     avformat           \
     avutil             \
     swscale            \
-    swresample         \
 
 # $(FFLIBS-yes) needs to be in linking order
 FFLIBS-$(CONFIG_AVDEVICE)   += avdevice
 FFLIBS-$(CONFIG_AVFILTER)   += avfilter
 FFLIBS-$(CONFIG_AVFORMAT)   += avformat
 FFLIBS-$(CONFIG_AVCODEC)    += avcodec
-FFLIBS-$(CONFIG_SWRESAMPLE) += swresample
 FFLIBS-$(CONFIG_SWSCALE)    += swscale
 
 FFLIBS := avutil
@@ -46,6 +44,19 @@ SKIPHEADERS = compat/w32pthreads.h
 
 # first so "all" becomes default target
 all: all-yes
+
+# cl.exe cannot write make dependency files directly, the mscl helper
+# converts its -showIncludes output into .d files.
+MSCL := $(if $(filter -showIncludes,$(CC_DEPFLAGS) $(CXX_DEPFLAGS) $(OBJCC_DEPFLAGS) $(AS_DEPFLAGS) $(HOSTCC_DEPFLAGS)),ffbuild/mscl$(HOSTEXESUF))
+ifneq ($(MSCL),)
+MSCLCC := $(HOSTCC)
+$(foreach V,CC CXX OBJCC HOSTCC AS,\
+    $(if $(filter -showIncludes,$($(V)_DEPFLAGS)),$(eval $(V) := $(MSCL) $($(V)))))
+HOSTPROGS += ffbuild/mscl
+
+ffbuild/mscl.o: $(SRC_PATH)/compat/windows/mscl.c
+	$(MSCLCC) $(HOSTCCFLAGS) $(HOSTCC_C) $(HOSTCC_O) $<
+endif
 
 include $(SRC_PATH)/tools/Makefile
 include $(SRC_PATH)/ffbuild/common.mak
@@ -78,9 +89,6 @@ tools/target_io_dem_fuzzer$(EXESUF): tools/target_io_dem_fuzzer.o $(FF_DEP_LIBS)
 tools/target_sws_fuzzer$(EXESUF): tools/target_sws_fuzzer.o $(FF_DEP_LIBS)
 	$(call LINK,$(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(ELIBS) $(FF_EXTRALIBS) $(LIBFUZZER_PATH))
 
-tools/target_swr_fuzzer$(EXESUF): tools/target_swr_fuzzer.o $(FF_DEP_LIBS)
-	$(call LINK,$(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(ELIBS) $(FF_EXTRALIBS) $(LIBFUZZER_PATH))
-
 tools/enum_options$(EXESUF): ELIBS = $(FF_EXTRALIBS)
 tools/enum_options$(EXESUF): $(FF_DEP_LIBS)
 tools/enc_recon_frame_test$(EXESUF): $(FF_DEP_LIBS)
@@ -107,7 +115,7 @@ ffbuild/.config: $(CONFIGURABLE_COMPONENTS)
 	@-tput sgr0 2>/dev/null
 
 SUBDIR_VARS := CLEANFILES FFLIBS DEVPROGS HOSTPROGS TESTPROGS TOOLS      \
-               HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS            \
+               HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS HEADER_DIRS            \
                ARMV5TE-OBJS ARMV6-OBJS ARMV8-OBJS VFP-OBJS NEON-OBJS     \
                ALTIVEC-OBJS VSX-OBJS X86ASM-OBJS                         \
                MIPSFPU-OBJS MIPSDSPR2-OBJS MIPSDSP-OBJS MSA-OBJS         \
@@ -220,5 +228,5 @@ $(sort $(OUTDIRS)):
 # so this saves some time on slow systems.
 .SUFFIXES:
 
-.PHONY: all all-yes alltools build check config testprogs
+.PHONY: all all-yes alltools build check config devprogs testprogs
 .PHONY: *clean install* uninstall*

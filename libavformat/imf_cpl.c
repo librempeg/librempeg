@@ -311,10 +311,8 @@ static int fill_marker(xmlNodePtr marker_elem, FFIMFMarker *marker)
     if (!(marker->scope_utf8 = xmlGetNoNsProp(element, "scope"))) {
         marker->scope_utf8
             = xmlCharStrdup("http://www.smpte-ra.org/schemas/2067-3/2013#standard-markers");
-        if (!marker->scope_utf8) {
-            xmlFree(marker->label_utf8);
+        if (!marker->scope_utf8)
             return AVERROR(ENOMEM);
-        }
     }
 
     return ret;
@@ -352,6 +350,10 @@ static int fill_base_resource(void *log_ctx, xmlNodePtr resource_elem,
     if ((ret = ff_imf_xml_read_uint32(element, &resource->duration))) {
         av_log(log_ctx, AV_LOG_ERROR, "Invalid IntrinsicDuration element found in a Resource\n");
         return ret;
+    }
+    if (resource->entry_point > resource->duration) {
+        av_log(log_ctx, AV_LOG_ERROR, "EntryPoint is beyond the IntrinsicDuration of a Resource\n");
+        return AVERROR_INVALIDDATA;
     }
     resource->duration -= resource->entry_point;
 

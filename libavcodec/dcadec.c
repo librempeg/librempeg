@@ -61,7 +61,7 @@ int ff_dca_set_channel_layout(AVCodecContext *avctx, int *ch_remap, int dca_mask
     av_channel_layout_uninit(&avctx->ch_layout);
     if (s->output_channel_order == CHANNEL_ORDER_CODED) {
         int ret;
-        for (dca_ch = 0; dca_ch < DCA_SPEAKER_COUNT; dca_ch++)
+        for (dca_ch = 0; dca_ch < DCA_SPEAKER_RSV1; dca_ch++)
             if (dca_mask & (1U << dca_ch))
                 ch_remap[nchannels++] = dca_ch;
         ret = av_channel_layout_custom_init(&avctx->ch_layout, nchannels);
@@ -69,7 +69,7 @@ int ff_dca_set_channel_layout(AVCodecContext *avctx, int *ch_remap, int dca_mask
             return ret;
 
         nchannels = 0;
-        for (dca_ch = 0; dca_ch < DCA_SPEAKER_COUNT; dca_ch++)
+        for (dca_ch = 0; dca_ch < DCA_SPEAKER_RSV1; dca_ch++)
             if (dca_mask & (1U << dca_ch))
                 avctx->ch_layout.u.map[nchannels++].id = dca2wav[dca_ch];
     } else {
@@ -184,7 +184,7 @@ int ff_dca_export_downmix_matrix(AVCodecContext *avctx, AVFrame *frame,
     matrix_l = av_downmix_matrix_coeff(dm, 0, 0);
     matrix_r = av_downmix_matrix_coeff(dm, 1, 0);
 
-    for (int i = 0; i <= av_log2(output_mask); i++) {
+    for (int i = 0; i < DCA_SPEAKER_RSV1; i++) {
         if (!(output_mask & (1U << i)))
             continue;
 
@@ -434,6 +434,8 @@ static av_cold int dcadec_init(AVCodecContext *avctx)
             s->request_channel_layout = DCA_SPEAKER_LAYOUT_5POINT1;
             av_channel_layout_uninit(&avctx->ch_layout);
             avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
+        } else if (!av_channel_layout_compare(&s->downmix_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_7POINT1)) {
+            s->x_bed_only = 1;
         }
         else
             av_log(avctx, AV_LOG_WARNING, "Invalid downmix layout\n");

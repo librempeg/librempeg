@@ -204,7 +204,7 @@ tests/data/hls-seek.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 	$(M)$(TARGET_EXEC) $(TARGET_PATH)/$< -nostdin \
         -f lavfi -i "testsrc2=size=128x72:rate=10:d=6" \
         -f lavfi -i "aevalsrc=cos(2*PI*t)*sin(2*PI*(440+4*t)*t):d=6" \
-        -map 0:v -map 1:a -c:v mpeg2video -bf 2 -g 15 -dct int -idct int -flags +bitexact -c:a mp2fixed \
+        -map 0:v -map 1:a -c:v mpeg2video -threads:v 1 -bf 2 -g 15 -dct int -idct int -flags +bitexact -c:a mp2fixed \
         -f hls -hls_time 2 -hls_list_size 0 \
         -var_stream_map "v:0,agroup:a a:0,agroup:a,default:yes" -master_pl_name hls-seek.m3u8 \
         -hls_segment_filename $(TARGET_PATH)/tests/data/hls-seek-s%v-%d.ts \
@@ -212,7 +212,7 @@ tests/data/hls-seek.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 
 FATE_SEEK_EXTRA += $(FATE_SEEK_EXTRA-yes)
 
-FATE_SEEK_FFMPEG-$(call ALLYES, TESTSRC2_FILTER AEVALSRC_FILTER ARESAMPLE_FILTER LAVFI_INDEV MPEG2VIDEO_ENCODER MP2FIXED_ENCODER HLS_MUXER MPEGTS_MUXER HLS_DEMUXER MPEGTS_DEMUXER FILE_PROTOCOL) += fate-seek-hls
+FATE_SEEK_FFMPEG-$(call ALLYES, TESTSRC2_FILTER AEVALSRC_FILTER ASF2SF_FILTER LAVFI_INDEV MPEG2VIDEO_ENCODER MP2FIXED_ENCODER HLS_MUXER MPEGTS_MUXER HLS_DEMUXER MPEGTS_DEMUXER FILE_PROTOCOL) += fate-seek-hls
 fate-seek-hls: tests/data/hls-seek.m3u8
 fate-seek-hls: CMD = run libavformat/tests/seek$(EXESUF) $(TARGET_PATH)/tests/data/hls-seek.m3u8 -duration 6
 

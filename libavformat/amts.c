@@ -88,7 +88,7 @@ static int read_header(AVFormatContext *s)
         break;
     case 16:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
-        st->codecpar->block_align = 1024 * nb_channels;
+        st->codecpar->block_align = 2 * nb_channels;
         break;
     default:
         avpriv_request_sample(s, "bps 0x%X", bps);
@@ -104,7 +104,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_amts_demuxer = {
     .p.name         = "amts",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("AMTS Audio"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Rockstar Games AMTS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lstm",
     .read_probe     = read_probe,

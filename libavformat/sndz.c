@@ -27,6 +27,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct SNDZContext {
     AVClass     *class;
@@ -135,19 +136,19 @@ static int read_header(AVFormatContext *s)
         switch (codec) {
         case 0x02:
             codec = AV_CODEC_ID_PCM_S16LE;
-            align = 256*2;
+            align = 2;
             break;
         case 0x04:
             codec = AV_CODEC_ID_PCM_S24LE;
-            align = 256*3;
+            align = 3;
             break;
         case 0x08:
             codec = AV_CODEC_ID_PCM_F32LE;
-            align = 256*4;
+            align = 4;
             break;
         case 0x20:
             codec = AV_CODEC_ID_ADPCM_HEVAG;
-            align = 32 * 0x10;
+            align = 16;
             break;
         case 0x21:
             codec = AV_CODEC_ID_ATRAC9;
@@ -284,7 +285,8 @@ redo:
 
     {
         const int64_t pos = avio_tell(pb);
-        const int size = FFMIN(par->block_align, sst->stop_offset - pos);
+        int size = ff_pcm_default_packet_size(par);
+        size = FFMIN(size, sst->stop_offset - pos);
 
         ret = av_get_packet(pb, pkt, size);
         pkt->pos = pos;

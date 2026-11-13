@@ -88,6 +88,9 @@ show video
 show audio waves
 @item 2, rdft
 show audio frequency band using RDFT ((Inverse) Real Discrete Fourier Transform)
+@item 3, phase
+like rdft, with stereo content whose left channel leads in phase shown in
+blue and whose right channel leads shown in yellow
 @end table
 
 Default value is "video", if video is not present or cannot be played
@@ -294,9 +297,6 @@ Toggle full screen.
 @ifset config-avdevice
 @include devices.texi
 @end ifset
-@ifset config-swresample
-@include resampler.texi
-@end ifset
 @ifset config-swscale
 @include scaler.texi
 @end ifset
@@ -318,7 +318,6 @@ Toggle full screen.
 @url{ffmpeg.html,ffmpeg}, @url{ffprobe.html,ffprobe},
 @url{ffmpeg-utils.html,ffmpeg-utils},
 @url{ffmpeg-scaler.html,ffmpeg-scaler},
-@url{ffmpeg-resampler.html,ffmpeg-resampler},
 @url{ffmpeg-codecs.html,ffmpeg-codecs},
 @url{ffmpeg-bitstream-filters.html,ffmpeg-bitstream-filters},
 @url{ffmpeg-formats.html,ffmpeg-formats},
@@ -335,7 +334,7 @@ ffplay(1),
 ffplay-all(1),
 @end ifset
 ffmpeg(1), ffprobe(1),
-ffmpeg-utils(1), ffmpeg-scaler(1), ffmpeg-resampler(1),
+ffmpeg-utils(1), ffmpeg-scaler(1),
 ffmpeg-codecs(1), ffmpeg-bitstream-filters(1), ffmpeg-formats(1),
 ffmpeg-devices(1), ffmpeg-protocols(1), ffmpeg-filters(1)
 @end ifnothtml

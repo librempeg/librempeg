@@ -227,10 +227,11 @@ static void free_buffers(CFHDContext *s)
             s->plane[i].l_h[j] = NULL;
 
         for (int j = 0; j < DWT_LEVELS_3D; j++)
-            p->band[j][0].read_ok =
-            p->band[j][1].read_ok =
-            p->band[j][2].read_ok =
-            p->band[j][3].read_ok = 0;
+            for (unsigned k = 0; k < FF_ARRAY_ELEMS(p->band[j]); k++) {
+                p->band[j][k].a_width  = 0;
+                p->band[j][k].a_height = 0;
+                p->band[j][k].read_ok  = 0;
+            }
     }
     s->a_height = 0;
     s->a_width  = 0;
@@ -288,13 +289,13 @@ static int alloc_buffers(AVCodecContext *avctx)
             s->plane[i].idwt_buf =
                 av_calloc(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_buf));
             s->plane[i].idwt_tmp =
-                av_malloc_array(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_tmp));
+                av_calloc(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_tmp));
         } else {
             s->plane[i].idwt_size = FFALIGN(height, 8) * stride * 2;
             s->plane[i].idwt_buf =
                 av_calloc(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_buf));
             s->plane[i].idwt_tmp =
-                av_malloc_array(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_tmp));
+                av_calloc(s->plane[i].idwt_size, sizeof(*s->plane[i].idwt_tmp));
         }
 
         if (!s->plane[i].idwt_buf || !s->plane[i].idwt_tmp)
@@ -433,11 +434,6 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
         } else if (tag == ChannelNumber) {
             s->channel_num = data;
             av_log(avctx, AV_LOG_DEBUG, "Channel number %"PRIu16"\n", data);
-            if (s->channel_num >= s->planes) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid channel number\n");
-                ret = AVERROR(EINVAL);
-                goto end;
-            }
             init_plane_defaults(s);
         } else if (tag == SubbandNumber) {
             if (s->subband_num != 0 && data == 1 && (s->transform_type == 0 || s->transform_type == 2))  // hack
@@ -631,6 +627,18 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
         } else
             av_log(avctx, AV_LOG_DEBUG,  "Unknown tag %i data %x\n", tag, data);
 
+        if (s->channel_num >= s->planes) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid channel number\n");
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+
+        if (got_buffer && (s->coded_width || s->coded_height || s->coded_format != AV_PIX_FMT_NONE)) {
+            av_log(avctx, AV_LOG_ERROR, "Header tag after end of header\n");
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+
         if (tag == BitstreamMarker && data == CoefficientSegment &&
             s->coded_format != AV_PIX_FMT_NONE) {
             int lowpass_height = s->plane[s->channel_num].band[0][0].height;
@@ -670,6 +678,7 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
             ret = ff_set_dimensions(avctx, s->coded_width, s->coded_height);
             if (ret < 0)
                 return ret;
+            avctx->pix_fmt = s->coded_format;
             if (s->cropped_height) {
                 unsigned height = s->cropped_height << (avctx->pix_fmt == AV_PIX_FMT_BAYER_RGGB16);
                 if (avctx->height < height)
@@ -918,8 +927,7 @@ finish:
     }
 
     if (!s->a_width || !s->a_height || s->a_format == AV_PIX_FMT_NONE ||
-        s->a_transform_type == INT_MIN ||
-        s->coded_width || s->coded_height || s->coded_format != AV_PIX_FMT_NONE) {
+        s->a_transform_type == INT_MIN) {
         av_log(avctx, AV_LOG_ERROR, "Invalid dimensions\n");
         ret = AVERROR(EINVAL);
         goto end;

@@ -187,7 +187,7 @@ static int pmp_close(AVFormatContext *s)
 
 const FFInputFormat ff_pmp_demuxer = {
     .p.name         = "pmp",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Playstation Portable PMP"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("PlayStation Portable PMP"),
     .priv_data_size = sizeof(PMPContext),
     .read_probe     = pmp_probe,
     .read_header    = pmp_header,

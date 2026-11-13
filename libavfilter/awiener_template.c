@@ -23,6 +23,7 @@
 #undef ctype
 #undef FPI
 #undef SAMPLE_FORMAT
+#undef TX_TYPE
 #undef EPS
 #if DEPTH == 32
 #define FEXP expf
@@ -32,6 +33,7 @@
 #define ctype AVComplexFloat
 #define FPI M_PIf
 #define SAMPLE_FORMAT fltp
+#define TX_TYPE AV_TX_FLOAT_RDFT
 #define EPS FLT_EPSILON
 #else
 #define FEXP exp
@@ -41,6 +43,7 @@
 #define ctype AVComplexDouble
 #define FPI M_PI
 #define SAMPLE_FORMAT dblp
+#define TX_TYPE AV_TX_DOUBLE_RDFT
 #define EPS FLT_EPSILON
 #endif
 
@@ -51,6 +54,18 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(StateContext) {
+    ftype *wiener_frame;
+    ftype *sbb;
+    ctype *ss[2];
+    ftype *in_buffer;
+    ftype *in_frame;
+    ftype *out_dist_frame;
+    ctype *spectrum_buf;
+    ftype *windowed_frame;
+
+    AVTXContext *tx_ctx, *itx_ctx;
+    av_tx_fn tx_fn, itx_fn;
+
     int capture;
     int noise_frame;
 } fn(StateContext);
@@ -58,17 +73,73 @@ typedef struct fn(StateContext) {
 static int fn(init)(AVFilterContext *ctx)
 {
     AudioWienerContext *s = ctx->priv;
+    ftype scale, iscale;
     fn(StateContext) *st;
+    int ret;
 
     s->st = av_calloc(s->channels, sizeof(*st));
     if (!s->st)
         return AVERROR(ENOMEM);
 
+    scale = F(1.0) / s->rdft_size;
+    iscale = F(1.0 / 1.5);
+
     st = s->st;
-    for (int ch = 0; ch < s->channels; ch++)
-        st[ch].capture = -1;
+    for (int ch = 0; ch < s->channels; ch++) {
+        fn(StateContext) *stc = &st[ch];
+
+        stc->capture = -1;
+
+        stc->wiener_frame   = av_calloc(s->rdft_size, sizeof(*stc->wiener_frame));
+        stc->sbb            = av_calloc(s->rdft_size + 2, sizeof(*stc->sbb));
+        stc->ss[0]          = av_calloc(s->rdft_size/2+1, sizeof(*stc->ss[0]));
+        stc->ss[1]          = av_calloc(s->rdft_size/2+1, sizeof(*stc->ss[1]));
+        stc->in_buffer      = av_calloc(s->rdft_size, sizeof(*stc->in_buffer));
+        stc->in_frame       = av_calloc(s->rdft_size, sizeof(*stc->in_frame));
+        stc->out_dist_frame = av_calloc(s->rdft_size, sizeof(*stc->out_dist_frame));
+        stc->spectrum_buf   = av_calloc(s->rdft_size/2+1, sizeof(*stc->spectrum_buf));
+        stc->windowed_frame = av_calloc(s->rdft_size, sizeof(*stc->windowed_frame));
+        if (!stc->in_buffer || !stc->in_frame || !stc->ss[0] || !stc->ss[1] ||
+            !stc->out_dist_frame || !stc->windowed_frame ||
+            !stc->wiener_frame || !stc->spectrum_buf || !stc->sbb)
+            return AVERROR(ENOMEM);
+
+        ret = av_tx_init(&stc->tx_ctx, &stc->tx_fn, TX_TYPE, 0, s->rdft_size, &scale, 0);
+        if (ret < 0)
+            return ret;
+
+        ret = av_tx_init(&stc->itx_ctx, &stc->itx_fn, TX_TYPE, 1, s->rdft_size, &iscale, 0);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
+}
+
+static void fn(uninit)(AVFilterContext *ctx)
+{
+    AudioWienerContext *s = ctx->priv;
+    fn(StateContext) *st;
+
+    st = s->st;
+    for (int ch = 0; ch < s->channels && st; ch++) {
+        fn(StateContext) *stc = &st[ch];
+
+        av_freep(&stc->wiener_frame);
+        av_freep(&stc->sbb);
+        av_freep(&stc->ss[0]);
+        av_freep(&stc->ss[1]);
+        av_freep(&stc->in_buffer);
+        av_freep(&stc->in_frame);
+        av_freep(&stc->out_dist_frame);
+        av_freep(&stc->spectrum_buf);
+        av_freep(&stc->windowed_frame);
+
+        av_tx_uninit(&stc->tx_ctx);
+        av_tx_uninit(&stc->itx_ctx);
+    }
+
+    av_freep(&s->st);
 }
 
 static void fn(generate_hann_window)(void *_window, int size)
@@ -130,7 +201,8 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
                      const ftype *in_samples, ftype *out_samples,
                      ftype *in_frame, ftype *out_dist_frame,
                      ftype *windowed_frame, ftype *wiener_frame,
-                     ctype *spectrum_buf, ctype *ss0, ctype *ss1, ftype *sbb)
+                     ctype *spectrum_buf, ctype *ss0, ctype *ss1, ftype *sbb,
+                     const int nb_samples)
 {
     AudioWienerContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
@@ -154,7 +226,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
     fn(apply_window)(s, in_frame, windowed_frame, 0);
 
-    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(ftype));
+    stc->tx_fn(stc->tx_ctx, spectrum_buf, windowed_frame, sizeof(ftype));
 
     if (s->capture >= 0) {
         capture = s->capture;
@@ -204,14 +276,14 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
         spectrum_buf[n].im = new.im * reduction + keep * spectrum_buf[n].im;
     }
 
-    s->itx_fn(s->itx_ctx[ch], wiener_frame, spectrum_buf, sizeof(ctype));
+    stc->itx_fn(stc->itx_ctx, wiener_frame, spectrum_buf, sizeof(ctype));
 
     fn(apply_window)(s, wiener_frame, out_dist_frame, 1);
 
     if (ff_filter_disabled(ctx) || bypass)
-        memcpy(out_samples, in_frame, sizeof(*out_samples) * overlap);
+        memcpy(out_samples, in_frame, sizeof(*out_samples) * nb_samples);
     else
-        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * overlap);
+        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * nb_samples);
 
     memcpy(ss0, ss1, sizeof(*ss0) * nb_coeffs);
 }
@@ -219,26 +291,28 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
 {
     AudioWienerContext *s = ctx->priv;
-    ftype *in_buffer = (ftype *)s->in_buffer->extended_data[ch];
     const int overlap = s->overlap;
+    fn(StateContext) *st = s->st;
+    fn(StateContext) *stc = &st[ch];
+    ftype *in_buffer = stc->in_buffer;
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
-        const int nb_samples = FFMIN(out->nb_samples - offset, overlap);
+        const int nb_samples = FFMIN(in->nb_samples - offset, overlap);
+        const int out_nb_samples = FFMIN(out->nb_samples - offset, overlap);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         memcpy(in_buffer, src, sizeof(*in_buffer) * nb_samples);
         memset(in_buffer + nb_samples, 0, sizeof(*in_buffer) * (overlap - nb_samples));
 
         fn(feed)(ctx, ch, in_buffer, dst,
-                 (ftype *)(s->in_frame->extended_data[ch]),
-                 (ftype *)(s->out_dist_frame->extended_data[ch]),
-                 (ftype *)(s->windowed_frame->extended_data[ch]),
-                 (ftype *)(s->wiener_frame->extended_data[ch]),
-                 (ctype *)(s->spectrum_buf->extended_data[ch]),
-                 (ctype *)(s->ss[0]->extended_data[ch]),
-                 (ctype *)(s->ss[1]->extended_data[ch]),
-                 (ftype *)(s->sbb->extended_data[ch]));
+                 stc->in_frame,
+                 stc->out_dist_frame,
+                 stc->windowed_frame,
+                 stc->wiener_frame,
+                 stc->spectrum_buf,
+                 stc->ss[0], stc->ss[1],
+                 stc->sbb, out_nb_samples);
     }
 
     return 0;
@@ -247,23 +321,25 @@ static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, i
 static int fn(wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
 {
     AudioWienerContext *s = ctx->priv;
-    ftype *in_buffer = (ftype *)s->in_buffer->extended_data[ch];
     const int overlap = s->overlap;
+    fn(StateContext) *st = s->st;
+    fn(StateContext) *stc = &st[ch];
+    ftype *in_buffer = stc->in_buffer;
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        const int out_nb_samples = FFMIN(out->nb_samples - offset, overlap);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         memset(in_buffer, 0, sizeof(*in_buffer) * overlap);
 
         fn(feed)(ctx, ch, in_buffer, dst,
-                 (ftype *)(s->in_frame->extended_data[ch]),
-                 (ftype *)(s->out_dist_frame->extended_data[ch]),
-                 (ftype *)(s->windowed_frame->extended_data[ch]),
-                 (ftype *)(s->wiener_frame->extended_data[ch]),
-                 (ctype *)(s->spectrum_buf->extended_data[ch]),
-                 (ctype *)(s->ss[0]->extended_data[ch]),
-                 (ctype *)(s->ss[1]->extended_data[ch]),
-                 (ftype *)(s->sbb->extended_data[ch]));
+                 stc->in_frame,
+                 stc->out_dist_frame,
+                 stc->windowed_frame,
+                 stc->wiener_frame,
+                 stc->spectrum_buf,
+                 stc->ss[0], stc->ss[1],
+                 stc->sbb, out_nb_samples);
     }
 
     return 0;

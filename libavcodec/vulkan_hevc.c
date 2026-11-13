@@ -450,11 +450,15 @@ static void set_sps(const HEVCSPS *sps, int sps_idx,
     };
 }
 
-static void set_pps(const HEVCPPS *pps, const HEVCSPS *sps,
-                    StdVideoH265ScalingLists *vkpps_scaling,
-                    StdVideoH265PictureParameterSet *vkpps,
-                    StdVideoH265PredictorPaletteEntries *pal)
+static int set_pps(const HEVCPPS *pps, const HEVCSPS *sps,
+                   StdVideoH265ScalingLists *vkpps_scaling,
+                   StdVideoH265PictureParameterSet *vkpps,
+                   StdVideoH265PredictorPaletteEntries *pal)
 {
+    if (pps->num_tile_columns > FF_ARRAY_ELEMS(vkpps->column_width_minus1) + 1 ||
+        pps->num_tile_rows    > FF_ARRAY_ELEMS(vkpps->row_height_minus1) + 1)
+        return AVERROR(ENOSYS);
+
     copy_scaling_list(&pps->scaling_list, vkpps_scaling);
 
     *vkpps = (StdVideoH265PictureParameterSet) {
@@ -536,6 +540,8 @@ static void set_pps(const HEVCPPS *pps, const HEVCSPS *sps,
         vkpps->cb_qp_offset_list[i] = pps->cb_qp_offset_list[i];
         vkpps->cr_qp_offset_list[i] = pps->cr_qp_offset_list[i];
     }
+
+    return 0;
 }
 
 static void set_vps(const HEVCVPS *vps,
@@ -680,8 +686,10 @@ static int vk_hevc_create_params(AVCodecContext *avctx, VkVideoSessionParameters
             const HEVCPPS *pps_l = h->ps.pps_list[i];
             const HEVCSPS *sps_l = h->ps.sps_list[pps_l->sps_id];
             int idx = h265_params_info.stdPPSCount++;
-            set_pps(pps_l, sps_l, &hdr->hpps[idx].scaling,
-                    &hdr->pps[idx], &hdr->hpps[idx].pal);
+            err = set_pps(pps_l, sps_l, &hdr->hpps[idx].scaling,
+                          &hdr->pps[idx], &hdr->hpps[idx].pal);
+            if (err < 0)
+                return err;
         }
     }
 
@@ -757,6 +765,13 @@ static int vk_hevc_start_frame(AVCodecContext          *avctx,
             continue;
         }
 
+        if (nb_refs >= HEVC_MAX_REFS) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Too many reference frames in DPB: %d >= %d\n",
+                   nb_refs, HEVC_MAX_REFS);
+            return AVERROR_INVALIDDATA;
+        }
+
         err = vk_hevc_fill_pict(avctx, &hp->ref_src[idx], &vp->ref_slots[idx],
                                 &vp->refs[idx], &hp->vkh265_refs[idx],
                                 &hp->h265_refs[idx], (HEVCFrame *)ref, 0, i);
@@ -764,6 +779,13 @@ static int vk_hevc_start_frame(AVCodecContext          *avctx,
             return err;
 
         nb_refs++;
+    }
+
+    if (h->rps[ST_CURR_BEF].nb_refs > FF_ARRAY_ELEMS(hp->h265pic.RefPicSetStCurrBefore) ||
+        h->rps[ST_CURR_AFT].nb_refs > FF_ARRAY_ELEMS(hp->h265pic.RefPicSetStCurrAfter)  ||
+        h->rps[LT_CURR].nb_refs     > FF_ARRAY_ELEMS(hp->h265pic.RefPicSetLtCurr)) {
+        av_log(avctx, AV_LOG_ERROR, "Too many reference frames\n");
+        return AVERROR_INVALIDDATA;
     }
 
     memset(hp->h265pic.RefPicSetStCurrBefore, 0xff, 8);
@@ -873,7 +895,9 @@ static int vk_hevc_end_frame(AVCodecContext *avctx)
             return err;
         hdr = dec->hevc_headers;
 
-        set_pps(pps, sps, &hdr->hpps[0].scaling, &hdr->pps[0], &hdr->hpps[0].pal);
+        err = set_pps(pps, sps, &hdr->hpps[0].scaling, &hdr->pps[0], &hdr->hpps[0].pal);
+        if (err < 0)
+            return err;
         set_sps(sps, pps->sps_id, &hdr->hsps[0].scaling, &hdr->hsps[0].vui_header,
                 &hdr->hsps[0].vui, &hdr->sps[0], hdr->hsps[0].nal_hdr,
                 hdr->hsps[0].vcl_hdr, &hdr->hsps[0].ptl, &hdr->hsps[0].dpbm,

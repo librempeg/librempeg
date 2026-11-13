@@ -71,8 +71,8 @@ static int FUNC(frame_info)(CodedBitstreamContext *ctx, RWContext *rw,
 
     u(5, reserved_zero_5bits, 0, 0);
 
-    ub(24, frame_width);
-    ub(24, frame_height);
+    u(24, frame_width,  1, MAX_UINT_BITS(24));
+    u(24, frame_height, 1, MAX_UINT_BITS(24));
 
     u(4, chroma_format_idc, 0, 4);
     if (current->chroma_format_idc == 1) {
@@ -228,11 +228,13 @@ static int FUNC(tile)(CodedBitstreamContext *ctx, RWContext *rw,
                       int tile_idx, uint32_t tile_size)
 {
     const CodedBitstreamAPVContext *priv = ctx->priv_data;
+    uint32_t data_size, padding_size;
     int err;
 
     CHECK(FUNC(tile_header)(ctx, rw, &current->tile_header,
                             tile_idx, tile_size));
 
+    data_size = 0;
     for (int c = 0; c < priv->num_comp; c++) {
         uint32_t comp_size = current->tile_header.tile_data_size[c];
 #ifdef READ
@@ -247,6 +249,24 @@ static int FUNC(tile)(CodedBitstreamContext *ctx, RWContext *rw,
             return AVERROR(ENOSPC);
         ff_copy_bits(rw, current->tile_data[c], comp_size * 8);
 #endif
+        data_size += comp_size;
+    }
+
+    av_assert0(tile_size >=
+               current->tile_header.tile_header_size + data_size);
+    padding_size = tile_size -
+        (current->tile_header.tile_header_size + data_size);
+
+    if (padding_size > 0) {
+#ifdef READ
+        current->tile_dummy_byte      = (uint8_t*)align_get_bits(rw);
+        current->tile_dummy_byte_size = padding_size;
+        skip_bits_long(rw, 8 * padding_size);
+#else
+        if (put_bytes_left(rw, 0) < padding_size)
+            return AVERROR(ENOSPC);
+        ff_copy_bits(rw, current->tile_dummy_byte, 8 * padding_size);
+#endif
     }
 
     return 0;
@@ -255,20 +275,42 @@ static int FUNC(tile)(CodedBitstreamContext *ctx, RWContext *rw,
 static int FUNC(frame)(CodedBitstreamContext *ctx, RWContext *rw,
                        APVRawFrame *current)
 {
-    const CodedBitstreamAPVContext *priv = ctx->priv_data;
+    CodedBitstreamAPVContext *priv = ctx->priv_data;
     int err;
 
     HEADER("Frame");
+
+#ifdef WRITE
+    // Calculate tile sizes from header, components and padding
+    // before writing any of them.  Must be done early because we might
+    // need to write them in the header.
+
+    cbs_apv_derive_tile_info(ctx, &current->frame_header);
+    priv->num_comp = cbs_apv_get_num_comp(&current->frame_header);
+
+    for (int t = 0; t < priv->num_tiles; t++) {
+        APVRawTile *tile = &current->tile[t];
+        uint32_t size = tile->tile_header.tile_header_size;
+        for (int c = 0; c < priv->num_comp; c++)
+            size += tile->tile_header.tile_data_size[c];
+        size += tile->tile_dummy_byte_size;
+
+        current->tile_size[t] = size;
+        if (current->frame_header.tile_info.tile_size_present_in_fh_flag)
+            current->frame_header.tile_info.tile_size_in_fh[t] = size;
+    }
+#endif
 
     CHECK(FUNC(pbu_header)(ctx, rw, &current->pbu_header));
 
     CHECK(FUNC(frame_header)(ctx, rw, &current->frame_header));
 
     for (int t = 0; t < priv->num_tiles; t++) {
+        APVRawTile *tile = &current->tile[t];
+
         us(32, tile_size[t], 10, MAX_INT_BITS(32), 1, t);
 
-        CHECK(FUNC(tile)(ctx, rw, &current->tile[t],
-                         t, current->tile_size[t]));
+        CHECK(FUNC(tile)(ctx, rw, tile, t, current->tile_size[t]));
     }
 
     CHECK(FUNC(filler)(ctx, rw, &current->filler));
@@ -310,6 +352,9 @@ static int FUNC(metadata_itu_t_t35)(CodedBitstreamContext *ctx,
     HEADER("ITU-T T.35 Metadata");
 
     ub(8, itu_t_t35_country_code);
+
+    if (payload_size < 1 + (current->itu_t_t35_country_code == 0xff))
+        return AVERROR_INVALIDDATA;
 
     if (current->itu_t_t35_country_code == 0xff) {
         ub(8, itu_t_t35_country_code_extension);
@@ -398,6 +443,9 @@ static int FUNC(metadata_user_defined)(CodedBitstreamContext *ctx,
     int err;
 
     HEADER("User-Defined Metadata");
+
+    if (payload_size < 16)
+        return AVERROR_INVALIDDATA;
 
     for (int i = 0; i < 16; i++)
         ubs(8, uuid[i], 1, i);

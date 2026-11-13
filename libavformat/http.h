@@ -22,10 +22,64 @@
 #ifndef AVFORMAT_HTTP_H
 #define AVFORMAT_HTTP_H
 
+#include <string.h>
+
+#include "libavutil/dict.h"
 #include "libavutil/error.h"
+#include "libavutil/log.h"
 #include "url.h"
 
 #define HTTP_HEADERS_SIZE 4096
+
+/**
+ * Parsed form of a response status line.
+ */
+typedef struct HTTPStatusLine {
+    char        version[4]; /**< protocol version, e.g. "1.1" */
+    int         code;       /**< response status code */
+    const char *reason;     /**< reason phrase, points into the parsed line */
+    int         willclose;  /**< the version implies the connection will close */
+} HTTPStatusLine;
+
+/**
+ * Parse the status line of an HTTP response.
+ *
+ * @param logctx context used for logging, may be NULL
+ * @param line NUL terminated status line, without its trailing CRLF
+ * @param st filled in with the parsed status line
+ * @return 0 on success, a negative AVERROR code on failure
+ */
+int ff_http_parse_status_line(void *logctx, const char *line,
+                              HTTPStatusLine *st);
+
+/**
+ * Split an in-band ICY metadata packet into its "Key='Value';" pairs.
+ *
+ * @param logctx context used for logging, may be NULL
+ * @param metadata dictionary the pairs are stored in
+ * @param data NUL terminated packet, split in place
+ */
+static inline void ff_http_parse_icy_packet(void *logctx,
+                                            AVDictionary **metadata, char *data)
+{
+    char *next = data;
+
+    while (*next) {
+        char *key = next, *val, *end;
+
+        if (!(val = strstr(key, "='")) || !(end = strstr(val, "';")))
+            break;
+
+        *val = '\0';
+        *end = '\0';
+        val += 2;
+
+        av_dict_set(metadata, key, val, 0);
+        av_log(logctx, AV_LOG_VERBOSE, "Metadata update for %s: %s\n", key, val);
+
+        next = end + 2;
+    }
+}
 
 /**
  * Initialize the authentication state based on another HTTP URLContext.

@@ -24,7 +24,6 @@ HEADERS = adler32.h                                                     \
           crc.h                                                         \
           csp.h                                                         \
           des.h                                                         \
-          detection_bbox.h                                              \
           dict.h                                                        \
           display.h                                                     \
           dovi_meta.h                                                   \
@@ -37,6 +36,7 @@ HEADERS = adler32.h                                                     \
           file.h                                                        \
           film_grain_params.h                                           \
           frame.h                                                       \
+          gain_map.h                                                    \
           hash.h                                                        \
           hdr_dynamic_metadata.h                                        \
           hdr_dynamic_vivid_metadata.h                                  \
@@ -129,7 +129,6 @@ OBJS = adler32.o                                                        \
        crc.o                                                            \
        csp.o                                                            \
        des.o                                                            \
-       detection_bbox.o                                                 \
        dict.o                                                           \
        display.o                                                        \
        dovi_meta.o                                                      \
@@ -147,6 +146,7 @@ OBJS = adler32.o                                                        \
        film_grain_params.o                                              \
        fixed_dsp.o                                                      \
        frame.o                                                          \
+       gain_map.o                                                       \
        hash.o                                                           \
        hdr_dynamic_metadata.o                                           \
        hdr_dynamic_vivid_metadata.o                                     \
@@ -230,11 +230,12 @@ OBJS-$(HAVE_THREADS)                    += thread.o
 OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 # Object files to satisfy dependencies of other libraries for static builds
+STLIBOBJS-$(CONFIG_AVFILTER)            += framepool.o
 STLIBOBJS-$(CONFIG_EXR_DECODER)         += half2float.o float2half.o
 STLIBOBJS-$(CONFIG_EXR_ENCODER)         += float2half.o
 STLIBOBJS-$(CONFIG_PHM_DECODER)         += half2float.o
 STLIBOBJS-$(CONFIG_PHM_ENCODER)         += float2half.o
-STLIBOBJS-$(CONFIG_SWSCALE)             += half2float.o
+STLIBOBJS-$(CONFIG_SWSCALE)             += framepool.o half2float.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avutilres.o
@@ -263,6 +264,7 @@ TESTPROGS = adler32                                                     \
             aes                                                         \
             aes_ctr                                                     \
             ambient_viewing_environment                                 \
+            atomic                                                      \
             audio_fifo                                                  \
             avstring                                                    \
             base64                                                      \
@@ -277,10 +279,10 @@ TESTPROGS = adler32                                                     \
             crc                                                         \
             csp                                                         \
             des                                                         \
-            detection_bbox                                              \
             dict                                                        \
             display                                                     \
             dovi_meta                                                   \
+            downmix_info                                                \
             encryption_info                                             \
             error                                                       \
             eval                                                        \
@@ -288,9 +290,11 @@ TESTPROGS = adler32                                                     \
             fifo                                                        \
             film_grain_params                                           \
             hash                                                        \
+            hdr_dynamic_metadata                                        \
             hdr_dynamic_vivid_metadata                                  \
             hmac                                                        \
             hwdevice                                                    \
+            iamf                                                        \
             integer                                                     \
             imgutils                                                    \
             lfg                                                         \
@@ -312,6 +316,7 @@ TESTPROGS = adler32                                                     \
             sha                                                         \
             sha512                                                      \
             samplefmt                                                   \
+            side_data                                                   \
             side_data_array                                             \
             softfloat                                                   \
             spherical                                                   \

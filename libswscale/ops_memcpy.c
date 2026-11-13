@@ -38,42 +38,57 @@ typedef struct MemcpyPriv {
 
 /* Memcpy backend for trivial cases */
 
-static void process(const SwsOpExec *exec, const void *priv,
-                    int x_start, int y_start, int x_end, int y_end)
+static void process_memcpy(const SwsOpExec *exec, const void *priv,
+                           int x_start, int y_start, int x_end, int y_end)
 {
     const MemcpyPriv *p = priv;
-    const int lines = y_end - y_start;
     av_assert1(x_start == 0 && x_end == exec->width);
 
     for (int i = 0; i < p->num_planes; i++) {
-        uint8_t *out = exec->out[i];
-        const int idx = p->index[i];
-        const int bytes = x_end * exec->block_size_out[i];
-        const int use_loop = exec->out_stride[i] > bytes + SWS_MAX_PADDING;
-        if (idx < 0 && !use_loop) {
-            memset(out, p->clear_value[i], exec->out_stride[i] * lines);
-        } else if (idx < 0) {
-            for (int y = y_start; y < y_end; y++) {
-                memset(out, p->clear_value[i], bytes);
-                out += exec->out_stride[i];
-            }
-        } else if (out == exec->in[idx]) {
-            av_assert1(exec->out_stride[i] == exec->in_stride[idx]);
+        uint8_t         *out        = exec->out[i];
+        const ptrdiff_t  out_stride = exec->out_stride[i];
+        const int        idx        = p->index[i];
+        const uint8_t   *in         = (idx >= 0) ? exec->in[idx] : NULL;
+        const ptrdiff_t  in_stride  = (idx >= 0) ? exec->in_stride[idx] : 0;
+
+        if (out == in) {
+            av_assert1(out_stride == in_stride);
             continue; /* plane was already ref'd */
-        } else if (exec->out_stride[i] == exec->in_stride[idx] && !use_loop) {
-            memcpy(out, exec->in[idx], exec->out_stride[i] * lines);
+        }
+
+        size_t bytes = x_end * exec->block_size_out[i];
+        int lines = y_end - y_start;
+
+        /* Replace the per-line loop with a bulk memset/memcpy when possible. */
+        const size_t abs_stride = FFABS(out_stride);
+        if ((!in || out_stride == in_stride) &&
+            abs_stride <= bytes + SWS_MAX_PADDING) {
+            if (out_stride < 0) {
+                const ptrdiff_t offset = (lines - 1) * out_stride;
+                out += offset;
+                if (in)
+                    in += offset;
+            }
+            bytes += (lines - 1) * abs_stride;
+            lines = 1;
+        }
+
+        if (!in) {
+            for (int y = 0; y < lines; y++) {
+                memset(out, p->clear_value[i], bytes);
+                out += out_stride;
+            }
         } else {
-            const uint8_t *in = exec->in[idx];
-            for (int y = y_start; y < y_end; y++) {
+            for (int y = 0; y < lines; y++) {
                 memcpy(out, in, bytes);
-                out += exec->out_stride[i];
-                in  += exec->in_stride[idx];
+                out += out_stride;
+                in  += in_stride;
             }
         }
     }
 }
 
-static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_ops_memcpy(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
 {
     MemcpyPriv p = {0};
 
@@ -112,7 +127,7 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
                  * can't memset on multi-byte sequences */
                 uint8_t val = op->clear.value[i].num & 0xFF;
                 uint32_t ref = val;
-                switch (ff_sws_pixel_type_size(op->type)) {
+                switch (ff_sws_pixel_type_size(op->clear.type[i])) {
                 case 2: ref *= 0x101; break;
                 case 4: ref *= 0x1010101; break;
                 }
@@ -137,7 +152,7 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
     *out = (SwsCompiledOp) {
         .slice_align = 1,
         .block_size  = 1,
-        .func = process,
+        .func = process_memcpy,
         .priv = av_memdup(&p, sizeof(p)),
         .free = av_free,
     };
@@ -147,6 +162,6 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
 const SwsOpBackend backend_murder = {
     .name       = "memcpy",
     .flags      = SWS_BACKEND_MEMCPY,
-    .compile    = compile,
+    .compile    = compile_ops_memcpy,
     .hw_format  = AV_PIX_FMT_NONE,
 };

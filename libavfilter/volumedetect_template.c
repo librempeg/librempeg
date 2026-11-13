@@ -121,13 +121,17 @@ static void fn(print_stats)(AVFilterContext *ctx)
     uint64_t nb_samples = 0, sum = 0, idb_sum = 0;
     int last_idb = INT_MAX;
 
+    if (s->print_done)
+        return;
+
     for (int i = 0; i < HISTOGRAM_SIZE; i++)
         nb_samples += s->histogram[i];
     if (!nb_samples)
         return;
 
+    s->print_done = 1;
     av_log(ctx, AV_LOG_INFO, "n_samples: %" PRId64 "\n", nb_samples);
-#if DEPTH == 16
+#if DEPTH == 16 || DEPTH == 32
     /*
      * If nb_samples > 1<<34, there is a risk of overflow in the
      * multiplication or the sum: shift all histogram values to avoid that.
@@ -150,17 +154,21 @@ static void fn(print_stats)(AVFilterContext *ctx)
         if (!nb_samples_shift)
             return;
         power = (power + nb_samples_shift / 2) / nb_samples_shift;
-        av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", fn(get_db)(sqrt(power)));
+        s->mean_volume = fn(get_db)(sqrt(power));
+        av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", s->mean_volume);
     }
     for (int i = MAX_IDX; i >= 0; i--) {
         if (s->histogram[i]) {
-            av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", fn(get_db)(i));
+            s->max_volume = fn(get_db)(i);
+            av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", s->max_volume);
             break;
         }
     }
 #elif DEPTH == 33 || DEPTH == 65 || DEPTH == 80
-    av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", (double)(F(20.0) * FLOG10(sqrt(s->sum2/nb_samples))));
-    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", (double)(F(20.0) * FLOG10(s->max)));
+    s->mean_volume = F(20.0) * FLOG10(sqrt(s->sum2/nb_samples));
+    s->max_volume = F(20.0) * FLOG10(s->max);
+    av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", s->mean_volume);
+    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", s->max_volume);
 #endif
     for (int i = MAX_IDX; i >= 0; i--) {
         if (s->histogram[i]) {

@@ -490,8 +490,11 @@ of the other. Its audio counterpart is the @code{amix} filter.
 While decoders are normally associated with demuxer streams, it is also possible
 to create "loopback" decoders that decode the output from some encoder and allow
 it to be fed back to complex filtergraphs. This is done with the @code{-dec}
-directive, which takes as a parameter the index of the output stream that should
-be decoded. Every such directive creates a new loopback decoder, indexed with
+directive, which takes as a parameter @var{output_file_index}:@var{stream_index}
+to select the output stream that should be decoded. Both indices are zero-based
+integers: the first identifies the output file and the second identifies the
+stream within that file. Stream specifiers such as @code{v:0} are not supported.
+Every such directive creates a new loopback decoder, indexed with
 successive integers starting at zero. These indices should then be used to refer
 to loopback decoders in complex filtergraph link labels, as described in the
 documentation for @option{-filter_complex}.
@@ -721,7 +724,7 @@ The selected stream, @code{stream 2} in @file{B.mp4}, is the first text-based su
 
 @subsubheading Example: labeled filtergraph outputs
 @example
-ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0[outv];overlay;aresample" \
+ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0[outv];overlay;ardftsrc" \
        -map '[outv]' -an        out1.mp4 \
                                 out2.mkv \
        -map '[outv]' -map 1:a:0 out3.mkv
@@ -731,7 +734,7 @@ The above command will fail, as the output pad labelled @code{[outv]} has been m
 None of the output files shall be processed.
 
 @example
-ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0[outv];overlay;aresample" \
+ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0[outv];overlay;ardftsrc" \
        -an        out1.mp4 \
                   out2.mkv \
        -map 1:a:0 out3.mkv
@@ -742,7 +745,7 @@ and hasn't been mapped anywhere.
 
 The command should be modified as follows,
 @example
-ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0,split=2[outv1][outv2];overlay;aresample" \
+ffmpeg -i A.avi -i B.mp4 -i C.mkv -filter_complex "[1:v]hue=s=0,split=2[outv1][outv2];overlay;ardftsrc" \
         -map '[outv1]' -an        out1.mp4 \
                                   out2.mkv \
         -map '[outv2]' -map 1:a:0 out3.mkv
@@ -755,7 +758,7 @@ The overlay filter, requiring two video inputs, uses the first two unused video 
 are the streams from @file{A.avi} and @file{C.mkv}. The overlay output isn't labelled, so it is
 sent to the first output file @file{out1.mp4}, regardless of the presence of the @code{-map} option.
 
-The aresample filter is sent the first unused audio stream, that of @file{A.avi}. Since this filter
+The ardftsrc filter is sent the first unused audio stream, that of @file{A.avi}. Since this filter
 output is also unlabelled, it too is mapped to the first output file. The presence of @code{-an}
 only suppresses automatic or manual stream selection of audio streams, not outputs sent from
 filtergraphs. Both these mapped streams shall be ordered before the mapped stream in @file{out1.mp4}.
@@ -1226,6 +1229,19 @@ that specifies the language for the "value" string. "key" must be the same as th
 all sub-mix element's @var{annotations}s
 @end table
 
+@item gain_map
+Groups together a base @var{stream} with a gain map, which together form a
+pair of renditions (e.g. HDR and SDR) as per ISO 21496-1.
+
+For this group @var{type}, the following options are available
+
+@table @option
+@item el_index
+Index of the gain map stream within the group. Defaults to 0.
+@item video_size
+Size of the final image for presentation.
+@end table
+
 @end table
 
 E.g. to create an scalable 5.1 IAMF file from several WAV input files
@@ -1449,7 +1465,7 @@ Defines how many threads are used to process a filter pipeline. Each pipeline
 will produce a thread pool with this many threads available for parallel processing.
 The default is the number of available CPUs.
 
-@item -filter_buffered_frames @var{nb_frames} (@emph{global})
+@item -filter_buffered_frames[:@var{media_type}] @var{nb_frames} (@emph{global})
 Defines the maximum number of buffered frames allowed in a filtergraph. Under
 normal circumstances, a filtergraph should not buffer more than a few frames,
 especially if frames are being fed to it and read from it in a balanced way
@@ -1457,6 +1473,11 @@ especially if frames are being fed to it and read from it in a balanced way
 to limit the total number of frames buffered across all links in a filtergraph.
 If more frames are generated, filtering is aborted and an error is returned.
 The default value is 0, which means no limit.
+
+The optional suffix @var{media_type} may be used to set a different limit
+for audio and video frames, using the suffixes @code{a} and @code{v},
+respectively. If the suffix is omitted, the limit applies to both audio and
+video frames, separately.
 
 @item -pre[:@var{stream_specifier}] @var{preset_name} (@emph{output,per-stream})
 Specify the preset for matching stream(s).
@@ -1597,6 +1618,48 @@ numerator and denominator of the aspect ratio. For example "4:3",
 If used together with @option{-vcodec copy}, it will affect the aspect ratio
 stored at container level, but not the aspect ratio stored in encoded
 frames, if it exists.
+
+@item -stereo3d[:@var{stream_specifier}] @var{layout} (@emph{output,per-stream})
+Set stereoscopic 3D layout metadata on the output stream. This does
+@emph{not} rearrange pixels; use @option{-vf stereo3d} for that.
+
+The metadata is stored as @code{AV_PKT_DATA_STEREO3D} side data on the
+output stream. Muxers that already consume that side data will write the
+corresponding container boxes or elements, including:
+
+@itemize
+@item
+MP4 Google spatial-media @code{st3d} (requires @option{-strict unofficial})
+@item
+QuickTime MOV Apple @code{vexu} eyes (no @code{st3d})
+@item
+Matroska @code{StereoMode}; @option{-stereo3d} overrides the
+@code{stereo_mode} metadata tag, including a value inherited from the
+input
+@end itemize
+
+@var{layout} is case-insensitive. The following values are accepted:
+
+@table @samp
+@item 2d
+@itemx mono
+Monoscopic video.
+@item sbs
+@itemx sbsl
+@itemx side by side
+Side-by-side, left eye on the left.
+@item tb
+@itemx tbl
+@itemx top and bottom
+Top-and-bottom, left eye on top.
+@end table
+
+Inverted layouts such as @samp{sbsr} are not supported. An empty stream
+specifier applies to video streams only and is ignored for audio and
+other types. An explicit specifier on a non-video stream (for example
+@option{-stereo3d:a}) is an error.
+
+Recommended form: @option{-stereo3d:v sbsl}.
 
 @item -display_rotation[:@var{stream_specifier}] @var{rotation} (@emph{input,per-stream})
 Set video rotation metadata.
@@ -2782,14 +2845,8 @@ to the @option{-ss} option is considered an actual timestamp, and is not
 offset by the start time of the file. This matters only for files which do
 not start from timestamp 0, such as transport streams.
 
-@item -thread_queue_size @var{size} (@emph{input/output})
-For input, this option sets the maximum number of queued packets when reading
-from the file or device. With low latency / high rate live streams, packets may
-be discarded if they are not read in a timely manner; setting this value can
-force ffmpeg to use a separate input thread and read packets as soon as they
-arrive. By default ffmpeg only does this if multiple inputs are specified.
-
-For output, this option specified the maximum number of packets that may be
+@item -thread_queue_size @var{size} (@emph{output})
+This option specifies the maximum number of packets per stream that may be
 queued to each muxing thread.
 
 @item -sdp_file @var{file} (@emph{global})
@@ -2861,7 +2918,7 @@ graphs, including those defined by @option{-vf}, @option{-af},
 @option{-filter_complex} and @option{-lavfi}. If filter format negotiation
 requires a conversion, the initialization of the filters will fail.
 Conversions can still be performed by inserting the relevant conversion
-filter (scale, aresample) in the graph.
+filter (scale, ardftsrc) in the graph.
 On by default, to explicitly disable it you need to specify
 @code{-noauto_conversion_filters}.
 
@@ -3320,9 +3377,6 @@ ffmpeg -i src.ext -lmax 21*QP2LAMBDA dst.ext
 @ifset config-avdevice
 @include devices.texi
 @end ifset
-@ifset config-swresample
-@include resampler.texi
-@end ifset
 @ifset config-swscale
 @include scaler.texi
 @end ifset
@@ -3344,7 +3398,6 @@ ffmpeg -i src.ext -lmax 21*QP2LAMBDA dst.ext
 @url{ffplay.html,ffplay}, @url{ffprobe.html,ffprobe},
 @url{ffmpeg-utils.html,ffmpeg-utils},
 @url{ffmpeg-scaler.html,ffmpeg-scaler},
-@url{ffmpeg-resampler.html,ffmpeg-resampler},
 @url{ffmpeg-codecs.html,ffmpeg-codecs},
 @url{ffmpeg-bitstream-filters.html,ffmpeg-bitstream-filters},
 @url{ffmpeg-formats.html,ffmpeg-formats},
@@ -3361,7 +3414,7 @@ ffmpeg(1),
 ffmpeg-all(1),
 @end ifset
 ffplay(1), ffprobe(1),
-ffmpeg-utils(1), ffmpeg-scaler(1), ffmpeg-resampler(1),
+ffmpeg-utils(1), ffmpeg-scaler(1),
 ffmpeg-codecs(1), ffmpeg-bitstream-filters(1), ffmpeg-formats(1),
 ffmpeg-devices(1), ffmpeg-protocols(1), ffmpeg-filters(1)
 @end ifnothtml

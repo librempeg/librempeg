@@ -208,8 +208,13 @@ static int dnxhd_decode_header(DNXHDContext *ctx, AVFrame *frame,
     ctx->mbaff = (buf[0x6] >> 5) & 1;
     ctx->alpha = buf[0x7] & 1;
     ctx->lla   = (buf[0x7] >> 1) & 1;
-    if (ctx->alpha)
-        avpriv_request_sample(ctx->avctx, "alpha");
+    if (ctx->alpha) {
+        if (ctx->lla) {
+            avpriv_request_sample(ctx->avctx, "RLE block alpha decoding");
+        } else {
+            avpriv_request_sample(ctx->avctx, "DCT block alpha decoding");
+        }
+    }
 
     ctx->height = AV_RB16(buf + 0x18);
     ctx->width  = AV_RB16(buf + 0x1a);
@@ -374,23 +379,20 @@ static av_always_inline int dnxhd_decode_dct_block(const DNXHDContext *ctx,
 
     if (!ctx->is_444) {
         if (n & 2) {
-            component     = 1 + (n & 1);
-            scale = row->chroma_scale;
-            weight_matrix = ctx->cid_table->chroma_weight;
+            component = 1 + (n & 1);
         } else {
-            component     = 0;
-            scale = row->luma_scale;
-            weight_matrix = ctx->cid_table->luma_weight;
+            component = 0;
         }
     } else {
         component = (n >> 1) % 3;
-        if (component) {
-            scale = row->chroma_scale;
-            weight_matrix = ctx->cid_table->chroma_weight;
-        } else {
-            scale = row->luma_scale;
-            weight_matrix = ctx->cid_table->luma_weight;
-        }
+    }
+
+    if (component) {
+        scale = row->chroma_scale;
+        weight_matrix = ctx->cid_table->chroma_weight;
+    } else {
+        scale = row->luma_scale;
+        weight_matrix = ctx->cid_table->luma_weight;
     }
 
     UPDATE_CACHE(bs, &row->gb);

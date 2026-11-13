@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct SWARStream {
     int64_t start_offset;
@@ -134,18 +135,17 @@ static int read_header(AVFormatContext *s)
         case 0:
             st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
             st->codecpar->bits_per_coded_sample = 8;
-            st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+            st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
             break;
         case 1:
             st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
             st->codecpar->bits_per_coded_sample = 16;
-            st->codecpar->block_align = 512 * st->codecpar->ch_layout.nb_channels;
+            st->codecpar->block_align = 2 * st->codecpar->ch_layout.nb_channels;
             break;
         case 2:
-            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA;
             st->codecpar->bits_per_coded_sample = 4;
-            st->codecpar->block_align = 0x40 * st->codecpar->ch_layout.nb_channels;
-            st->codecpar->profile = 3;
+            st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
             break;
         default:
             avpriv_request_sample(s, "codec 0x%X", codec);
@@ -198,7 +198,8 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= pst->start_offset && pos < pst->stop_offset) {
-            const int size = FFMIN(par->block_align, pst->stop_offset - pos);
+            int size = ff_pcm_default_packet_size(par);
+            size = FFMIN(size, pst->stop_offset - pos);
 
             ret = av_get_packet(pb, pkt, size);
 

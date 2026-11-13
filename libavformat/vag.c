@@ -64,10 +64,6 @@ static int read_header(AVFormatContext *s)
     char title[33];
     AVStream *st;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
     type = avio_rb32(pb);
     version = avio_rb32(pb);
     reserved = avio_rb32(pb);
@@ -79,8 +75,6 @@ static int read_header(AVFormatContext *s)
         rate = avio_rb32(pb);
     }
     codec = AV_CODEC_ID_ADPCM_PSX;
-    if (rate <= 0)
-        return AVERROR_INVALIDDATA;
 
     switch (type) {
     case MKBETAG('V','A','G','1'):
@@ -136,8 +130,12 @@ static int read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     }
 
-    if (channels <= 0 || align <= 0 || align > INT_MAX/channels)
+    if (rate <= 0 || channels <= 0 || align <= 0 || align > INT_MAX/channels)
         return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
 
     st->start_time = 0;
     if (duration > 0)

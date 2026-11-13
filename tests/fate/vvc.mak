@@ -51,14 +51,21 @@ fate-vvc-conformance-%: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc-conform
 fate-vvc-output-ref: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/Hierarchical.bit $(SCALE_OPTS)
 fate-vvc-frames-with-ltr: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/vvc_frames_with_ltr.vvc -pix_fmt yuv420p10le -vf scale
 fate-vvc-wpp-single-slice-pic: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/wpp-single-slice-pic.vvc -pix_fmt yuv420p10le -vf scale
+fate-vvc-curr-ltrp-alias: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/curr-ltrp-alias.vvc
+fate-vvc-mv-clip-wrap: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/mv-clip-wrap.vvc -pix_fmt yuv420p
+fate-vvc-rpr-weighted-pred: CMD = framecrc -c:v vvc -i $(TARGET_SAMPLES)/vvc/rpr-weighted-pred.vvc -pix_fmt yuv420p10le -vf scale
 
-FATE_VVC-$(call FRAMECRC, VVC, VVC, VVC_PARSER) += $(VVC_TESTS_8BIT) fate-vvc-output-ref
+FATE_VVC-$(call FRAMECRC, VVC, VVC, VVC_PARSER) += $(VVC_TESTS_8BIT) \
+                                                   fate-vvc-output-ref \
+                                                   fate-vvc-curr-ltrp-alias \
+                                                   fate-vvc-mv-clip-wrap
 FATE_VVC-$(call FRAMECRC, VVC, VVC, VVC_PARSER SCALE_FILTER) +=                   \
                                                     $(VVC_TESTS_10BIT)            \
                                                     $(VVC_TESTS_422_10BIT)        \
                                                     $(VVC_TESTS_444_10BIT)        \
                                                     fate-vvc-frames-with-ltr      \
                                                     fate-vvc-wpp-single-slice-pic \
+                                                    fate-vvc-rpr-weighted-pred    \
 
 FATE_SAMPLES_FFMPEG += $(FATE_VVC-yes)
 

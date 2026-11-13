@@ -132,7 +132,7 @@ static av_cold int init(AVFilterContext *ctx)
     fill_items(s->speeds_str, &nb_speeds, s->speeds);
     fill_items(s->depths_str, &nb_depths, s->depths);
 
-    if (nb_delays != nb_decays && nb_delays != nb_speeds && nb_delays != nb_depths) {
+    if (nb_delays != nb_decays || nb_delays != nb_speeds || nb_delays != nb_depths) {
         av_log(ctx, AV_LOG_ERROR, "Number of delays & decays & speeds & depths given must be same.\n");
         return AVERROR(EINVAL);
     }
@@ -142,6 +142,13 @@ static av_cold int init(AVFilterContext *ctx)
     if (s->num_chorus < 1) {
         av_log(ctx, AV_LOG_ERROR, "At least one delay & decay & speed & depth must be set.\n");
         return AVERROR(EINVAL);
+    }
+
+    for (int n = 0; n < s->num_chorus; n++) {
+        if (!(s->speeds[n] > 0)) {
+            av_log(ctx, AV_LOG_ERROR, "Speeds must be positive.\n");
+            return AVERROR(EINVAL);
+        }
     }
 
     s->length = av_calloc(s->num_chorus, sizeof(*s->length));
@@ -168,9 +175,14 @@ static int config_output(AVFilterLink *outlink)
         int samples = (int) ((s->delays[n] + s->depths[n]) * outlink->sample_rate / 1000.0);
         int depth_samples = (int) (s->depths[n] * outlink->sample_rate / 1000.0);
 
-        s->length[n] = outlink->sample_rate / s->speeds[n];
+        s->length[n] = av_clipd(outlink->sample_rate / s->speeds[n], 0, INT_MAX);
+        if (s->length[n] < 1) {
+            av_log(ctx, AV_LOG_ERROR, "Speed %g is above the sample rate of %d.\n",
+                   s->speeds[n], outlink->sample_rate);
+            return AVERROR(EINVAL);
+        }
 
-        s->lookup_table[n] = av_malloc(sizeof(int32_t) * s->length[n]);
+        s->lookup_table[n] = av_malloc_array(s->length[n], sizeof(*s->lookup_table[n]));
         if (!s->lookup_table[n])
             return AVERROR(ENOMEM);
 

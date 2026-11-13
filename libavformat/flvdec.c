@@ -35,6 +35,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
 #include "flv.h"
@@ -549,7 +550,7 @@ static int parse_keyframes_index(AVFormatContext *s, AVIOContext *ioc, int64_t m
             break;
 
         arraylen = avio_rb32(ioc);
-        if (arraylen>>28)
+        if (arraylen>>28 || arraylen > (max_pos - avio_tell(ioc)) / 9)
             break;
 
         if       (!strcmp(KEYFRAMES_TIMESTAMP_TAG , str_val) && !times) {
@@ -1336,7 +1337,7 @@ static int flv_parse_mod_ex_data(AVFormatContext *s, int *pkt_type, int *size, i
     if (!ex_data)
         return AVERROR(ENOMEM);
 
-    ret = avio_read(s->pb, ex_data, ex_size);
+    ret = ffio_read_size(s->pb, ex_data, ex_size);
     if (ret < 0) {
         av_free(ex_data);
         return ret;

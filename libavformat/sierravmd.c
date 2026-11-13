@@ -79,6 +79,12 @@ static int vmd_probe(const AVProbeData *p)
     if ((!w || w > 2048 || !h || h > 2048) &&
         sample_rate != 22050)
         return 0;
+    /* the header of a file with a video stream carries the 6bit VGA
+     * palette that vmdvideo_decode_init() loads from offset 28 */
+    if (w && h)
+        for (int i = 28; i < 28 + 3 * 256; i++)
+            if (p->buf[i] > 0x3F)
+                return 0;
 
     /* only return half certainty since this check is a bit sketchy */
     return AVPROBE_SCORE_EXTENSION;
@@ -266,7 +272,7 @@ static int vmd_read_packet(AVFormatContext *s,
 {
     VmdDemuxContext *vmd = s->priv_data;
     AVIOContext *pb = s->pb;
-    int ret = 0;
+    int ret = 0, record_size;
     vmd_frame *frame;
 
     if (vmd->current_frame >= vmd->frame_count)
@@ -278,16 +284,13 @@ static int vmd_read_packet(AVFormatContext *s,
 
     if(ffio_limit(pb, frame->frame_size) != frame->frame_size)
         return AVERROR_INVALIDDATA;
-    ret = av_new_packet(pkt, frame->frame_size + BYTES_PER_FRAME_RECORD);
+    record_size = vmd->is_indeo3 && frame->frame_record[0] == 0x02 ? 0 : BYTES_PER_FRAME_RECORD;
+    ret = av_new_packet(pkt, frame->frame_size + record_size);
     if (ret < 0)
         return ret;
     pkt->pos= avio_tell(pb);
-    memcpy(pkt->data, frame->frame_record, BYTES_PER_FRAME_RECORD);
-    if(vmd->is_indeo3 && frame->frame_record[0] == 0x02)
-        ret = ffio_read_size(pb, pkt->data, frame->frame_size);
-    else
-        ret = ffio_read_size(pb, pkt->data + BYTES_PER_FRAME_RECORD,
-            frame->frame_size);
+    memcpy(pkt->data, frame->frame_record, record_size);
+    ret = ffio_read_size(pb, pkt->data + record_size, frame->frame_size);
 
     pkt->stream_index = frame->stream_index;
     pkt->pts = frame->pts;

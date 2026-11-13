@@ -1,4 +1,4 @@
-FATE_VQF-$(call PCM, VQF, TWINVQ, ARESAMPLE_FILTER) += fate-twinvq
+FATE_VQF-$(call PCM, VQF, TWINVQ, ASF2SF_FILTER) += fate-twinvq
 fate-twinvq: CMD = pcm -i $(TARGET_SAMPLES)/vqf/achterba.vqf
 fate-twinvq: CMP = oneoff
 fate-twinvq: REF = $(SAMPLES)/vqf/achterba.pcm

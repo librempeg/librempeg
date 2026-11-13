@@ -16,115 +16,128 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <stdint.h>
-
 #include "avcodec.h"
-#include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "mathops.h"
 
-typedef struct ADPCMCFDFContext {
-    int left;
-    int8_t prev_sample;
-    uint8_t control_byte;
-} ADPCMCFDFContext;
+typedef struct CFDFADPCMState {
+    unsigned sample;
+    int pairs;
+    int seeded;
+} CFDFADPCMState;
+
+typedef struct CFDFADPCMContext {
+    CFDFADPCMState state;
+    int framing; /* 0: continuous, 1: independent chunk, 2: D5 block */
+} CFDFADPCMContext;
 
 static av_cold int decode_init(AVCodecContext *avctx)
 {
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
-    avctx->ch_layout.nb_channels = 1;
+    CFDFADPCMContext *c = avctx->priv_data;
 
+    if (avctx->ch_layout.nb_channels != 1 || avctx->extradata_size > 1)
+        return AVERROR_INVALIDDATA;
+    if (avctx->extradata_size) {
+        c->framing = avctx->extradata[0];
+        if (c->framing > 2)
+            return AVERROR_INVALIDDATA;
+    }
+    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     return 0;
 }
 
-static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
-                        int *got_frame_ptr, AVPacket *avpkt)
+static void put_sample(int16_t *dst, int index, unsigned sample, int scale)
 {
-    ADPCMCFDFContext *s = avctx->priv_data;
-    uint8_t control_byte = s->control_byte;
-    int8_t prev_sample = s->prev_sample;
-    GetByteContext gbc, *gb = &gbc;
-    int left = s->left;
-    int16_t *dst;
-    int ret, n;
+    int signed_sample = sample < 0x80 ? sample : (int)sample - 0x100;
+    unsigned pcm = (unsigned)((signed_sample - 0x40) * scale) & 0xFFFF;
 
-    bytestream2_init(gb, avpkt->data, avpkt->size);
-
-    frame->nb_samples = avpkt->size * 16;
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
-        return ret;
-
-    n = 0;
-    dst = (int16_t *)frame->data[0];
-
-    if (avpkt->pts == 0) {
-        prev_sample = bytestream2_get_byte(gb);
-        dst[n] = prev_sample * 256;
-        left = 0;
-        n++;
-    }
-
-    while (n < frame->nb_samples && bytestream2_get_bytes_left(gb) > 0) {
-        if (left <= 0)
-            control_byte = bytestream2_get_byte(gb);
-
-        if (!(control_byte & 0x80)) {
-            prev_sample = (int8_t)control_byte;
-            dst[n++] = (prev_sample - 0x40) * 256;
-        } else if (!(control_byte & 0x40)) {
-            if (left <= 0)
-                left = (control_byte & 0x3f) + 1;
-
-            while (left > 0 && n < frame->nb_samples &&
-                   bytestream2_get_bytes_left(gb) > 0) {
-                uint8_t table_val = bytestream2_get_byte(gb);
-                int8_t step_delta = (int8_t)table_val >> 4;
-                int8_t index_delta = (int8_t)(table_val << 4) >> 4;
-                int8_t step_sample = prev_sample + step_delta;
-                int8_t index_sample = step_sample + index_delta;
-                dst[n++] = (step_sample - 0x40) * 256;
-                dst[n++] = (index_sample - 0x40) * 256;
-                prev_sample = index_sample;
-                left--;
-            }
-        } else {
-            if (left <= 0)
-                left = (control_byte & 0x3f) + 1;
-
-            while (left > 0 && n < frame->nb_samples) {
-                dst[n++] = (prev_sample - 0x40) * 256;
-                left--;
-            }
-        }
-    }
-
-    s->control_byte = control_byte;
-    s->prev_sample = prev_sample;
-    s->left = left;
-
-    frame->nb_samples = n;
-
-    *got_frame_ptr = 1;
-
-    return avpkt->size;
+    if (dst)
+        dst[index] = pcm < 0x8000 ? pcm : (int)pcm - 0x10000;
 }
 
-static av_cold void decode_flush(AVCodecContext *avctx)
+static int expand(CFDFADPCMState *state, const uint8_t *src, int size,
+                  int framing, int16_t *dst)
 {
-    ADPCMCFDFContext *s = avctx->priv_data;
+    int pos = 0, count = 0;
+    int scale = framing == 2 ? 0x200 : 0x100;
 
-    s->left = s->prev_sample = s->control_byte = 0;
+    if (framing)
+        *state = (CFDFADPCMState){ 0 };
+    if (!state->seeded && size) {
+        state->sample = src[pos++];
+        state->seeded = 1;
+        if (framing != 2)
+            put_sample(dst, count++, state->sample, scale);
+    }
+    while (pos < size) {
+        unsigned code = src[pos++];
+
+        if (count > INT_MAX - 0x80)
+            return AVERROR_INVALIDDATA;
+        if (state->pairs) {
+            for (int shift = 4; shift >= 0; shift -= 4) {
+                unsigned nibble = (code >> shift) & 0xF;
+                int delta = (int)(nibble ^ 8) - 8;
+
+                state->sample = (state->sample + delta) & 0xFF;
+                put_sample(dst, count++, state->sample, scale);
+            }
+            state->pairs--;
+        } else if (code < 0x80) {
+            state->sample = code;
+            put_sample(dst, count++, state->sample, scale);
+        } else if (code < 0xC0) {
+            state->pairs = (code & 0x3F) + 1;
+        } else {
+            int repeat = (code & 0x3F) + 1;
+
+            for (int i = 0; i < repeat; i++)
+                put_sample(dst, count++, state->sample, scale);
+        }
+    }
+    if (framing && state->pairs)
+        return AVERROR_INVALIDDATA;
+    return count;
+}
+
+static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
+                        int *got_frame, AVPacket *pkt)
+{
+    CFDFADPCMContext *c = avctx->priv_data;
+    CFDFADPCMState next = c->state;
+    int samples, ret;
+
+    samples = expand(&next, pkt->data, pkt->size, c->framing, NULL);
+    if (samples < 0)
+        return samples;
+    if (!samples) {
+        c->state = next;
+        return pkt->size;
+    }
+    frame->nb_samples = samples;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+        return ret;
+    expand(&c->state, pkt->data, pkt->size, c->framing,
+           (int16_t *)frame->data[0]);
+    *got_frame = 1;
+    return pkt->size;
+}
+
+static void decode_flush(AVCodecContext *avctx)
+{
+    CFDFADPCMContext *c = avctx->priv_data;
+
+    c->state = (CFDFADPCMState){ 0 };
 }
 
 const FFCodec ff_adpcm_cfdf_decoder = {
     .p.name         = "adpcm_cfdf",
-    CODEC_LONG_NAME("ADPCM Cyberflix DreamFactory CFDF"),
+    CODEC_LONG_NAME("ADPCM Cyberflix DreamFactory"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_CFDF,
-    .priv_data_size = sizeof(ADPCMCFDFContext),
+    .p.capabilities = AV_CODEC_CAP_DR1,
+    .priv_data_size = sizeof(CFDFADPCMContext),
     .init           = decode_init,
     .flush          = decode_flush,
     FF_CODEC_DECODE_CB(decode_frame),
-    .p.capabilities = AV_CODEC_CAP_DR1,
 };

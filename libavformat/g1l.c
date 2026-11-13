@@ -44,10 +44,13 @@ typedef struct G1LStream {
 
 static int g1l_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "G1L_", 4) && memcmp(p->buf, "_L1G", 4))
+    if (AV_RB32(p->buf) != MKBETAG('G','1','L','_') &&
+        AV_RL32(p->buf) != MKBETAG('G','1','L','_'))
         return 0;
-    if (memcmp(p->buf + 4, "0000", 4))
+
+    if (AV_RB32(p->buf + 4) != MKBETAG('0','0','0','0'))
         return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
@@ -175,6 +178,8 @@ static int g1l_read_header(AVFormatContext *s)
         gst->parent = s;
 
         avio_seek(pb, gst->start_offset, SEEK_SET);
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
 
         chunk = avio_rb32(pb);
         if (chunk == MKBETAG('A','T','S','L')) {

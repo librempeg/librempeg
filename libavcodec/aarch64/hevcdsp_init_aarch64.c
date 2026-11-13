@@ -2,21 +2,21 @@
  * Copyright (c) 2020 Reimar Döffinger
  * Copyright (c) 2023 xu fulong <839789740@qq.com>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdint.h>
@@ -338,6 +338,11 @@ av_cold void ff_hevc_dsp_init_aarch64(HEVCDSPContext *c, const int bit_depth)
         c->idct_dc[2]                  = ff_hevc_idct_16x16_dc_10_neon;
         c->idct_dc[3]                  = ff_hevc_idct_32x32_dc_10_neon;
         c->dequant                     = hevc_dequant_10_neon;
+        c->sao_edge_filter[0]          = ff_hevc_sao_edge_filter_8x8_10_neon;
+        c->sao_edge_filter[1]          =
+        c->sao_edge_filter[2]          =
+        c->sao_edge_filter[3]          =
+        c->sao_edge_filter[4]          = ff_hevc_sao_edge_filter_16x16_10_neon;
     }
     if (bit_depth == 12) {
         c->hevc_h_loop_filter_luma     = ff_hevc_h_loop_filter_luma_12_neon;
@@ -353,5 +358,10 @@ av_cold void ff_hevc_dsp_init_aarch64(HEVCDSPContext *c, const int bit_depth)
         c->idct_dc[2]                  = ff_hevc_idct_16x16_dc_12_neon;
         c->idct_dc[3]                  = ff_hevc_idct_32x32_dc_12_neon;
         c->dequant                     = hevc_dequant_12_neon;
+        c->sao_edge_filter[0]          = ff_hevc_sao_edge_filter_8x8_12_neon;
+        c->sao_edge_filter[1]          =
+        c->sao_edge_filter[2]          =
+        c->sao_edge_filter[3]          =
+        c->sao_edge_filter[4]          = ff_hevc_sao_edge_filter_16x16_12_neon;
     }
 }

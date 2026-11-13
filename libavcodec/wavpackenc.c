@@ -144,10 +144,10 @@ static av_cold int wavpack_encode_init(AVCodecContext *avctx)
         else
             block_samples = avctx->sample_rate;
 
-        while (block_samples * avctx->ch_layout.nb_channels > WV_MAX_SAMPLES)
+        while (block_samples * (int64_t)avctx->ch_layout.nb_channels > WV_MAX_SAMPLES)
             block_samples /= 2;
 
-        while (block_samples * avctx->ch_layout.nb_channels < 40000)
+        while (block_samples * (int64_t)avctx->ch_layout.nb_channels < 40000)
             block_samples *= 2;
         avctx->frame_size = block_samples;
     } else if (avctx->frame_size && (avctx->frame_size < 128 ||
@@ -663,8 +663,9 @@ static uint32_t log2mono(int32_t *samples, int nb_samples, int limit)
 {
     uint32_t result = 0;
     while (nb_samples--) {
-        if (log2sample(abs(*samples++), limit, &result))
+        if (log2sample(FFABSU(samples[0]), limit, &result))
             return UINT32_MAX;
+        samples++;
     }
     return result;
 }
@@ -674,9 +675,11 @@ static uint32_t log2stereo(int32_t *samples_l, int32_t *samples_r,
 {
     uint32_t result = 0;
     while (nb_samples--) {
-        if (log2sample(abs(*samples_l++), limit, &result) ||
-            log2sample(abs(*samples_r++), limit, &result))
+        if (log2sample(FFABSU(samples_l[0]), limit, &result) ||
+            log2sample(FFABSU(samples_r[0]), limit, &result))
             return UINT32_MAX;
+        samples_l++;
+        samples_r++;
     }
     return result;
 }
@@ -992,7 +995,7 @@ static void scan_word(WavPackEncodeContext *s, WvChannel *c,
         samples += nb_samples - 1;
 
     while (nb_samples--) {
-        uint32_t low, value = labs(samples[0]);
+        uint32_t low, value = FFABSU(samples[0]);
 
         if (value < GET_MED(0)) {
             DEC_MED(0);

@@ -30,13 +30,13 @@ static int read_probe(const AVProbeData *p)
     if (memcmp(p->buf, "MSF", 3))
         return 0;
 
+    if (p->buf_size < 20)
+        return 0;
+    if (AV_RB32(p->buf+4) > 7)
+        return 0;
     if ((int)AV_RB32(p->buf+8) <= 0)
         return 0;
-
     if ((int)AV_RB32(p->buf+16) <= 0)
-        return 0;
-
-    if (AV_RB32(p->buf+4) > 7)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -109,7 +109,7 @@ static int read_header(AVFormatContext *s)
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
     default:
-        avpriv_request_sample(s, "Codec %d", codec);
+        avpriv_request_sample(s, "codec %d", codec);
         return AVERROR_PATCHWELCOME;
     }
     avio_seek(pb, 0x40, SEEK_SET);

@@ -33,7 +33,6 @@ OBJS-$(CONFIG_PULLUP_FILTER)                 += x86/vf_pullup_init.o
 OBJS-$(CONFIG_REMOVEGRAIN_FILTER)            += x86/vf_removegrain_init.o
 OBJS-$(CONFIG_SHOWCQT_FILTER)                += x86/avf_showcqt_init.o
 OBJS-$(CONFIG_SOBEL_FILTER)                  += x86/vf_convolution_init.o
-OBJS-$(CONFIG_SPP_FILTER)                    += x86/vf_spp.o
 OBJS-$(CONFIG_SSIM_FILTER)                   += x86/vf_ssim_init.o
 OBJS-$(CONFIG_STEREO3D_FILTER)               += x86/vf_stereo3d_init.o
 OBJS-$(CONFIG_TBLEND_FILTER)                 += x86/vf_blend_init.o

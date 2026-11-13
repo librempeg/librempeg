@@ -39,11 +39,8 @@ enum operation {
 typedef struct StereoFieldContext {
     const AVClass *class;
 
-    double D, P;
+    double D, W, P;
     int mode;
-
-    double *A;
-    unsigned A_size;
 
     int fft_size;
     int overlap;
@@ -69,13 +66,10 @@ typedef struct StereoFieldContext {
 
 #define OFFSET(x) offsetof(StereoFieldContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
-#define AR AV_OPT_TYPE_FLAG_ARRAY
-
-static const AVOptionArrayDef def_att = {.def="1 1", .size_min=2, .size_max=2, .sep=' '};
 
 static const AVOption stereofield_options[] = {
-    { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
-    { "a", "set the attenuation", OFFSET(A), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_att}, 0, 2, FLAGS },
+    { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 64, FLAGS },
+    { "w", "set the widening", OFFSET(W), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 16, FLAGS },
     { "p", "set the panning", OFFSET(P), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
     { "o", "set the operating mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=OP_STEREO}, 0, NB_OPERATION-1, FLAGS, "mode" },
     {  "l", "left",   0, AV_OPT_TYPE_CONST, {.i64=OP_LEFT},   0, 0, FLAGS, .unit = "mode"},
@@ -180,13 +174,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
         s->sf_stereo(ctx, out, offset);
 
-    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    s->last_pts = out->pts + out->duration;
-
     if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
         for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
             out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
@@ -201,7 +188,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_inlink_request_frame(inlink);
 
         return 0;
+    } else {
+        out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     }
+
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
 
     s->in = NULL;
     ff_graph_frame_free(ctx, &in);
@@ -245,7 +240,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     StereoFieldContext *s = ctx->priv;
     int ret, status, available, wanted;
-    AVFrame *in = NULL;
+    AVFrame *in;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
@@ -309,7 +304,8 @@ const FFFilter ff_af_stereofield = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
     .process_command = ff_filter_process_command,
 };

@@ -28,6 +28,10 @@
 #undef SIN
 #undef COS
 #undef FABS
+#undef SQRT
+#undef FEPS
+#undef FATANH
+#undef FTANH
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ctype AVComplexFloat
@@ -37,6 +41,10 @@
 #define SIN sinf
 #define COS cosf
 #define FABS fabsf
+#define SQRT sqrtf
+#define FEPS FLT_EPSILON
+#define FATANH atanhf
+#define FTANH tanhf
 #else
 #define SAMPLE_FORMAT double
 #define ctype AVComplexDouble
@@ -46,9 +54,15 @@
 #define SIN sin
 #define COS cos
 #define FABS fabs
+#define SQRT sqrt
+#define FEPS DBL_EPSILON
+#define FATANH atanh
+#define FTANH tanh
 #endif
 
 #define F(x) ((ftype)(x))
+
+#define HYPOT(x, y) SQRT(((x)*(x))+((y)*(y)))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -94,113 +108,236 @@ static void fn(apply_window)(StereoFieldContext *s,
     }
 }
 
-static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
-                            const ftype d, const ftype a0, const ftype a1,
-                            const ftype p, const int M)
+typedef struct fn(ThreadData) {
+    ctype *windowed_oleft;
+    ctype *windowed_oright;
+} fn(ThreadData);
+
+static void fn(stereofield)(ctype *fl, ctype *fr,
+                            const ftype d, const ftype w,
+                            const ftype p, const int M,
+                            const int start, const int end)
 {
     const ftype lx = (p > F(0.0)) ? F(1.0)-p : F(1.0);
     const ftype rx = (p < F(0.0)) ? F(1.0)+p : F(1.0);
-    const ftype m = (d < F(0.0)) ? d : F(0.0);
-    const ftype s = (d > F(0.0)) ? d : F(0.0);
 
     switch (M) {
     case OP_LEFT:
-        for (int i = 0; i < N; i++) {
-            const ftype l_re = fl[i].re;
-            const ftype l_im = fl[i].im;
-            const ftype r_re = fr[i].re;
-            const ftype r_im = fr[i].im;
-            const ftype re = l_re * r_re + l_im * r_im;
-            const ftype im = l_re * r_im - l_im * r_re;
-            const ftype a = ATAN2(im, re);
-            const ftype aa = FABS(a);
-            const ftype lf = m * -a + s * (F(M_PI) - aa);
-            const ftype lc = COS(lf);
-            const ftype ls = SIN(lf);
-            const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
+        for (int i = start; i < end; i++) {
+            if (d < F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (F(1.0) - d) * a;
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-            fl[i].re = l_re * lc - l_im * ls;
-            fl[i].im = l_re * ls + l_im * lc;
-            fr[i].re = r_re;
-            fr[i].im = r_im;
+                fl[i].re = l_re * lc - l_im * ls;
+                fl[i].im = l_re * ls + l_im * lc;
+                fr[i].re = r_re;
+                fr[i].im = r_im;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (F(1.0) - F(1.0) / d) * (a - FFSIGN(a) * F(M_PI));
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-            fl[i].re *= bx;
-            fl[i].im *= bx;
-            fr[i].re *= bx;
-            fr[i].im *= bx;
+                fl[i].re = l_re * lc - l_im * ls;
+                fl[i].im = l_re * ls + l_im * lc;
+                fr[i].re = r_re;
+                fr[i].im = r_im;
+            }
 
             fl[i].re *= lx;
             fl[i].im *= lx;
             fr[i].re *= rx;
             fr[i].im *= rx;
+
+            if (w != F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype l_m = HYPOT(l_re, l_im);
+                const ftype r_m = HYPOT(r_re, r_im);
+                const ftype s_m = l_m + r_m;
+                const ftype ip = (l_m - r_m) / (s_m + FEPS);
+                const ftype op = FTANH(w * FATANH(ip));
+                const ftype nl_m = s_m * (F(1.0) + op) * F(0.5);
+                const ftype nr_m = s_m * (F(1.0) - op) * F(0.5);
+                const ftype lf = nl_m / (l_m + FEPS);
+                const ftype rf = nr_m / (r_m + FEPS);
+
+                fl[i].re *= lf;
+                fl[i].im *= lf;
+                fr[i].re *= rf;
+                fr[i].im *= rf;
+            }
         }
         break;
     case OP_RIGHT:
-        for (int i = 0; i < N; i++) {
-            const ftype l_re = fl[i].re;
-            const ftype l_im = fl[i].im;
-            const ftype r_re = fr[i].re;
-            const ftype r_im = fr[i].im;
-            const ftype re = l_re * r_re + l_im * r_im;
-            const ftype im = l_re * r_im - l_im * r_re;
-            const ftype a = ATAN2(im, re);
-            const ftype aa = FABS(a);
-            const ftype lf = m * a - s * (F(M_PI) - aa);
-            const ftype lc = COS(lf);
-            const ftype ls = SIN(lf);
-            const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
+        for (int i = start; i < end; i++) {
+            if (d < F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = ((1.0) - d) * -a;
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-            fl[i].re = l_re;
-            fl[i].im = l_im;
-            fr[i].re = r_re * lc - r_im * ls;
-            fr[i].im = r_re * ls + r_im * lc;
+                fl[i].re = l_re;
+                fl[i].im = l_im;
+                fr[i].re = r_re * lc - r_im * ls;
+                fr[i].im = r_re * ls + r_im * lc;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (F(1.0) - F(1.0) / d) * (FFSIGN(a) * F(M_PI) - a);
+                const ftype lc = COS(da);
+                const ftype ls = SIN(da);
 
-            fl[i].re *= bx;
-            fl[i].im *= bx;
-            fr[i].re *= bx;
-            fr[i].im *= bx;
+                fl[i].re = l_re;
+                fl[i].im = l_im;
+                fr[i].re = r_re * lc - r_im * ls;
+                fr[i].im = r_re * ls + r_im * lc;
+            }
 
             fl[i].re *= lx;
             fl[i].im *= lx;
             fr[i].re *= rx;
             fr[i].im *= rx;
+
+            if (w != F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype l_m = HYPOT(l_re, l_im);
+                const ftype r_m = HYPOT(r_re, r_im);
+                const ftype s_m = l_m + r_m;
+                const ftype ip = (l_m - r_m) / (s_m + FEPS);
+                const ftype op = FTANH(w * FATANH(ip));
+                const ftype nl_m = s_m * (F(1.0) + op) * F(0.5);
+                const ftype nr_m = s_m * (F(1.0) - op) * F(0.5);
+                const ftype lf = nl_m / (l_m + FEPS);
+                const ftype rf = nr_m / (r_m + FEPS);
+
+                fl[i].re *= lf;
+                fl[i].im *= lf;
+                fr[i].re *= rf;
+                fr[i].im *= rf;
+            }
         }
         break;
     case OP_STEREO:
-        for (int i = 0; i < N; i++) {
-            const ftype l_re = fl[i].re;
-            const ftype l_im = fl[i].im;
-            const ftype r_re = fr[i].re;
-            const ftype r_im = fr[i].im;
-            const ftype re = l_re * r_re + l_im * r_im;
-            const ftype im = l_re * r_im - l_im * r_re;
-            const ftype a = ATAN2(im, re) * F(0.5);
-            const ftype aa = FABS(a);
-            const ftype lfl = m * -a + s * (F(M_PI) - aa);
-            const ftype lfr = m *  a + s * aa;
-            const ftype lcl = COS(lfl);
-            const ftype lsl = SIN(lfl);
-            const ftype lcr = COS(lfr);
-            const ftype lsr = SIN(lfr);
-            const ftype bx = a1 * aa * F(M_2_PI) + a0 * ((F(M_PI_2) - aa) * F(M_2_PI));
+        for (int i = start; i < end; i++) {
+            if (d < F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re) * F(0.5);
+                const ftype dal = (F(1.0) - d) *  a;
+                const ftype dar = (F(1.0) - d) * -a;
+                const ftype lcl = COS(dal);
+                const ftype lsl = SIN(dal);
+                const ftype lcr = COS(dar);
+                const ftype lsr = SIN(dar);
 
-            fl[i].re = l_re * lcl - l_im * lsl;
-            fl[i].im = l_re * lsl + l_im * lcl;
-            fr[i].re = r_re * lcr - r_im * lsr;
-            fr[i].im = r_re * lsr + r_im * lcr;
+                fl[i].re = l_re * lcl - l_im * lsl;
+                fl[i].im = l_re * lsl + l_im * lcl;
+                fr[i].re = r_re * lcr - r_im * lsr;
+                fr[i].im = r_re * lsr + r_im * lcr;
+            } else if (d > F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype re = l_re * r_re + l_im * r_im;
+                const ftype im = l_re * r_im - l_im * r_re;
+                const ftype a = ATAN2(im, re);
+                const ftype da = (a - FFSIGN(a) * F(M_PI)) * F(0.5);
+                const ftype dal = (F(1.0) - F(1.0) / d) *  da;
+                const ftype dar = (F(1.0) - F(1.0) / d) * -da;
+                const ftype lcl = COS(dal);
+                const ftype lsl = SIN(dal);
+                const ftype lcr = COS(dar);
+                const ftype lsr = SIN(dar);
 
-            fl[i].re *= bx;
-            fl[i].im *= bx;
-            fr[i].re *= bx;
-            fr[i].im *= bx;
+                fl[i].re = l_re * lcl - l_im * lsl;
+                fl[i].im = l_re * lsl + l_im * lcl;
+                fr[i].re = r_re * lcr - r_im * lsr;
+                fr[i].im = r_re * lsr + r_im * lcr;
+            }
 
             fl[i].re *= lx;
             fl[i].im *= lx;
             fr[i].re *= rx;
             fr[i].im *= rx;
+
+            if (w != F(1.0)) {
+                const ftype l_re = fl[i].re;
+                const ftype l_im = fl[i].im;
+                const ftype r_re = fr[i].re;
+                const ftype r_im = fr[i].im;
+                const ftype l_m = HYPOT(l_re, l_im);
+                const ftype r_m = HYPOT(r_re, r_im);
+                const ftype s_m = l_m + r_m;
+                const ftype ip = (l_m - r_m) / (s_m + FEPS);
+                const ftype op = FTANH(w * FATANH(ip));
+                const ftype nl_m = s_m * (F(1.0) + op) * F(0.5);
+                const ftype nr_m = s_m * (F(1.0) - op) * F(0.5);
+                const ftype lf = nl_m / (l_m + FEPS);
+                const ftype rf = nr_m / (r_m + FEPS);
+
+                fl[i].re *= lf;
+                fl[i].im *= lf;
+                fr[i].re *= rf;
+                fr[i].im *= rf;
+            }
         }
         break;
     }
+}
+
+static int fn(stereofield_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    StereoFieldContext *s = ctx->priv;
+    const int N = s->fft_size/2 + 1;
+    fn(ThreadData) *td = arg;
+    ctype *windowed_oleft  = td->windowed_oleft;
+    ctype *windowed_oright = td->windowed_oright;
+    const int start = ff_slice_pos(N, jobnr, nb_jobs);
+    const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
+    const int M = s->mode;
+    const ftype D = s->D;
+    const ftype W = s->W;
+    const ftype P = s->P;
+
+    fn(stereofield)(windowed_oleft, windowed_oright, D, W, P, M, start, end);
+
+    return 0;
 }
 
 static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
@@ -220,13 +357,9 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = ((ftype *)out->extended_data[1]) + doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
+    const int nb_samples = FFMIN(overlap, FFMAX(s->in->nb_samples - doffset, 0));
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
-    const int M = s->mode;
-    const ftype A0 = s->A[0];
-    const ftype A1 = s->A[1];
-    const ftype D = s->D;
-    const ftype P = s->P;
+    fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
@@ -243,8 +376,10 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     s->tx_fn(s->tx_ctx, windowed_oleft,  windowed_left,  sizeof(ftype));
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
-    fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, A0, A1, P, M);
+    td.windowed_oleft = windowed_oleft;
+    td.windowed_oright = windowed_oright;
+    ff_filter_execute(ctx, fn(stereofield_slice), &td, NULL,
+                      FFMIN(s->fft_size/2+1, ff_filter_get_nb_threads(ctx)));
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
@@ -283,19 +418,15 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = 0;
-    const int M = s->mode;
-    const ftype A0 = s->A[0];
-    const ftype A1 = s->A[1];
-    const ftype D = s->D;
-    const ftype P = s->P;
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples);
+    fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
     memmove(right_in, &right_in[overlap], offset * sizeof(*right_in));
 
-    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
-    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
+    memset(&left_in[offset], 0, overlap * sizeof(*left_in));
+    memset(&right_in[offset], 0, overlap * sizeof(*right_in));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
@@ -303,8 +434,10 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     s->tx_fn(s->tx_ctx, windowed_oleft,  windowed_left,  sizeof(ftype));
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
-    fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, A0, A1, P, M);
+    td.windowed_oleft = windowed_oleft;
+    td.windowed_oright = windowed_oright;
+    ff_filter_execute(ctx, fn(stereofield_slice), &td, NULL,
+                      FFMIN(s->fft_size/2+1, ff_filter_get_nb_threads(ctx)));
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
@@ -318,11 +451,11 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     fn(apply_window)(s, windowed_right, right_out, 1);
 
     if (ff_filter_disabled(ctx)) {
-        memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_in, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out_nb_samples * sizeof(*right_osamples));
     } else {
-        memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
-        memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+        memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
     }
 
     return 0;

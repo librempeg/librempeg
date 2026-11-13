@@ -35,8 +35,8 @@ IDCT_ADD_FUNC(, 8, avx)
 IDCT_ADD_FUNC(, 10, sse2)
 IDCT_ADD_FUNC(_dc, 8, sse2)
 IDCT_ADD_FUNC(_dc, 8, avx)
-IDCT_ADD_FUNC(_dc, 10, mmxext)
-IDCT_ADD_FUNC(8_dc, 8, mmxext)
+IDCT_ADD_FUNC(_dc, 10, sse2)
+IDCT_ADD_FUNC(8_dc, 8, sse2)
 IDCT_ADD_FUNC(8_dc, 10, sse2)
 IDCT_ADD_FUNC(8, 8, sse2)
 IDCT_ADD_FUNC(8, 10, sse2)
@@ -70,7 +70,7 @@ IDCT_ADD_REP_FUNC2(, 8, 8, sse2)
 IDCT_ADD_REP_FUNC2(, 8, 10, sse2)
 IDCT_ADD_REP_FUNC2(, 8, 10, avx)
 
-IDCT_ADD_REP_FUNC2(, 8_422, 8, mmx)
+IDCT_ADD_REP_FUNC2(, 8_422, 8, sse2)
 
 IDCT_ADD_REP_FUNC2(, 8_422, 10, sse2)
 IDCT_ADD_REP_FUNC2(, 8_422, 10, avx)
@@ -80,11 +80,11 @@ void ff_h264_luma_dc_dequant_idct_sse2(int16_t *output, int16_t *input, int qmul
 /***********************************/
 /* deblocking */
 
-void ff_h264_loop_filter_strength_mmxext(int16_t bS[2][4][4], uint8_t nnz[40],
-                                         int8_t ref[2][40],
-                                         int16_t mv[2][40][2],
-                                         int bidir, int edges, int step,
-                                         int mask_mv0, int mask_mv1, int field);
+void ff_h264_loop_filter_strength_sse2(int16_t bS[2][4][4], uint8_t nnz[40],
+                                       int8_t ref[2][40],
+                                       int16_t mv[2][40][2],
+                                       int bidir, int edges, int step,
+                                       int mask_mv0, int mask_mv1, int field);
 
 #define LF_FUNC(DIR, TYPE, DEPTH, OPT)                                        \
 void ff_deblock_ ## DIR ## _ ## TYPE ## _ ## DEPTH ## _ ## OPT(uint8_t *pix,  \
@@ -140,10 +140,6 @@ void ff_h264_biweight_ ## W ## _ ## OPT(uint8_t *dst, uint8_t *src,     \
                                         int log2_denom, int weightd,    \
                                         int weights, int offset);
 
-#define H264_BIWEIGHT_MMX(W)                    \
-    H264_WEIGHT(W, mmxext)                      \
-    H264_BIWEIGHT(W, mmxext)
-
 #define H264_BIWEIGHT_SSE(W)                    \
     H264_WEIGHT(W, sse2)                        \
     H264_BIWEIGHT(W, sse2)                      \
@@ -151,7 +147,7 @@ void ff_h264_biweight_ ## W ## _ ## OPT(uint8_t *dst, uint8_t *src,     \
 
 H264_BIWEIGHT_SSE(16)
 H264_BIWEIGHT_SSE(8)
-H264_BIWEIGHT_MMX(4)
+H264_BIWEIGHT_SSE(4)
 
 #define H264_WEIGHT_10(W, DEPTH, OPT)                                   \
 void ff_h264_weight_ ## W ## _ ## DEPTH ## _ ## OPT(uint8_t *dst,       \
@@ -186,38 +182,29 @@ av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
 {
     int cpu_flags = av_get_cpu_flags();
 
-    if (EXTERNAL_MMXEXT(cpu_flags) && chroma_format_idc <= 1)
-        c->loop_filter_strength = ff_h264_loop_filter_strength_mmxext;
+    if (EXTERNAL_SSE2(cpu_flags) && chroma_format_idc <= 1)
+        c->loop_filter_strength = ff_h264_loop_filter_strength_sse2;
 
     if (bit_depth == 8) {
-        if (EXTERNAL_MMX(cpu_flags)) {
-            if (chroma_format_idc <= 1) {
-            } else {
-                c->idct_add8 = ff_h264_idct_add8_422_8_mmx;
-            }
-        }
-        if (EXTERNAL_MMXEXT(cpu_flags)) {
-            c->idct8_dc_add = ff_h264_idct8_dc_add_8_mmxext;
-
-            c->weight_pixels_tab[2] = ff_h264_weight_4_mmxext;
-
-            c->biweight_pixels_tab[2] = ff_h264_biweight_4_mmxext;
-        }
         if (EXTERNAL_SSE2(cpu_flags)) {
             c->idct8_add  = ff_h264_idct8_add_8_sse2;
-
+            c->idct8_dc_add = ff_h264_idct8_dc_add_8_sse2;
             c->idct_add16 = ff_h264_idct_add16_8_sse2;
             c->idct8_add4 = ff_h264_idct8_add4_8_sse2;
             if (chroma_format_idc <= 1)
                 c->idct_add8 = ff_h264_idct_add8_8_sse2;
+            else
+                c->idct_add8 = ff_h264_idct_add8_422_8_sse2;
             c->idct_add16intra      = ff_h264_idct_add16intra_8_sse2;
             c->luma_dc_dequant_idct = ff_h264_luma_dc_dequant_idct_sse2;
 
             c->weight_pixels_tab[0] = ff_h264_weight_16_sse2;
             c->weight_pixels_tab[1] = ff_h264_weight_8_sse2;
+            c->weight_pixels_tab[2] = ff_h264_weight_4_sse2;
 
             c->biweight_pixels_tab[0] = ff_h264_biweight_16_sse2;
             c->biweight_pixels_tab[1] = ff_h264_biweight_8_sse2;
+            c->biweight_pixels_tab[2] = ff_h264_biweight_4_sse2;
 
             c->v_loop_filter_luma       = ff_deblock_v_luma_8_sse2;
             c->h_loop_filter_luma       = ff_deblock_h_luma_8_sse2;
@@ -244,6 +231,7 @@ av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
         if (EXTERNAL_SSSE3(cpu_flags)) {
             c->biweight_pixels_tab[0] = ff_h264_biweight_16_ssse3;
             c->biweight_pixels_tab[1] = ff_h264_biweight_8_ssse3;
+            c->biweight_pixels_tab[2] = ff_h264_biweight_4_ssse3;
         }
         if (EXTERNAL_AVX(cpu_flags)) {
             c->v_loop_filter_luma       = ff_deblock_v_luma_8_avx;
@@ -268,10 +256,8 @@ av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
             c->idct_dc_add     = ff_h264_idct_dc_add_8_avx;
         }
     } else if (bit_depth == 10) {
-        if (EXTERNAL_MMXEXT(cpu_flags)) {
-            c->idct_dc_add = ff_h264_idct_dc_add_10_mmxext;
-        }
         if (EXTERNAL_SSE2(cpu_flags)) {
+            c->idct_dc_add  = ff_h264_idct_dc_add_10_sse2;
             c->idct_add     = ff_h264_idct_add_10_sse2;
             c->idct8_dc_add = ff_h264_idct8_dc_add_10_sse2;
 

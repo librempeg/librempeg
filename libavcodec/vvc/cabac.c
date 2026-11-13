@@ -855,6 +855,10 @@ int ff_vvc_cabac_init(VVCLocalContext *lc,
             ret = cabac_reinit(lc);
         if (!ret)
             cabac_init_state(lc);
+    } else if (lc->sc->nb_eps == 1 && rx == pps->ctb_to_col_bd[rx] &&
+               lc->fc->ps.sps->r->sps_entropy_coding_sync_enabled_flag) {
+        avpriv_report_missing_feature(lc->fc->log_ctx, "Entropy coding sync without entry points");
+        return AVERROR_PATCHWELCOME;
     }
     return ret;
 }
@@ -872,11 +876,7 @@ static void vvc_refill2(CABACContext* c) {
 
     x = -CABAC_MASK;
 
-#if CABAC_BITS == 16
     x += (c->bytestream[0] << 9) + (c->bytestream[1] << 1);
-#else
-    x += c->bytestream[0] << 1;
-#endif
 
     c->low += x << i;
 #if !UNCHECKED_BITSTREAM_READER

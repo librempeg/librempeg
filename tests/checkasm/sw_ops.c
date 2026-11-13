@@ -127,17 +127,20 @@ static void fill8(uint8_t *line, int num, unsigned range)
     }
 }
 
-static void set_range(AVRational64 *rangeq, unsigned range, unsigned range_def)
+static SwsPixelType pixel_type_to_int(const SwsPixelType type)
 {
-    if (!range)
-        range = range_def;
-    if (range)
-        *rangeq = (AVRational64) { range, 1 };
+    switch (ff_sws_pixel_type_size(type)) {
+    case 1: return SWS_PIXEL_U8;
+    case 2: return SWS_PIXEL_U16;
+    case 4: return SWS_PIXEL_U32;
+    default: break;
+    }
+
+    av_unreachable("Invalid pixel type!");
+    return SWS_PIXEL_NONE;
 }
 
-static void check_compiled(const char *name, const SwsOpBackend *backend,
-                           const SwsOp *read_op, const SwsOp *write_op,
-                           const int ranges[NB_PLANES],
+static void check_compiled(const Test *test,
                            const SwsCompiledOp *comp_ref,
                            const SwsCompiledOp *comp_new)
 {
@@ -148,15 +151,16 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
      */
     uintptr_t id = (uintptr_t) comp_new->func;
     id ^= (id << 6) + (id >> 2) + 0x9e3779b97f4a7c15 + comp_new->cpu_flags;
-    if (!check_key((void *) id, "%s/%s", name, backend->name))
+    if (!check_key(id, "%s", test->name))
         return;
 
     declare_func(void, const SwsOpExec *, const void *, int bx, int y, int bx_end, int y_end);
 
     static DECLARE_ALIGNED_64(char, src0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
     static DECLARE_ALIGNED_64(char, src1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    static DECLARE_ALIGNED_64(char, dst0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    static DECLARE_ALIGNED_64(char, dst1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    /* All output planes are stacked vertically in a single padded buffer */
+    static BUF_RECT(uint8_t, dst0, PIXELS * sizeof(uint32_t[4]), NB_PLANES * LINES);
+    static BUF_RECT(uint8_t, dst1, PIXELS * sizeof(uint32_t[4]), NB_PLANES * LINES);
 
     av_assert0(PIXELS % comp_new->block_size == 0);
     for (int p = 0; p < NB_PLANES; p++) {
@@ -183,8 +187,8 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
     }
 
     memcpy(src1, src0, sizeof(src0));
-    memset(dst0, 0, sizeof(dst0));
-    memset(dst1, 0, sizeof(dst1));
+    CLEAR_BUF_RECT(dst0);
+    CLEAR_BUF_RECT(dst1);
 
     const int read_size  = PIXELS * test->pixel_bits_in  >> 3;
     const int write_size = PIXELS * test->pixel_bits_out >> 3;
@@ -194,7 +198,7 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
     exec.height = exec.slice_h = LINES;
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in_stride[i]  = sizeof(src0[i][0]);
-        exec.out_stride[i] = sizeof(dst0[i][0]);
+        exec.out_stride[i] = dst0_stride;
         exec.in_bump[i]  = exec.in_stride[i]  - read_size;
         exec.out_bump[i] = exec.out_stride[i] - write_size;
     }
@@ -225,7 +229,7 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
 
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in[i]  = (void *) src0[i];
-        exec.out[i] = (void *) dst0[i];
+        exec.out[i] = dst0 + i * LINES * dst0_stride;
         exec.block_size_in[i]  = comp_ref->block_size * test->pixel_bits_in  >> 3;
         exec.block_size_out[i] = comp_ref->block_size * test->pixel_bits_out >> 3;
     }
@@ -233,7 +237,7 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
 
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in[i]  = (void *) src1[i];
-        exec.out[i] = (void *) dst1[i];
+        exec.out[i] = dst1 + i * LINES * dst1_stride;
         exec.block_size_in[i]  = comp_new->block_size * test->pixel_bits_in  >> 3;
         exec.block_size_out[i] = comp_new->block_size * test->pixel_bits_out >> 3;
     }
@@ -243,28 +247,41 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
         if (!SWS_COMP_TEST(test->planes_out, i))
             continue;
 
+        /* checkasm_check_padded() assumes a power of two alignment, but our
+         * overwrite may be an arbitrary number of bytes. Smooth out the
+         * difference by manually copying over the padding from the reference
+         * to the output buffer, and extending the checked padding past it. */
+        const int elem_size = ff_sws_pixel_type_size(test->type_out);
+        const int over_write = comp_new->over_write[i];
+        const int padding = (over_write + elem_size - 1) / elem_size + 8;
+        const int w = write_size / elem_size;
+        const uint8_t *out_ref = dst0 + i * LINES * dst0_stride;
+        uint8_t *out_new = exec.out[i];
+        for (int y = 0; y < LINES; y++) {
+            memcpy(&out_new[y * dst1_stride + write_size],
+                   &out_ref[y * dst0_stride + write_size], over_write);
+        }
+
         const char *desc = FMT("%s[%d]", test->name, i);
-        const int stride = sizeof(dst0[i][0]);
         switch (test->type_out) {
         case SWS_PIXEL_U8:
-            checkasm_check(uint8_t, (void *) dst0[i], stride,
-                                    (void *) dst1[i], stride,
-                                    write_size, LINES, desc);
+            checkasm_check_padded(uint8_t, out_ref, dst0_stride, out_new, dst1_stride,
+                                  w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_U16:
-            checkasm_check(uint16_t, (void *) dst0[i], stride,
-                                     (void *) dst1[i], stride,
-                                     write_size >> 1, LINES, desc);
+            checkasm_check_padded(uint16_t, (void *) out_ref, dst0_stride,
+                                            (void *) out_new, dst1_stride,
+                                            w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_U32:
-            checkasm_check(uint32_t, (void *) dst0[i], stride,
-                                     (void *) dst1[i], stride,
-                                     write_size >> 2, LINES, desc);
+            checkasm_check_padded(uint32_t, (void *) out_ref, dst0_stride,
+                                            (void *) out_new, dst1_stride,
+                                            w, LINES, desc, 1, 0, padding);
             break;
         case SWS_PIXEL_F32:
-            checkasm_check(float_ulp, (void *) dst0[i], stride,
-                                      (void *) dst1[i], stride,
-                                      write_size >> 2, LINES, desc, 0);
+            checkasm_check_padded(float_ulp, (void *) out_ref, dst0_stride,
+                                             (void *) out_new, dst1_stride,
+                                             w, LINES, desc, 0, 1, 0, padding);
             break;
         }
     }
@@ -315,19 +332,19 @@ static void run_test(const Test *test)
         goto done;
     }
 
+    /* Check with the C backend to establish a reference */
+    check_compiled(test, &comp_ref, &comp_ref);
+
     /* Iterate over every other backend, and test it against the C reference */
     for (int n = 0; ff_sws_op_backends[n]; n++) {
         const SwsOpBackend *backend = ff_sws_op_backends[n];
         if (backend->hw_format != AV_PIX_FMT_NONE || backend == backend_ref)
             continue;
-
-        if (!av_get_cpu_flags()) {
-            /* Also test once with the existing C reference to set the baseline */
-            check_compiled(name, backend, read_op, write_op, ranges, &comp_ref, &comp_ref);
-        }
+        if (!backend->compile_uops)
+            continue;
 
         SwsCompiledOp comp_new = {0};
-        int ret = ff_sws_ops_compile(ctx, backend, &oplist, &comp_new);
+        int ret = backend->compile_uops(ctx, &oplist, &comp_new);
         if (ret == AVERROR(ENOTSUP)) {
             continue;
         } else if (ret < 0) {
@@ -335,7 +352,9 @@ static void run_test(const Test *test)
             goto done;
         }
 
-        check_compiled(name, backend, read_op, write_op, ranges, &comp_ref, &comp_new);
+        /* Distinguish backends from each other even with same CPU flags */
+        checkasm_set_func_variant("%s_%s", backend->name, checkasm_get_cpu_suffix());
+        check_compiled(test, &comp_ref, &comp_new);
         ff_sws_compiled_op_unref(&comp_new);
     }
 
@@ -455,16 +474,19 @@ static void check_simple(const char *name, const SwsUOp *uop)
     check_range(name, uop, NULL);
 }
 
-static void check_scalar(const char *name, SwsUOp *uop)
-{
-    uop->data.scalar = rndpx(uop->type);
-    check_simple(name, uop);
-}
-
 static void check_vec4(const char *name, SwsUOp *uop)
 {
     for (int i = 0; i < 4; i++)
         uop->data.vec4[i] = rndpx(uop->type);
+
+    check_simple(name, uop);
+}
+
+static void check_clear(const char *name, SwsUOp *uop)
+{
+    /* Clear values are always expanded to 32 bits, see SwsClearUOp */
+    for (int i = 0; i < 4; i++)
+        uop->data.vec4[i] = ff_sws_pixel_expand32(uop->type, rndpx(uop->type));
 
     check_simple(name, uop);
 }
@@ -510,7 +532,7 @@ static void check_filter(const char *name, SwsUOp *uop)
 
             char desc[256];
             snprintf(desc, sizeof(desc), "%s_%s_%d", name,
-                     uop->data.kernel->name, par.src_size);
+                     ff_sws_scaler_name(par.scaler), par.src_size);
 
             check_read(desc, uop);
             av_refstruct_unref(&uop->data.kernel);
@@ -595,11 +617,11 @@ static void check_linear(const char *name, SwsUOp *uop)
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 5; j++) {
             if (par->zero & SWS_MASK(i, j))
-                uop->data.mat4[i][j] = constpx(uop->type, 0);
+                uop->data.mat4x5[i][j] = constpx(uop->type, 0);
             else if (par->one & SWS_MASK(i, j))
-                uop->data.mat4[i][j] = constpx(uop->type, 1);
+                uop->data.mat4x5[i][j] = constpx(uop->type, 1);
             else
-                uop->data.mat4[i][j] = rndpx(uop->type);
+                uop->data.mat4x5[i][j] = rndpx(uop->type);
         }
     }
 
@@ -689,14 +711,14 @@ void checkasm_check_sw_ops(void)
     CHECK_FOR(TO_U32,           check_cast);
     CHECK_FOR(TO_F32,           check_cast);
     CHECK_FOR(SCALE,            check_scale);
-    CHECK_FOR(ADD,              check_scalar);
+    CHECK_FOR(ADD,              check_vec4);
     CHECK_FOR(MIN,              check_vec4);
     CHECK_FOR(MAX,              check_vec4);
     CHECK_FOR(UNPACK,           check_unpack);
     CHECK_FOR(PACK,             check_pack);
     CHECK_FOR(LSHIFT,           check_simple);
     CHECK_FOR(RSHIFT,           check_simple);
-    CHECK_FOR(CLEAR,            check_vec4);
+    CHECK_FOR(CLEAR,            check_clear);
     CHECK_FOR(LINEAR,           check_linear);
     CHECK_FOR(DITHER,           check_dither);
     CHECK_FOR(LUT_3D,           check_lut_3d);

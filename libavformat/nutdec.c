@@ -36,8 +36,6 @@
 #include "nut.h"
 #include "riff.h"
 
-#define NUT_MAX_STREAMS 256    /* arbitrary sanity check value */
-
 static int64_t nut_read_timestamp(AVFormatContext *s, int stream_index,
                                   int64_t *pos_arg, int64_t pos_limit);
 
@@ -216,7 +214,7 @@ static int decode_main_header(NUTContext *nut)
     if (nut->version > 3)
         nut->minor_version = ffio_read_varlen(bc);
 
-    GET_V(stream_count, tmp > 0 && tmp <= NUT_MAX_STREAMS);
+    GET_V(stream_count, tmp > 0 && tmp <= s->max_streams);
 
     nut->max_distance = ffio_read_varlen(bc);
     if (nut->max_distance > 65536) {
@@ -939,6 +937,9 @@ static int read_sm_data(AVFormatContext *s, AVIOContext *bc, AVPacket *pkt, int 
             if(!dst)
                 return AVERROR(ENOMEM);
             avio_read(bc, dst, value_len);
+            if (HAVE_BIGENDIAN && !strcmp(name, "Palette"))
+                for (int j = 0; j + 4 <= value_len; j += 4)
+                    AV_WN32(dst + j, AV_RL32(dst + j));
         } else if (value == -3) {
             value = get_s(bc);
         } else if (value == -4) {

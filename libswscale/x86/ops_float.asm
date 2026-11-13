@@ -91,10 +91,11 @@ IF W,   %1 mw2, m11, m12
 %xdefine fltsize tmp1q
 
 assert_idn FILTER_TYPE, SWS_PIXEL_F32
+%assign PRIV_SIZE     2 * gprsize
 %assign SIZEOF_WEIGHT 4
 
-        mov weights, [implq + SwsOpImpl.priv]     ; float *weights
-        mov fltsize, [implq + SwsOpImpl.priv + 8] ; size_t filter_size
+        mov weights, [implq + SwsOpImpl.priv]           ; float *weights
+        mov fltsize, [implq + SwsOpImpl.priv + gprsize] ; size_t filter_size
         ; weights += filter_size * y * sizeof(float)
         mov tmp2q, fltsize
         imul tmp2q, yq
@@ -209,6 +210,7 @@ IF X,   add in0q, FILTER_SIZE
 %xdefine FILTER_H_PX FILTER_H_ %+ TYPE
 
 assert_idn FILTER_TYPE, SWS_PIXEL_F32
+%assign PRIV_SIZE 2 * gprsize
 %ifidn TYPE, SWS_PIXEL_F32
     %assign SIZEOF_WEIGHT 4 ; F32
 %else
@@ -216,7 +218,7 @@ assert_idn FILTER_TYPE, SWS_PIXEL_F32
 %endif
 
         mov tmp0q,   [execq + SwsOpExec.in_offset_x]
-        mov fltsize, [implq + SwsOpImpl.priv + 8] ; size_t filter_size
+        mov fltsize, [implq + SwsOpImpl.priv + gprsize] ; size_t filter_size
         mov tmp2d, bxd
         shl_log2 tmp2q, FILTER_WIDTH   ; x := bx * FILTER_WIDTH
         movu m14, [tmp0q + 4 * tmp2q]  ; &exec->in_offset_x[x]
@@ -415,6 +417,7 @@ IF W,   vcvtdq2ps mw%2, mw%2
 %xdefine ILOAD_PX ILOAD_ %+ TYPE
 
 assert_idn FILTER_TYPE, SWS_PIXEL_F32
+%assign PRIV_SIZE 2 * gprsize
 %ifidn TYPE, SWS_PIXEL_F32
     %assign SIZEOF_WEIGHT 4 ; F32
 %else
@@ -428,9 +431,9 @@ assert_idn FILTER_TYPE, SWS_PIXEL_F32
         push offset2q
         push offset3q
         shl_log2 bxq, FILTER_WIDTH ; x := bx * FILTER_WIDTH
-        mov weights, [implq + SwsOpImpl.priv]        ; int16_t *weights
-        mov tmp1d,   [implq + SwsOpImpl.priv + 8]    ; size_t filter_size
-        mov offsets, [execq + SwsOpExec.in_offset_x] ; int32_t *offsets
+        mov weights, [implq + SwsOpImpl.priv]           ; int16_t *weights
+        mov tmp1d,   [implq + SwsOpImpl.priv + gprsize] ; size_t filter_size
+        mov offsets, [execq + SwsOpExec.in_offset_x]    ; int32_t *offsets
         lea offsets, [offsets + 4 * bxq] ; offsets += x * sizeof(int32_t)
         imul bxq, fltsize
         add weights, bxq ; weights += x * filter_size
@@ -467,6 +470,7 @@ IF W,   mulps mw2, m10
 ; Arithmetic operations
 
 %macro SCALE 0
+%assign PRIV_SIZE BYTES
         vbroadcastss m8, [implq + SwsOpImpl.priv]
         LOAD_CONT tmp0q
 IF X,   mulps mx, m8
@@ -481,6 +485,7 @@ IF W,   mulps mw2, m8
 %endmacro
 
 %macro ADD 0
+%assign PRIV_SIZE 4 * BYTES
 IF X,   vbroadcastss m8,  [implq + SwsOpImpl.priv + 0 * BYTES]
 IF Y,   vbroadcastss m9,  [implq + SwsOpImpl.priv + 1 * BYTES]
 IF Z,   vbroadcastss m10, [implq + SwsOpImpl.priv + 2 * BYTES]
@@ -498,6 +503,7 @@ IF W,   addps mw2, m11
 %endmacro
 
 %macro MIN 0
+%assign PRIV_SIZE 4 * BYTES
 IF X,   vbroadcastss m8,  [implq + SwsOpImpl.priv + 0 * BYTES]
 IF Y,   vbroadcastss m9,  [implq + SwsOpImpl.priv + 1 * BYTES]
 IF Z,   vbroadcastss m10, [implq + SwsOpImpl.priv + 2 * BYTES]
@@ -515,6 +521,7 @@ IF W,   minps mw2, m11
 %endmacro
 
 %macro MAX 0
+%assign PRIV_SIZE 4 * BYTES
 IF X,   vbroadcastss m8,  [implq + SwsOpImpl.priv + 0 * BYTES]
 IF Y,   vbroadcastss m9,  [implq + SwsOpImpl.priv + 1 * BYTES]
 IF Z,   vbroadcastss m10, [implq + SwsOpImpl.priv + 2 * BYTES]
@@ -534,9 +541,7 @@ IF W,   maxps mw2, m11
 ;---------------------------------------------------------
 ; Linear operations
 
-%define LIN_MASK(I, J) (1 << (5 * (I) + (J)))
-
-%macro linear_muladd 5 ; dst, src, use_coef, coef, use_fma
+%macro linear_muladdps 5 ; dst, src, use_coef, coef, use_fma
     %if INIT ; dst is already initialized
         %if %3 && %5
             fmaddps %1, %4, %2, %1
@@ -570,37 +575,39 @@ IF LOAD(0), vbroadcastss m12, [%2 + 0 * BYTES]
 IF LOAD(1), vbroadcastss m13, [%2 + 1 * BYTES]
 IF LOAD(2), vbroadcastss m14, [%2 + 2 * BYTES]
 IF LOAD(3), vbroadcastss m15, [%2 + 3 * BYTES]
-IF NEED(0), linear_muladd %1, mx%4, LOAD(0), m12, FMA(0)
-IF NEED(1), linear_muladd %1, my%4, LOAD(1), m13, FMA(1)
-IF NEED(2), linear_muladd %1, mz%4, LOAD(2), m14, FMA(2)
-IF NEED(3), linear_muladd %1, mw%4, LOAD(3), m15, FMA(3)
+IF NEED(0), linear_muladdps %1, mx%4, LOAD(0), m12, FMA(0)
+IF NEED(1), linear_muladdps %1, my%4, LOAD(1), m13, FMA(1)
+IF NEED(2), linear_muladdps %1, mz%4, LOAD(2), m14, FMA(2)
+IF NEED(3), linear_muladdps %1, mw%4, LOAD(3), m15, FMA(3)
             assert INIT, SWS_UOP_LINEAR should not contain empty rows
 %endmacro
 
 %macro LINEAR_FMA 3
+%assign PRIV_SIZE  4 * 5 * BYTES
 %assign ONE_MASK   %1
 %assign ZERO_MASK  %2
 %assign EXACT_MASK %3
 
-        mov tmp0q, [implq + SwsOpImpl.priv] ; address of matrix
         LOAD_CONT tmp1q
-IF1 X,  linear_row m8,  tmp0q +  0 * BYTES, 0
-IF1 Y,  linear_row m9,  tmp0q +  5 * BYTES, 1
-IF1 Z,  linear_row m10, tmp0q + 10 * BYTES, 2
-IF1 W,  linear_row m11, tmp0q + 15 * BYTES, 3
+%define MATRIX implq + SwsOpImpl.priv
+IF1 X,  linear_row m8,  MATRIX +  0 * BYTES, 0
+IF1 Y,  linear_row m9,  MATRIX +  5 * BYTES, 1
+IF1 Z,  linear_row m10, MATRIX + 10 * BYTES, 2
+IF1 W,  linear_row m11, MATRIX + 15 * BYTES, 3
 IF X,   mova mx, m8
 IF Y,   mova my, m9
 IF Z,   mova mz, m10
 IF W,   mova mw, m11
-IF1 X,  linear_row m8,  tmp0q +  0 * BYTES, 0, 2
-IF1 Y,  linear_row m9,  tmp0q +  5 * BYTES, 1, 2
-IF1 Z,  linear_row m10, tmp0q + 10 * BYTES, 2, 2
-IF1 W,  linear_row m11, tmp0q + 15 * BYTES, 3, 2
+IF1 X,  linear_row m8,  MATRIX +  0 * BYTES, 0, 2
+IF1 Y,  linear_row m9,  MATRIX +  5 * BYTES, 1, 2
+IF1 Z,  linear_row m10, MATRIX + 10 * BYTES, 2, 2
+IF1 W,  linear_row m11, MATRIX + 15 * BYTES, 3, 2
 IF X,   mova mx2, m8
 IF Y,   mova my2, m9
 IF Z,   mova mz2, m10
 IF W,   mova mw2, m11
         CONTINUE tmp1q
+%undef MATRIX
 %endmacro
 
 %macro LINEAR 2
@@ -623,6 +630,7 @@ IF W,   mova mw2, m11
 %endmacro
 
 %macro DITHER 5 ; x_off, y_off, z_off, w_off, size_log2
+%assign PRIV_SIZE gprsize
 %assign SIZE_LOG2 %5
 %assign SIZE      (1 << SIZE_LOG2)
 %assign STRIDE    (SIZE * BYTES)
@@ -679,21 +687,21 @@ IF W,   addps mw2, m11
 ; Instantiate above macros to generate all uop kernels
 
 %macro decl_filter_ops 1 ; type
-    decl_suffix _4x4,   DECL_%1_READ_PLANAR_FH (READ_PLANAR_FH_4X4)
+    decl_suffix _4x4,   DECL_%1_READ_PLANAR_FH READ_PLANAR_FH_4X4
 
-    DECL_%1_READ_PLANAR_FH      (READ_PLANAR_FH)
-    DECL_%1_READ_PLANAR_FV      (READ_PLANAR_FV)
-    DECL_%1_READ_PLANAR_FV_FMA  (READ_PLANAR_FV_FMA)
+    DECL_%1_READ_PLANAR_FH      READ_PLANAR_FH
+    DECL_%1_READ_PLANAR_FV      READ_PLANAR_FV
+    DECL_%1_READ_PLANAR_FV_FMA  READ_PLANAR_FV_FMA
 %endmacro
 
 %macro decl_float_ops 1 ; type
-    DECL_%1_SCALE           (SCALE)
-    DECL_%1_ADD             (ADD)
-    DECL_%1_MIN             (MIN)
-    DECL_%1_MAX             (MAX)
-    DECL_%1_LINEAR          (LINEAR)
-    DECL_%1_LINEAR_FMA      (LINEAR_FMA)
-    DECL_%1_DITHER          (DITHER)
+    DECL_%1_SCALE           SCALE
+    DECL_%1_ADD             ADD
+    DECL_%1_MIN             MIN
+    DECL_%1_MAX             MAX
+    DECL_%1_LINEAR          LINEAR
+    DECL_%1_LINEAR_FMA      LINEAR_FMA
+    DECL_%1_DITHER          DITHER
 %endmacro
 
 INIT_YMM avx2

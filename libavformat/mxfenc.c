@@ -118,6 +118,7 @@ typedef struct MXFStreamContext {
     int max_gop;             ///< maximum gop size, used by mpeg-2 descriptor
     int b_picture_count;     ///< maximum number of consecutive b pictures, used in mpeg-2 descriptor
     int low_delay;           ///< low delay, used in mpeg-2 descriptor
+    int version;             ///< format version, used in ffv1 descriptor
     int micro_version;       ///< format micro_version, used in ffv1 descriptor
     j2k_info_t j2k_info;
     enum MXFMetadataSetType sub_descriptor;
@@ -1633,7 +1634,7 @@ static void mxf_write_ffv1_subdesc(AVFormatContext *s, AVStream *st)
     }
 
     mxf_write_local_tag(s, 2, 0xDFDA);
-    avio_wb16(pb, (*sc->codec_ul)[14]); // FFV1Version
+    avio_wb16(pb, sc->version); // FFV1Version
 
     if (st->codecpar->extradata_size) {
         mxf_write_local_tag(s, 2, 0xDFD9);
@@ -2676,8 +2677,7 @@ static int mxf_parse_ffv1_frame(AVFormatContext *s, AVStream *st, AVPacket *pkt)
         ff_init_range_decoder(&c, st->codecpar->extradata, st->codecpar->extradata_size);
         ff_build_rac_states(&c, 0.05 * (1LL << 32), 256 - 8);
         v = get_ffv1_unsigned_symbol(&c, state);
-        av_assert0(v >= 2);
-        if (v > 4) {
+        if (v < 2 || v > 4) {
             av_log(s, AV_LOG_ERROR, "unsupported ffv1 version %d\n", v);
             return 0;
         }
@@ -2688,8 +2688,10 @@ static int mxf_parse_ffv1_frame(AVFormatContext *s, AVStream *st, AVPacket *pkt)
         ff_build_rac_states(&c, 0.05 * (1LL << 32), 256 - 8);
         get_rac(&c, &keystate); // keyframe
         v = get_ffv1_unsigned_symbol(&c, state);
-        av_assert0(v < 2);
+        if (v >= 2)
+            return 0;
     }
+    sc->version = v;
     sc->codec_ul = &mxf_ffv1_codec_uls[v];
     sc->sub_descriptor = FFV1SubDescriptor;
 
@@ -3048,6 +3050,11 @@ static int mxf_init(AVFormatContext *s)
                 if (st->codecpar->codec_id != AV_CODEC_ID_PCM_S16LE &&
                     st->codecpar->codec_id != AV_CODEC_ID_PCM_S24LE) {
                     av_log(s, AV_LOG_ERROR, "MXF D-10 only support 16 or 24 bits le audio\n");
+                    return AVERROR_PATCHWELCOME;
+                }
+                if (st->codecpar->ch_layout.nb_channels > 8) {
+                    av_log(s, AV_LOG_ERROR, "MXF D-10 supports at most 8 audio channels\n");
+                    return AVERROR(EINVAL);
                 }
                 sc->index = INDEX_D10_AUDIO;
                 sc->container_ul = ((MXFStreamContext*)s->streams[0]->priv_data)->container_ul;

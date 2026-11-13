@@ -1,4 +1,4 @@
-FATE_GAPLESS-$(call FRAMECRC, MP3, MP3, ARESAMPLE_FILTER WAV_MUXER MD5_PROTOCOL) += fate-gapless-mp3
+FATE_GAPLESS-$(call FRAMECRC, MP3, MP3, ASF2SF_FILTER WAV_MUXER MD5_PROTOCOL) += fate-gapless-mp3
 fate-gapless-mp3: CMD = gapless $(TARGET_SAMPLES)/gapless/gapless.mp3 "-c:a mp3"
 
 FATE_GAPLESSINFO_PROBE-$(call ALLYES, MP3_DEMUXER MP3FLOAT_DECODER FILE_PROTOCOL) += fate-gapless-mp3-side-data
@@ -9,51 +9,51 @@ fate-gapless-mp3-side-data: CMD = ffprobe_demux $(TARGET_SAMPLES)/gapless/gaples
 FATE_GAPLESSENC_PROBE-$(call ALLYES, MP3_DEMUXER MP3_MUXER NULL_MUXER) += fate-gapless-mp3-remux
 fate-gapless-mp3-remux: CMD = transcode mp3 $(TARGET_SAMPLES)/gapless/gapless.mp3 mp3 "-c copy" "-c copy" "-of compact -show_entries stream=start_pts,duration_ts" "" "" "" null
 
-FATE_GAPLESS-$(call DEMDEC, MP3, MP3, ARESAMPLE_FILTER WAV_MUXER) += fate-audiomatch-square-mp3
+FATE_GAPLESS-$(call DEMDEC, MP3, MP3, ASF2SF_FILTER WAV_MUXER) += fate-audiomatch-square-mp3
 fate-audiomatch-square-mp3: CMD = audio_match $(TARGET_SAMPLES)/audiomatch/square3.mp3 $(SAMPLES)/audiomatch/square3.wav
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-square-aac
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-16000-mono-lc-adts    fate-audiomatch-afconvert-16000-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-44100-mono-lc-adts    fate-audiomatch-afconvert-44100-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-16000-mono-he-adts    fate-audiomatch-afconvert-16000-mono-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-44100-mono-he-adts    fate-audiomatch-afconvert-44100-mono-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-16000-stereo-he-adts  fate-audiomatch-afconvert-16000-stereo-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-44100-stereo-he-adts  fate-audiomatch-afconvert-44100-stereo-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-16000-stereo-he2-adts fate-audiomatch-afconvert-16000-stereo-he2-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-44100-stereo-he2-adts fate-audiomatch-afconvert-44100-stereo-he2-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-16000-stereo-lc-adts  fate-audiomatch-afconvert-16000-stereo-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-afconvert-44100-stereo-lc-adts  fate-audiomatch-afconvert-44100-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-square-aac
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-16000-mono-lc-adts    fate-audiomatch-afconvert-16000-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-44100-mono-lc-adts    fate-audiomatch-afconvert-44100-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-16000-mono-he-adts    fate-audiomatch-afconvert-16000-mono-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-44100-mono-he-adts    fate-audiomatch-afconvert-44100-mono-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-16000-stereo-he-adts  fate-audiomatch-afconvert-16000-stereo-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-44100-stereo-he-adts  fate-audiomatch-afconvert-44100-stereo-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-16000-stereo-he2-adts fate-audiomatch-afconvert-16000-stereo-he2-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-44100-stereo-he2-adts fate-audiomatch-afconvert-44100-stereo-he2-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-16000-stereo-lc-adts  fate-audiomatch-afconvert-16000-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-afconvert-44100-stereo-lc-adts  fate-audiomatch-afconvert-44100-stereo-lc-m4a
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-faac-16000-mono-lc-adts    fate-audiomatch-faac-16000-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-faac-44100-mono-lc-adts    fate-audiomatch-faac-44100-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-faac-16000-stereo-lc-adts  fate-audiomatch-faac-16000-stereo-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ARESAMPLE_FILTER) += fate-audiomatch-faac-44100-stereo-lc-adts  fate-audiomatch-faac-44100-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-faac-16000-mono-lc-adts    fate-audiomatch-faac-16000-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-faac-44100-mono-lc-adts    fate-audiomatch-faac-44100-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-faac-16000-stereo-lc-adts  fate-audiomatch-faac-16000-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, AAC_DEMUXER ASF2SF_FILTER) += fate-audiomatch-faac-44100-stereo-lc-adts  fate-audiomatch-faac-44100-stereo-lc-m4a
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-dolby-44100-mono-lc-mp4
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-dolby-44100-mono-he-mp4
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-dolby-44100-stereo-he-mp4
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-dolby-44100-stereo-he2-mp4
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-dolby-44100-stereo-lc-mp4
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-dolby-44100-mono-lc-mp4
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-dolby-44100-mono-he-mp4
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-dolby-44100-stereo-he-mp4
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-dolby-44100-stereo-he2-mp4
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-dolby-44100-stereo-lc-mp4
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-fdkaac-44100-stereo-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-fdkaac-44100-stereo-he2-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-fdkaac-44100-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-fdkaac-44100-stereo-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-fdkaac-44100-stereo-he2-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-fdkaac-44100-stereo-lc-m4a
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-16000-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-44100-mono-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-16000-mono-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-44100-mono-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-16000-stereo-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-44100-stereo-he-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-16000-stereo-he2-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-44100-stereo-he2-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-16000-stereo-lc-m4a
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-nero-44100-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-16000-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-44100-mono-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-16000-mono-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-44100-mono-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-16000-stereo-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-44100-stereo-he-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-16000-stereo-he2-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-44100-stereo-he2-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-16000-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-nero-44100-stereo-lc-m4a
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE OPUS, WAV OGG, ARESAMPLE_FILTER) += fate-audiomatch-opus-48000-stereo-opus
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE OPUS, WAV MATROSKA, ARESAMPLE_FILTER) += fate-audiomatch-opus-48000-stereo-mka
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE OPUS, WAV OGG, ASF2SF_FILTER) += fate-audiomatch-opus-48000-stereo-opus
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE OPUS, WAV MATROSKA, ASF2SF_FILTER) += fate-audiomatch-opus-48000-stereo-mka
 
-FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ARESAMPLE_FILTER) += fate-audiomatch-quicktime7-44100-stereo-lc-mp4 fate-audiomatch-quicktimeX-44100-stereo-lc-m4a
+FATE_GAPLESS-$(call TRANSCODE, PCM_S16LE AAC, WAV MOV, ASF2SF_FILTER) += fate-audiomatch-quicktime7-44100-stereo-lc-mp4 fate-audiomatch-quicktimeX-44100-stereo-lc-m4a
 
 fate-audiomatch-square-aac: CMD = audio_match $(TARGET_SAMPLES)/audiomatch/square3.m4a $(SAMPLES)/audiomatch/square3.wav
 
@@ -123,10 +123,10 @@ fate-gaplessinfo-itunes1: CMD = probegaplessinfo $(TARGET_SAMPLES)/cover_art/Own
 FATE_GAPLESSINFO_PROBE-$(call DEMDEC, MOV, AAC) += fate-gaplessinfo-itunes2
 fate-gaplessinfo-itunes2: CMD = probegaplessinfo $(TARGET_SAMPLES)/gapless/102400samples_qt-lc-aac.m4a
 
-FATE_GAPLESSENC_PROBE-$(call ENCDEC, AAC, IPOD MOV, ARESAMPLE_FILTER) += fate-gaplessenc-itunes-to-ipod-aac
+FATE_GAPLESSENC_PROBE-$(call ENCDEC, AAC, IPOD MOV, ASF2SF_FILTER) += fate-gaplessenc-itunes-to-ipod-aac
 fate-gaplessenc-itunes-to-ipod-aac: CMD = gaplessenc $(TARGET_SAMPLES)/gapless/102400samples_qt-lc-aac.m4a ipod aac
 
-FATE_GAPLESSENC_PROBE-$(call ENCDEC, AAC, MOV, PCM_S16LE_DEMUXER PCM_S16LE_DECODER ARESAMPLE_FILTER) += fate-gaplessenc-pcm-to-mov-aac
+FATE_GAPLESSENC_PROBE-$(call ENCDEC, AAC, MOV, PCM_S16LE_DEMUXER PCM_S16LE_DECODER ASF2SF_FILTER) += fate-gaplessenc-pcm-to-mov-aac
 fate-gaplessenc-pcm-to-mov-aac: $(AREF)
 fate-gaplessenc-pcm-to-mov-aac: CMD = gaplessenc $(AREF) mov aac
 

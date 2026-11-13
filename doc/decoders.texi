@@ -81,6 +81,21 @@ the corresponding elements of @option{view_ids_available}, i.e.
 Same validity restrictions as for @option{view_ids_available} apply to
 this option.
 
+@item tile_interleave
+Decode pictures split into tile columns in CTB row order rather than in tile
+scan order, so that frame threading keeps overlapping. With the tile scan the
+lower CTB rows are published only once the last tile column has been decoded,
+which stalls the frames waiting for them. Only the order in which the CTBs are
+decoded changes, the output is the same.
+
+The default of -1 takes this order for eligible pictures when frame threading is
+in use, 0 disables it, and 1 takes it for eligible pictures even without frame
+threading. A picture is eligible when it has two or more tile columns, does not
+use entropy coding synchronization and packs its tiles into slices in a layout
+the traversal supports. Every other picture is decoded in tile scan order as
+before. With slice threading, a picture whose tiles are all carried in one
+slice is still decoded tile-parallel, whatever this option is set to.
+
 @end table
 
 @section rawvideo
@@ -282,6 +297,27 @@ Loud sounds are fully compressed.  Soft sounds are enhanced.
 
 @end table
 
+@section dca
+
+DCA (DTS Coherent Acoustics) audio decoder, including the DTS-HD extensions.
+
+@subsection DCA Decoder Options
+
+@table @option
+
+@item -downmix @var{channel_layout}
+Request a smaller channel layout from the decoder: @samp{stereo},
+@samp{5.0(side)}, @samp{5.1(side)} or @samp{7.1}.
+
+A DTS:X stream in the standard presentation decodes to 7.1.4 by default. Its
+four height channels are carried in an extension at the end of each lossless
+(XLL) frame, and the encoder also folds them into the 7.1 bed, so the decoder
+removes them from the bed when it outputs them. Requesting @samp{7.1} outputs
+the bed as coded instead, with the heights folded in, and so does every
+smaller layout. A @samp{7.1} request has no effect on other streams.
+
+@end table
+
 @section flac
 
 FLAC audio decoder.
@@ -297,6 +333,41 @@ The lavc FLAC encoder used to produce buggy streams with high lpc values
 (like the default value). This option makes it possible to decode such streams
 correctly by using lavc's old buggy lpc logic for decoding.
 
+@end table
+
+@section libastcenc
+
+ARM ASTC Encoder wrapper for decoding ASTC textures.
+
+This decoder requires the Arm ASTC Encoder (astc-encoder) library version
+5.4 or newer, installed as @code{astcenc/astcenc.h} next to a library that
+@code{-lastcenc} finds. Pass @code{--enable-version3} together with
+@code{--enable-libastcenc} to configure.
+
+The @file{.astc} header does not record the intended decoding profile.
+Individual blocks identify their endpoint encodings, but this does not
+establish the sRGB versus linear interpretation. The decoder therefore uses
+the container metadata or @option{dec_profile}: a KTX sRGB texture is decoded
+as @code{ldr-srgb}, while a KTX texture in the linear format is sampled with
+HDR precision (@code{hdr-ldr-a}, half-float output) because the linear GL
+internal format says nothing about LDR. A raw @code{.astc} file carries no
+profile at all, so it falls back to @code{ldr-srgb}; use @option{dec_profile}
+for a raw HDR image:
+
+@example
+ffmpeg -dec_profile hdr-ldr-a -i input.astc output.png
+@end example
+
+@subsection Options
+@table @option
+@item dec_profile @var{int}
+Color profile to decode with, overriding the container metadata. It must
+match the profile the texture was encoded with: @code{astcenc} substitutes
+a fixed magenta error color for blocks whose endpoints do not fit the
+selected profile. The values are @code{ldr}, @code{ldr-srgb},
+@code{hdr-ldr-a} and @code{hdr}. Without this option the profile published
+by the container is used; a raw @file{.astc} stream, which publishes none,
+falls back to @code{ldr-srgb}.
 @end table
 
 @section ffwavesynth

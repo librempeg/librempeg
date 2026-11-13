@@ -53,9 +53,9 @@ TestContext AVOptions:
   -bool3             <boolean>    E.......... set boolean value (default false)
   -dict1             <dictionary> E.......... set dictionary value
   -dict2             <dictionary> E.......... set dictionary value (default "happy=':-)'")
-  -array_int         [<int> ,]    .........T. array of ints (from 0 to INT_MAX)
-  -array_str         [<string> |] .........T. array of strings (default str0|str\|1|str\\2)
-  -array_dict        [<dictionary> ,] .........T. array of dicts (default k00=v\\\\00:k01=v\,01,k10=v\\=1\\:0)
+  -array_int         [<int>     ].........T. array of ints
+  -array_str         [<string>  ].........T. array of strings (default str0|str\|1|str\\2)
+  -array_dict        [<dictionary>].........T. array of dicts (default k00=v\\\\00:k01=v\,01,k10=v\\=1\\:0)
 
 Testing av_opt_is_set_to_default()
 name:       num default:1 error:
@@ -191,7 +191,22 @@ Setting entry with key 'array_int' to value ''
 Setting entry with key 'array_str' to value 'str0|str\|1|str\\2'
 Setting entry with key 'array_dict' to value 'k00=v\\\\00:k01=v\,01,k10=v\\=1\\:0'
 num=0,unum=2147483648,toggle=1,rational=1/1,string=default,escape=\\\=\,,flags=0x00000001,size=200x300,pix_fmt=0bgr,sample_fmt=s16,video_rate=25/1,duration=0.001,color=0xffc0cbff,cl=hexagonal,bin=62696E00,bin1=,bin2=,num64=4294967296,flt=0.333333,dbl=0.333333,bool1=auto,bool2=true,bool3=false,dict1=,dict2=happy\=\\:-),array_int=,array_str=str0|str\\|1|str\\\\2,array_dict=k00\=v\\\\\\\\00:k01\=v\\\,01\,k10\=v\\\\\=1\\\\:0
+Exclude flag EXPORT:
 child_num=0,flt=0.333333,dbl=0.333333
+Include flag EXPORT:
+child_num64=1,child_unum=1
+Exclude flag 1:
+child_unum=1
+Include flag 1:
+child_num64=1,child_num=0,flt=0.333333,dbl=0.333333
+Exclude exact match flag 1:
+child_num64=1,child_unum=1
+Include exact match flag 1:
+child_num=0,flt=0.333333,dbl=0.333333
+Exclude exact match flag EXPORT|READONLY:
+child_num64=1,child_num=0,flt=0.333333,dbl=0.333333
+Include exact match flag EXPORT|READONLY:
+child_unum=1
 
 Testing av_set_options_string()
 Setting options string ''
@@ -254,6 +269,18 @@ Setting entry with key 'flags' to value '+mu-lame'
 Setting entry with key 'num' to value '42'
 Setting entry with key 'toggle' to value '0'
 OK    'flags=+mu-lame : num=42: toggle=0'
+Setting options string 'flags=+1.5'
+Setting entry with key 'flags' to value '+1.5'
+Value 1.500000 for parameter 'flags' is not a valid set of 32bit integer flags
+Error 'flags=+1.5'
+Setting options string 'flags=-1.5'
+Setting entry with key 'flags' to value '-1.5'
+Value 1.500000 for parameter 'flags' is not a valid set of 32bit integer flags
+Error 'flags=-1.5'
+Setting options string 'flags=+100000000000000000000'
+Error 'flags=+100000000000000000000'
+Setting options string 'flags=-100000000000000000000'
+Error 'flags=-100000000000000000000'
 Setting options string 'num=42 : string=blahblah'
 Setting entry with key 'num' to value '42'
 Setting entry with key 'string' to value 'blahblah'
@@ -472,6 +499,7 @@ Setting options string 'array_int=2147483648'
 Setting entry with key 'array_int' to value '2147483648'
 Value 2147483648.000000 for parameter 'array_int' out of range [0 - 2.14748e+09]
 Error 'array_int=2147483648'
+flags=5
 
 Testing av_opt_set_from_string()
 Setting options string ''
@@ -518,3 +546,10 @@ Error 'num64'
 Error 'child_num'
 OK    'child_num'
 Error 'foo'
+
+Testing av_opt_copy() into a memdup'ed object
+cl=2 channels (FL@Left+FR@Right)
+
+Testing av_opt_copy() of a native layout into a custom layout
+copy: 0
+same layout: 1

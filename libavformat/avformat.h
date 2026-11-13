@@ -421,7 +421,9 @@ struct AVFrame;
  service_provider -- name of the service provider in broadcasting.
  title        -- name of the work.
  track        -- number of this work in the set, can be in form current/total.
- variant_bitrate -- the total bitrate of the bitrate variant that the current stream is part of
+ variant_bitrate -- the total bitrate of the bitrate variant that the program
+                    represents or that the current stream is part of. On
+                    streams it is only set when unambiguous.
  @endverbatim
  *
  * Look in the examples section for an application example how to use the Metadata API.
@@ -1069,26 +1071,35 @@ typedef struct AVStreamGroupTileGrid {
      */
     int height;
 
+#if FF_API_STREAM_GROUP_ENTRIES
     /**
      * Additional data associated with the grid.
      *
      * Should be allocated with av_packet_side_data_new() or
      * av_packet_side_data_add(), and will be freed by avformat_free_context().
+     *
+     * @deprecated, use @ref AVStreamGroup.coded_side_data.
      */
+    attribute_deprecated
     AVPacketSideData *coded_side_data;
 
     /**
      * Amount of entries in @ref coded_side_data.
+     *
+     * @deprecated, use @ref AVStreamGroup.nb_coded_side_data.
      */
+    attribute_deprecated
     int nb_coded_side_data;
+#endif
 } AVStreamGroupTileGrid;
 
 /**
  * AVStreamGroupLayeredVideo is meant to define the relation between a base
  * layer video stream and a separate enhancement layer stream that together
  * form a single layered video presentation (for example a video stream and a
- * data stream containing LCEVC enhancement layer NALUs, or Dolby Vision
- * Profile 7 dual-layer encoding).
+ * data stream containing LCEVC enhancement layer NALUs, Dolby Vision
+ * Profile 7 dual-layer encoding, an Alpha plane being a separate stream, or
+ * a base rendition accompanied by an ISO 21496-1 gain map).
  *
  * The enhancement layer stream is identified by @ref el_index.
  */
@@ -1153,10 +1164,25 @@ enum AVStreamGroupParamsType {
     AV_STREAM_GROUP_PARAMS_LCEVC,
     AV_STREAM_GROUP_PARAMS_TREF,
     AV_STREAM_GROUP_PARAMS_DOLBY_VISION,
+    AV_STREAM_GROUP_PARAMS_GAIN_MAP,
+    AV_STREAM_GROUP_PARAMS_ALPHA,
 };
 
 struct AVIAMFAudioElement;
 struct AVIAMFMixPresentation;
+
+enum AVStreamGroupEntryType {
+    AV_STREAM_GROUP_ENTRY_STREAM,
+    AV_STREAM_GROUP_ENTRY_STREAM_GROUP,
+};
+
+typedef struct AVStreamGroupEntry {
+    enum AVStreamGroupEntryType type;
+    union {
+        AVStream *stream;
+        struct AVStreamGroup *stream_group;
+    };
+} AVStreamGroupEntry;
 
 typedef struct AVStreamGroup {
     /**
@@ -1215,11 +1241,15 @@ typedef struct AVStreamGroup {
      */
     AVDictionary *metadata;
 
+#if FF_API_STREAM_GROUP_ENTRIES
     /**
      * Number of elements in AVStreamGroup.streams.
      *
-     * Set by avformat_stream_group_add_stream() must not be modified by any other code.
+     * Set by avformat_stream_group_add_stream(), must not be modified by any other code.
+     *
+     * @deprecated Use AVStreamGroup.nb_entries.
      */
+    attribute_deprecated
     unsigned int nb_streams;
 
     /**
@@ -1232,8 +1262,12 @@ typedef struct AVStreamGroup {
      * - muxing: entries are created by the user before avformat_write_header().
      *
      * Freed by libavformat in avformat_free_context().
+     *
+     * @deprecated Use AVStreamGroup.entries.
      */
+    attribute_deprecated
     AVStream **streams;
+#endif
 
     /**
      * Stream group disposition - a combination of AV_DISPOSITION_* flags.
@@ -1244,6 +1278,40 @@ typedef struct AVStreamGroup {
      * - muxing: may be set by the caller before avformat_write_header().
      */
     int disposition;
+
+    /**
+     * Number of elements in AVStreamGroup.entries.
+     *
+     * Set by avformat_stream_group_add_stream() or avformat_stream_group_add_stream_group(),
+     * must not be modified by any other code.
+     */
+    unsigned int nb_entries;
+
+    /**
+     * A list of streams or child groups in the group. New entries are created with
+     * or avformat_stream_group_add_stream() or avformat_stream_group_add_stream_group().
+     *
+     * - demuxing: entries are created by libavformat on group creation.
+     *             If AVFMTCTX_NOHEADER is set in ctx_flags, then new entries may also
+     *             appear in av_read_frame().
+     * - muxing: entries are created by the user before avformat_write_header().
+     *
+     * Freed by libavformat in avformat_free_context().
+     */
+    AVStreamGroupEntry **entries;
+
+    /**
+     * Additional data associated with the group.
+     *
+     * Should be allocated with av_packet_side_data_new() or
+     * av_packet_side_data_add(), and will be freed by avformat_free_context().
+     */
+    AVPacketSideData *coded_side_data;
+
+    /**
+     * Amount of entries in @ref coded_side_data.
+     */
+    int nb_coded_side_data;
 } AVStreamGroup;
 
 struct AVCodecParserContext *av_stream_get_parser(const AVStream *s);
@@ -1410,7 +1478,8 @@ typedef struct AVFormatContext {
     unsigned int nb_stream_groups;
     /**
      * A list of all stream groups in the file. New groups are created with
-     * avformat_stream_group_create(), and filled with avformat_stream_group_add_stream().
+     * avformat_stream_group_create(), and filled with avformat_stream_group_add_stream()
+     * and avformat_stream_group_add_stream_group.
      *
      * - demuxing: groups may be created by libavformat in avformat_open_input().
      *             If AVFMTCTX_NOHEADER is set in ctx_flags, then new groups may also
@@ -1796,12 +1865,17 @@ typedef struct AVFormatContext {
      */
     unsigned int correct_ts_overflow;
 
+#if FF_API_SEEK2ANY
     /**
      * Force seeking to any (also non key) frames.
      * - encoding: unused
      * - decoding: Set by user
+     *
+     * @deprecated use AVSEEK_FLAG_ANY in seek_flags
      */
+    attribute_deprecated
     int seek2any;
+#endif
 
     /**
      * Flush the I/O context after each packet.
@@ -1987,6 +2061,14 @@ typedef struct AVFormatContext {
      * - demuxing: Set by user
      */
     int recursion_limit;
+
+    /**
+     * Flags added to the flags of every avformat_seek_file(): AVSEEK_FLAG_ANY
+     * and AVSEEK_FLAG_PREROLL.
+     * - encoding: unused
+     * - decoding: Set by user
+     */
+    int seek_flags;
 } AVFormatContext;
 
 /**
@@ -2112,11 +2194,13 @@ const char *avformat_stream_group_name(enum AVStreamGroupParamsType type);
  * by avformat_stream_group_create().
  *
  * New streams can be added to the group with avformat_stream_group_add_stream().
+ * Child groups can be added to the group with avformat_stream_group_add_stream_group().
  *
  * @param s media file handle
  *
  * @return newly created group or NULL on error.
- * @see avformat_new_stream, avformat_stream_group_add_stream.
+ * @see avformat_new_stream.
+ * @see avformat_stream_group_add_stream, avformat_stream_group_add_stream_group.
  */
 AVStreamGroup *avformat_stream_group_create(AVFormatContext *s,
                                             enum AVStreamGroupParamsType type,
@@ -2165,6 +2249,31 @@ AVStream *avformat_new_stream(AVFormatContext *s, const struct AVCodec *c);
  * @see avformat_new_stream, avformat_stream_group_create.
  */
 int avformat_stream_group_add_stream(AVStreamGroup *stg, AVStream *st);
+
+/**
+ * Add an already allocated stream group to another stream group.
+ *
+ * When demuxing, it may be called by the demuxer in read_header(). If the
+ * flag AVFMTCTX_NOHEADER is set in s.ctx_flags, then it may also
+ * be called in read_packet().
+ *
+ * When muxing, may be called by the user before avformat_write_header() after
+ * having allocated a both the parent and child groups with
+ * avformat_stream_group_create().
+ *
+ * User is required to call avformat_free_context() to clean up the allocation
+ * by avformat_stream_group_add_stream_group().
+ *
+ * @param stg stream group belonging to a media file.
+ * @param group stream group in the media file to add to the group.
+ *
+ * @retval 0                 success
+ * @retval AVERROR(EEXIST)   the stream group was already in the group
+ * @retval "another negative error code" legitimate errors
+ *
+ * @see avformat_stream_group_create.
+ */
+int avformat_stream_group_add_stream_group(AVStreamGroup *stg, AVStreamGroup *group);
 
 AVProgram *av_new_program(AVFormatContext *s, int id);
 
@@ -2447,6 +2556,9 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt);
  *                     is specified, in AV_TIME_BASE units.
  * @param flags        flags which select direction and seeking mode
  *
+ * With AVSEEK_FLAG_PREROLL set, timestamp moves back by the audio pre-roll,
+ * which is discarded after the seek, as with avformat_seek_file().
+ *
  * @return >= 0 on success
  */
 int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
@@ -2467,6 +2579,25 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
  * If flags contain AVSEEK_FLAG_ANY, then non-keyframes are treated as
  * keyframes (this may not be supported by all demuxers).
  * If flags contain AVSEEK_FLAG_BACKWARD, it is ignored.
+ *
+ * If flags or AVFormatContext.seek_flags contain AVSEEK_FLAG_PREROLL, a seek
+ * by timestamp moves ts back by the largest
+ * AVCodecParameters.seek_preroll of the audio streams that are not discarded,
+ * whatever stream_index is, so that the decoders get their declared pre-roll
+ * before ts. This is meant for a caller that decodes: the seek may land one
+ * keyframe earlier, which a caller that copies the packets would keep. The
+ * target stays within min_ts and after the start of the stream, so less room
+ * may be left. max_ts moves back as much, unless it is INT64_MAX. If that
+ * seek fails, the seek is done to ts.
+ *
+ * The first packet read after a seek from an audio stream carries
+ * AV_PKT_DATA_SKIP_SAMPLES side data to discard the rest of the priming
+ * (AVCodecParameters.initial_padding) if the seek landed inside it. With
+ * AVSEEK_FLAG_PREROLL, it discards at least the seek pre-roll. The discard
+ * supplies the stream's declared pre-roll; recovery beyond that allowance
+ * depends on the codec and bitstream. Only the priming is discarded on the
+ * first packet of the stream, and no pre-roll after the priming of a stream
+ * whose start the seek targets.
  *
  * @param s            media file handle
  * @param stream_index index of the stream which is used as time base reference
@@ -2619,6 +2750,7 @@ void avformat_close_input(AVFormatContext **s);
 #define AVSEEK_FLAG_BYTE     2 ///< seeking based on position in bytes
 #define AVSEEK_FLAG_ANY      4 ///< seek to any frame, even non-keyframes
 #define AVSEEK_FLAG_FRAME    8 ///< seeking based on frame number
+#define AVSEEK_FLAG_PREROLL 16 ///< move the target back by the audio pre-roll, see avformat_seek_file()
 
 /**
  * @addtogroup lavf_encoding
@@ -2706,6 +2838,10 @@ int avformat_init_output(AVFormatContext *s, AVDictionary **options);
  *            set to the index of the corresponding stream in @ref
  *            AVFormatContext.streams "s->streams".
  *            <br>
+ *            The packet data must be followed by AV_INPUT_BUFFER_PADDING_SIZE
+ *            bytes, as for decoder input; packets from libavcodec and from
+ *            demuxers are.
+ *            <br>
  *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
  *            must be set to correct values in the stream's timebase (unless the
  *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
@@ -2749,6 +2885,10 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt);
  *            Packet's @ref AVPacket.stream_index "stream_index" field must be
  *            set to the index of the corresponding stream in @ref
  *            AVFormatContext.streams "s->streams".
+ *            <br>
+ *            The packet data must be followed by AV_INPUT_BUFFER_PADDING_SIZE
+ *            bytes, as for decoder input; packets from libavcodec and from
+ *            demuxers are.
  *            <br>
  *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
  *            must be set to correct values in the stream's timebase (unless the
@@ -2810,7 +2950,7 @@ int av_write_uncoded_frame_query(AVFormatContext *s, int stream_index);
  * May only be called after a successful call to avformat_write_header.
  *
  * @param s media file handle
- * @return 0 if OK, AVERROR_xxx on error
+ * @return >=0 if OK, AVERROR_xxx on error
  */
 int av_write_trailer(AVFormatContext *s);
 

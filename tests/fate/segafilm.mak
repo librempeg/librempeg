@@ -8,8 +8,8 @@ fate-segafilm-s8-remux: CMD = transcode film_cpk $(TARGET_SAMPLES)/film/logo-cap
 FATE_SEGAFILM-$(call REMUX, SEGAFILM, AVI_DEMUXER CINEPAK_DECODER) += fate-segafilm-cinepak-mux
 fate-segafilm-cinepak-mux: CMD = transcode avi $(TARGET_SAMPLES)/cvid/pcitva15.avi film_cpk "-map 0:v -c copy" "-c copy"
 
-FATE_SEGAFILM-$(call TRANSCODE, RAWVIDEO CINEPAK, SEGAFILM, AVI_DEMUXER PCM_U8_DECODER ARESAMPLE_FILTER PCM_S16BE_PLANAR_ENCODER) += fate-segafilm-rawvideo-mux
-fate-segafilm-rawvideo-mux: CMD = transcode avi $(TARGET_SAMPLES)/cvid/laracroft-cinepak-partial.avi film_cpk "-c:v rawvideo -pix_fmt rgb24 -af aresample -c:a pcm_s16be_planar" "-c copy"
+FATE_SEGAFILM-$(call TRANSCODE, RAWVIDEO CINEPAK, SEGAFILM, AVI_DEMUXER PCM_U8_DECODER ASF2SF_FILTER PCM_S16BE_PLANAR_ENCODER) += fate-segafilm-rawvideo-mux
+fate-segafilm-rawvideo-mux: CMD = transcode avi $(TARGET_SAMPLES)/cvid/laracroft-cinepak-partial.avi film_cpk "-c:v rawvideo -pix_fmt rgb24 -af asf2sf -c:a pcm_s16be_planar" "-c copy"
 
 FATE_SAMPLES_FFMPEG += $(FATE_SEGAFILM-yes)
 fate-segafilm: $(FATE_SEGAFILM-yes)

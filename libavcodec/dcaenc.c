@@ -306,8 +306,8 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     for (k = 0; k < 32; k++) {
         for (j = 0; j < 8; j++) {
-            c->lfe_fir_64i[64 * j + k] = (int32_t)(0xffffff800000ULL * ff_dca_lfe_fir_64[8 * k + j]);
-            c->lfe_fir_64i[64 * (7-j) + (63 - k)] = (int32_t)(0xffffff800000ULL * ff_dca_lfe_fir_64[8 * k + j]);
+            c->lfe_fir_64i[64 * j + k] = (int32_t)(0xffffff800000ULL * (double)ff_dca_lfe_fir_64[8 * k + j]);
+            c->lfe_fir_64i[64 * (7-j) + (63 - k)] = (int32_t)(0xffffff800000ULL * (double)ff_dca_lfe_fir_64[8 * k + j]);
         }
     }
 
@@ -969,7 +969,8 @@ static void shift_history(DCAEncContext *c, const int32_t *input)
 
     for (k = 0; k < 512; k++)
         for (ch = 0; ch < c->channels; ch++) {
-            const int chi = c->channel_order_tab[ch];
+            const int chi = ch < c->fullband_channels ? c->channel_order_tab[ch]
+                                                      : lfe_index[c->channel_config];
 
             c->history[ch][k] = input[k * c->channels + chi];
         }

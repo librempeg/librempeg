@@ -30,6 +30,7 @@
  ***************************************************************************/
 
 #include "libavutil/attributes.h"
+#include "rational64.h"
 
 typedef struct SwsContext       SwsContext;
 typedef struct SwsFilterWeights SwsFilterWeights;
@@ -87,6 +88,41 @@ typedef union SwsPixel {
 /* Ensures (SwsPixel) {0} is properly initialized to all zeros */
 static_assert(sizeof(SwsPixel) == sizeof(char[4]), "SwsPixel size mismatch");
 
+static inline SwsPixel ff_sws_pixel_from_q64(SwsPixelType type, AVRational64 val)
+{
+    switch (type) {
+    case SWS_PIXEL_U8:  return (SwsPixel) { .u8  = val.num / val.den };
+    case SWS_PIXEL_U16: return (SwsPixel) { .u16 = val.num / val.den };
+    case SWS_PIXEL_U32: return (SwsPixel) { .u32 = val.num / val.den };
+    case SWS_PIXEL_F32: return (SwsPixel) { .f32 = (float) val.num / (float) val.den };
+    case SWS_PIXEL_NONE:
+    case SWS_PIXEL_TYPE_NB: break;
+    }
+    return (SwsPixel) {0};
+}
+
+/* Expand pixel value to 32-bits by repeating as necessary */
+static inline SwsPixel ff_sws_pixel_expand32(SwsPixelType type, SwsPixel val)
+{
+    switch (type) {
+    case SWS_PIXEL_U8:  val.u32 = val.u8  * 0x01010101u; break;
+    case SWS_PIXEL_U16: val.u32 = val.u16 * 0x00010001u; break;
+    default: break;
+    }
+    return val;
+}
+
+static inline bool ff_sws_pixel_is_1s(SwsPixelType type, SwsPixel val)
+{
+    switch (ff_sws_pixel_type_size(type)) {
+    case 1: return val.u8  == UINT8_MAX;
+    case 2: return val.u16 == UINT16_MAX;
+    case 4: return val.u32 == UINT32_MAX;
+    default: break;
+    }
+    return false;
+}
+
 /**
  * Bit-mask of components. Exact meaning depends on the usage context.
  */
@@ -121,9 +157,13 @@ static inline char *ff_sws_comp_mask_print(SwsCompMask mask, char buf[5])
 
 typedef uint32_t SwsUOpFlags;
 typedef enum SwsUOpFlagBits {
-    SWS_UOP_FLAG_NONE   = 0,
-    SWS_UOP_FLAG_FMA    = (1 << 0), /* platform supports FMA ops */
-    SWS_UOP_FLAG_PSHUFB = (1 << 1), /* platform supports pshufb equivalent */
+    SWS_UOP_FLAG_NONE         = 0,
+    SWS_UOP_FLAG_FMA          = (1 << 0), /* platform supports FMA ops */
+    SWS_UOP_FLAG_PSHUFB       = (1 << 1), /* platform supports pshufb equivalent */
+    SWS_UOP_FLAG_EXPAND_BIT   = (1 << 2), /* backend implements SWS_UOP_EXPAND_BIT */
+    SWS_UOP_FLAG_READ_PALETTE = (1 << 3), /* backend implements SWS_UOP_READ_PALETTE */
+    SWS_UOP_FLAG_ADD          = (1 << 4), /* backend implements SWS_UOP_ADD */
+    SWS_UOP_FLAG_PUNNING      = (1 << 5), /* allow type punning float data as int */
 } SwsUOpFlagBits;
 
 typedef enum SwsUOpType {
@@ -215,6 +255,10 @@ typedef struct SwsPackUOp {
     uint8_t pattern[4]; /* bit depth pattern, from MSB to LSB */
 } SwsPackUOp;
 
+/**
+ * The clear values (SwsUOp.data.vec4) are always expanded to repeating 32-bit
+ * patterns, so they remain valid if the uop is executed as a smaller type.
+ */
 typedef struct SwsClearUOp {
     SwsCompMask one;  /* mask of coefficients equal to all 1s */
     SwsCompMask zero; /* mask of coefficients equal to all 0s */
@@ -274,7 +318,7 @@ typedef struct SwsUOp {
         SwsPixel *ptr;              /* refstruct */
         SwsPixel scalar;
         SwsPixel vec4[4];
-        SwsPixel mat4[4][5];        /* row major */
+        SwsPixel mat4x5[4][5];      /* row major */
         SwsShuffleMask shuffle;     /* for SWS_UOP_RW_SHUFFLE */
         const SwsLut3D *lut3d;      /* for SWS_UOP_LUT_3D; refstruct */
         void *opaque;               /* reserved for internal use */
@@ -318,6 +362,11 @@ int ff_sws_uop_list_append(SwsUOpList *uops, SwsUOp *uop);
  * Called internally by ff_sws_ops_translate().
  */
 int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uops);
+
+/**
+ * Print the micro-ops of a compiled list at the given log level.
+ */
+void ff_sws_uop_list_print(void *log_ctx, int log_level, const SwsUOpList *uops);
 
 /**
  * Translate a list of operations down to micro-ops, which can be further

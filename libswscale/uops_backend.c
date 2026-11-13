@@ -28,13 +28,13 @@
  */
 #ifdef __clang__
 #pragma STDC FP_CONTRACT OFF
-#elif AV_GCC_VERSION_AT_LEAST(4, 8)
+#elif defined(__GNUC__)
 #pragma GCC optimize ("fp-contract=off")
 #elif defined(_MSC_VER)
 #pragma fp_contract (off)
 #endif
 
-#if AV_GCC_VERSION_AT_LEAST(4, 4)
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC optimize ("finite-math-only")
 #endif
 
@@ -106,32 +106,35 @@ static const SwsUOpTable uop_table = {
     },
 };
 
-static void process(const SwsOpExec *exec, const void *priv,
-                    const int bx_start, const int y_start,
-                    int bx_end, int y_end)
+static void process_c(const SwsOpExec *exec, const void *priv,
+                      const int bx_start, const int y_start,
+                      int bx_end, int y_end)
 {
     const SwsOpChain *chain = priv;
-    const SwsOpImpl *impl = chain->impl;
+    const SwsOpImpl *impl = (const SwsOpImpl *) chain->impl;
     block_t x, y, z, w; /* allocate enough space for any intermediate */
 
-    SwsOpIter iterdata;
-    SwsOpIter *iter = &iterdata; /* for CONTINUE() macro to work */
-    iter->exec = exec;
+    SwsOpIter iter;
+    iter.exec = exec;
     for (int i = 0; i < 4; i++) {
-        iter->in[i]  = (uintptr_t) exec->in[i];
-        iter->out[i] = (uintptr_t) exec->out[i];
+        iter.in[i]  = (uintptr_t) exec->in[i];
+        iter.out[i] = (uintptr_t) exec->out[i];
     }
 
-    for (iter->y = y_start; iter->y < y_end; iter->y++) {
+    void (*entry)(SwsOpIter *, const SwsOpImpl *, void *, void *, void *, void *);
+    entry = (void (*)(SwsOpIter *, const SwsOpImpl *,
+                      void *, void *, void *, void *)) impl->func;
+
+    for (iter.y = y_start; iter.y < y_end; iter.y++) {
         for (int block = bx_start; block < bx_end; block++) {
-            iter->x = block * SWS_BLOCK_SIZE;
-            CONTINUE(&x, &y, &z, &w);
+            iter.x = block * SWS_BLOCK_SIZE;
+            entry(&iter, impl, &x, &y, &z, &w);
         }
 
-        const int y_bump = exec->in_bump_y ? exec->in_bump_y[iter->y] : 0;
+        const int y_bump = exec->in_bump_y ? exec->in_bump_y[iter.y] : 0;
         for (int i = 0; i < 4; i++) {
-            iter->in[i]  += exec->in_bump[i] + y_bump * exec->in_stride[i];
-            iter->out[i] += exec->out_bump[i];
+            iter.in[i]  += exec->in_bump[i] + y_bump * exec->in_stride[i];
+            iter.out[i] += exec->out_bump[i];
         }
     }
 }
@@ -154,24 +157,13 @@ static int compile_uops_c(SwsContext *ctx, const SwsUOpList *uops, SwsCompiledOp
     }
 
     *out = (SwsCompiledOp) {
-        .slice_align = 1,
         .block_size  = SWS_BLOCK_SIZE,
-        .cpu_flags   = chain->cpu_flags,
-        .priv        = chain,
-        .free        = ff_sws_op_chain_free_cb,
-        .func        = process,
+        .slice_align = 1,
+        .func        = process_c,
     };
 
-    memcpy(out->over_read,  chain->over_read,  sizeof(out->over_read));
-    memcpy(out->over_write, chain->over_write, sizeof(out->over_write));
-
-    av_log(ctx, AV_LOG_DEBUG, "Compiled micro-ops:\n");
-    for (int i = 0; i < uops->num_ops; i++) {
-        char name[SWS_UOP_NAME_MAX];
-        ff_sws_uop_name(&uops->ops[i], name);
-        av_log(ctx, AV_LOG_DEBUG, "    %s\n", name);
-    }
-
+    ff_sws_uop_list_print(ctx, AV_LOG_DEBUG, uops);
+    ff_sws_op_chain_attach(chain, out);
     return 0;
 
 fail:
@@ -179,13 +171,17 @@ fail:
     return ret;
 }
 
-static int compile_c(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_ops_c(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
 {
     SwsUOpList *uops = ff_sws_uop_list_alloc();
     if (!uops)
         return AVERROR(ENOMEM);
 
-    int ret = ff_sws_ops_translate(ctx, ops, 0, uops);
+    const SwsUOpFlags flags = SWS_UOP_FLAG_EXPAND_BIT
+                            | SWS_UOP_FLAG_READ_PALETTE
+                            | SWS_UOP_FLAG_ADD
+                            | SWS_UOP_FLAG_PUNNING;
+    int ret = ff_sws_ops_translate(ctx, ops, flags, uops);
     if (ret < 0)
         goto fail;
 
@@ -199,7 +195,7 @@ fail:
 const SwsOpBackend backend_c = {
     .name           = "c",
     .flags          = SWS_BACKEND_C,
-    .compile        = compile_c,
+    .compile        = compile_ops_c,
     .compile_uops   = compile_uops_c,
     .hw_format      = AV_PIX_FMT_NONE,
 };

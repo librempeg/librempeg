@@ -100,7 +100,7 @@ static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
                 if (n >= nb_samples)
                     break;
             }
-        } else {
+        } else if (isfinite(src[n])) {
             while (src[n] >= -min_peak && src[n] <= min_peak) {
                 new_max_peak = min_peak;
                 new_size++;
@@ -108,6 +108,9 @@ static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
                 if (n >= nb_samples)
                     break;
             }
+        } else {
+            new_size++;
+            n++;
         }
 
         pi->max_peak = new_max_peak;

@@ -1,11 +1,17 @@
+/auenc
+/demux_probe
 /id3v2
+/id3v2enc
 /fifo_muxer
 /imf
 /mkdir
 /noproxy
 /rename
 /rtmpdh
+/rtpdec
 /seek
 /srtp
 /url
 /seek_utils
+/http
+/ogg_pages

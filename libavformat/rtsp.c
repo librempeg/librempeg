@@ -53,6 +53,7 @@
 #include "rtpdec_formats.h"
 #include "rtpenc_chain.h"
 #include "url.h"
+#include "tls.h"
 #include "rtpenc.h"
 #include "mpegts.h"
 #include "version.h"
@@ -103,6 +104,9 @@ const AVOption ff_rtsp_options[] = {
     { "timeout", "set timeout (in microseconds) of socket I/O operations", OFFSET(stimeout), AV_OPT_TYPE_INT64, {.i64 = 0}, INT_MIN, INT64_MAX, DEC },
     COMMON_OPTS(),
     { "user_agent", "override User-Agent header", OFFSET(user_agent), AV_OPT_TYPE_STRING, {.str = LIBAVFORMAT_IDENT}, 0, 0, DEC },
+
+    // TLS options
+    FF_TLS_CLIENT_OPTIONS(RTSPState, tls_opts),
     { NULL },
 };
 
@@ -138,6 +142,29 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     return opts;
 }
+
+#define ERR_RET(c)      \
+    do {                \
+        int ret = c;    \
+        if (ret < 0)    \
+            return ret; \
+    } while (0)
+
+/**
+ * Add the TLS options of the given RTSPState to the dict
+ */
+static int copy_tls_opts_dict(RTSPState *rt, AVDictionary **dict)
+{
+    ERR_RET(av_dict_set_int(dict, "tls_verify", rt->tls_opts.verify, 0));
+    ERR_RET(av_dict_set(dict, "ca_file", rt->tls_opts.ca_file, 0));
+    ERR_RET(av_dict_set(dict, "cert_file", rt->tls_opts.cert_file, 0));
+    ERR_RET(av_dict_set(dict, "key_file", rt->tls_opts.key_file, 0));
+    ERR_RET(av_dict_set(dict, "verifyhost", rt->tls_opts.host, 0));
+
+    return 0;
+}
+
+#undef ERR_RET
 
 static void get_word_until_chars(char *buf, int buf_size,
                                  const char *sep, const char **pp)
@@ -654,8 +681,17 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
                 rt->transport = RTSP_TRANSPORT_RDT;
         } else if (av_strstart(p, "SampleRate:integer;", &p) &&
                    s->nb_streams > 0) {
-            st = s->streams[s->nb_streams - 1];
-            st->codecpar->sample_rate = atoi(p);
+            long sample_rate;
+
+            errno = 0;
+            sample_rate = strtol(p, NULL, 10);
+            if (errno == ERANGE || sample_rate <= 0 || sample_rate > INT_MAX) {
+                av_log(s, AV_LOG_WARNING,
+                       "Invalid SampleRate %ld in SDP, ignoring\n", sample_rate);
+            } else {
+                st = s->streams[s->nb_streams - 1];
+                st->codecpar->sample_rate = sample_rate;
+            }
         } else if (av_strstart(p, "crypto:", &p) && s->nb_streams > 0) {
             // RFC 4568
             rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
@@ -707,7 +743,7 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
             if (s->nb_streams > 0) {
                 rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
 
-                if (rt->server_type == RTSP_SERVER_REAL)
+                if (rt->server_type == RTSP_SERVER_REAL && rtsp_st->stream_index >= 0)
                     ff_real_parse_sdp_a_line(s, rtsp_st->stream_index, p);
 
                 if (rtsp_st->dynamic_handler &&
@@ -889,10 +925,17 @@ int ff_rtsp_open_transport_ctx(AVFormatContext *s, RTSPStream *rtsp_st)
                                               rtsp_st->dynamic_protocol_context,
                                               rtsp_st->dynamic_handler);
         }
-        if (rtsp_st->crypto_suite[0])
-            ff_rtp_parse_set_crypto(rtsp_st->transport_priv,
-                                    rtsp_st->crypto_suite,
-                                    rtsp_st->crypto_params);
+        if (rtsp_st->crypto_suite[0]) {
+            int ret = ff_rtp_parse_set_crypto(rtsp_st->transport_priv,
+                                              rtsp_st->crypto_suite,
+                                              rtsp_st->crypto_params);
+            if (ret < 0) {
+                av_log(s, AV_LOG_ERROR,
+                       "SRTP setup failed for suite '%s'\n",
+                       rtsp_st->crypto_suite);
+                return ret;
+            }
+        }
     }
 
     return 0;
@@ -1335,6 +1378,18 @@ start:
     if (rt->seq != reply->seq) {
         av_log(s, AV_LOG_WARNING, "CSeq %d expected, %d received.\n",
             rt->seq, reply->seq);
+        /* At close time, drain stale async replies - e.g. queued keepalive
+         * OPTIONS or GET_PARAMETER responses - until the expected CSeq shows
+         * up.  Otherwise ff_rtsp_send_cmd("TEARDOWN") in rtsp_read_close()
+         * is satisfied by a queued keepalive reply, leaving the TEARDOWN
+         * 200 OK unread so the server never frees the session.  Only done
+         * while teardown_deadline bounds the wait; every other synchronous
+         * command keeps accepting a mismatching reply. */
+        if (rt->teardown_deadline) {
+            if (content_ptr)
+                av_freep(content_ptr);
+            goto start;
+        }
     }
 
     /* EOS */
@@ -1426,6 +1481,8 @@ int ff_rtsp_send_cmd_with_content_async(AVFormatContext *s,
 
     if (!rt->rtsp_hd_out)
         return AVERROR(ENOTCONN);
+    if (strpbrk(url, "\r\n"))
+        return AVERROR(EINVAL);
 
     /* Add in RTSP headers */
     out_buf = buf;
@@ -1867,6 +1924,19 @@ static int rtsp_url_same_origin(const char *url1, const char *url2)
            port1 == port2;
 }
 
+static int rtsp_control_interrupt_cb(void *opaque)
+{
+    AVFormatContext *s = opaque;
+    RTSPState *rt = s->priv_data;
+
+    /* While closing, a pending user interrupt must not prevent TEARDOWN from
+     * being sent and its reply from being read; bound the wait instead. */
+    if (rt->teardown_deadline)
+        return av_gettime_relative() >= rt->teardown_deadline;
+
+    return ff_check_interrupt(&s->interrupt_callback);
+}
+
 int ff_rtsp_connect(AVFormatContext *s)
 {
     RTSPState *rt = s->priv_data;
@@ -1876,6 +1946,7 @@ int ff_rtsp_connect(AVFormatContext *s)
     int port, err, tcp_fd;
     RTSPMessageHeader reply1, *reply = &reply1;
     int lower_transport_mask = 0;
+    int redirects = 0;
     int default_port = RTSP_DEFAULT_PORT;
     int https_tunnel = 0;
     char real_challenge[64] = "";
@@ -1883,6 +1954,8 @@ int ff_rtsp_connect(AVFormatContext *s)
     socklen_t peer_len = sizeof(peer);
 
     rt->stored_msg.expected_seq = -1;
+    rt->control_interrupt_cb.callback = rtsp_control_interrupt_cb;
+    rt->control_interrupt_cb.opaque   = s;
     if (rt->rtp_port_max < rt->rtp_port_min) {
         av_log(s, AV_LOG_ERROR, "Invalid UDP port range, max port %d less "
                                 "than min port %d\n", rt->rtp_port_max,
@@ -1959,6 +2032,14 @@ redirect:
         AVDictionary *options = NULL;
 
         av_dict_set_int(&options, "timeout", rt->stimeout, 0);
+        if (https_tunnel) {
+            int ret = copy_tls_opts_dict(rt, &options);
+            if (ret < 0) {
+                av_dict_free(&options);
+                err = ret;
+                goto fail;
+            }
+        }
 
         ff_url_join(httpname, sizeof(httpname), https_tunnel ? "https" : "http", auth, host, port, "%s", path);
         snprintf(sessioncookie, sizeof(sessioncookie), "%08x%08x",
@@ -1966,7 +2047,7 @@ redirect:
 
         /* GET requests */
         if (ffurl_alloc(&rt->rtsp_hd, httpname, AVIO_FLAG_READ,
-                        &s->interrupt_callback) < 0) {
+                        &rt->control_interrupt_cb) < 0) {
             av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
@@ -2008,7 +2089,7 @@ redirect:
 
         /* POST requests */
         if (ffurl_alloc(&rt->rtsp_hd_out, httpname, AVIO_FLAG_WRITE,
-                        &s->interrupt_callback) < 0 ) {
+                        &rt->control_interrupt_cb) < 0 ) {
             av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
@@ -2055,14 +2136,26 @@ redirect:
     } else {
         int ret;
         /* open the tcp connection */
+        AVDictionary *proto_opts = NULL;
+        if (strcmp("tls", lower_rtsp_proto) == 0) {
+            ret = copy_tls_opts_dict(rt, &proto_opts);
+            if (ret < 0) {
+                av_dict_free(&proto_opts);
+                err = ret;
+                goto fail;
+            }
+        }
+
         ff_url_join(tcpname, sizeof(tcpname), lower_rtsp_proto, NULL,
                     host, port,
                     "?timeout=%"PRId64, rt->stimeout);
         if ((ret = ffurl_open_whitelist(&rt->rtsp_hd, tcpname, AVIO_FLAG_READ_WRITE,
-                       &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+                       &rt->control_interrupt_cb, &proto_opts, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+            av_dict_free(&proto_opts);
             err = ret;
             goto fail;
         }
+        av_dict_free(&proto_opts);
         rt->rtsp_hd_out = rt->rtsp_hd;
     }
     rt->seq = 0;
@@ -2162,6 +2255,11 @@ redirect:
     if (reply->status_code >=300 && reply->status_code < 400 && s->iformat) {
         int ret;
 
+        if (redirects++ >= 8 /* MAX_RTSP_REDIRECTS */) {
+            av_log(s, AV_LOG_ERROR, "Too many RTSP redirects\n");
+            err = AVERROR(EIO);
+            goto fail2;
+        }
         if (!rtsp_url_same_origin(s->url, reply->location)) {
             memset(rt->auth, 0, sizeof(rt->auth));
             memset(&rt->auth_state, 0, sizeof(rt->auth_state));

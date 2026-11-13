@@ -1,5 +1,5 @@
 /*
- * Chinese AVS video (AVS1-P2, JiZhun profile) parser.
+ * Chinese AVS video (AVS1-P2/P16, JiZhun and Broadcasting profiles) parser.
  * Copyright (c) 2006  Stefan Gehrer <stefan.gehrer@gmx.de>
  *
  * This file is part of Librempeg
@@ -21,7 +21,7 @@
 
 /**
  * @file
- * Chinese AVS video (AVS1-P2, JiZhun profile) parser
+ * Chinese AVS video (AVS1-P2/P16, JiZhun and Broadcasting profiles) parser
  * @author Stefan Gehrer <stefan.gehrer@gmx.de>
  */
 
@@ -81,11 +81,11 @@ static int parse_seq_header(AVCodecParserContext *s, AVCodecContext *avctx,
 {
     int frame_rate_code;
     int width, height;
-    int mb_width, mb_height;
+    int mb_width, mb_height, progressive;
 
-    skip_bits(gb, 8); // profile
+    avctx->profile = get_bits(gb, 8);
     skip_bits(gb, 8); // level
-    skip_bits1(gb);   // progressive sequence
+    progressive = get_bits1(gb);
 
     width  = get_bits(gb, 14);
     height = get_bits(gb, 14);
@@ -94,7 +94,8 @@ static int parse_seq_header(AVCodecParserContext *s, AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
     }
     mb_width  = (width  + 15) >> 4;
-    mb_height = (height + 15) >> 4;
+    /* an interlaced sequence has an even MbHeight (clause 7.2.2) */
+    mb_height = progressive ? (height + 15) >> 4 : ((height + 31) >> 5) * 2;
 
     skip_bits(gb, 2); // chroma format
     skip_bits(gb, 3); // sample_precision

@@ -491,6 +491,16 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->color_ranges)) < 0)
         return ret;
 
+    if ((ret = ff_formats_ref(ff_all_chroma_locations(),
+                              &cfg_in[0]->chroma_locations)) < 0)
+        return ret;
+
+    formats = scale->out_chroma_loc != AVCHROMA_LOC_UNSPECIFIED
+                ? ff_make_formats_list_singleton(scale->out_chroma_loc)
+                : ff_all_chroma_locations();
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->chroma_locations)) < 0)
+        return ret;
+
     if (scale->sws->alpha_blend) {
         if ((ret = ff_formats_ref(ff_make_formats_list_singleton(AVALPHA_MODE_STRAIGHT),
                                   &cfg_in[0]->alpha_modes)) < 0)
@@ -797,7 +807,8 @@ scale:
         in->color_trc = scale->in_transfer;
     if (scale->in_range != AVCOL_RANGE_UNSPECIFIED)
         in->color_range = scale->in_range;
-    in->chroma_location = scale->in_chroma_loc;
+    if (scale->in_chroma_loc != AVCHROMA_LOC_UNSPECIFIED)
+        in->chroma_location = scale->in_chroma_loc;
 
     flags_orig = in->flags;
     if (scale->interlaced > 0)
@@ -811,6 +822,8 @@ scale:
     out->color_range = outlink->color_range;
     out->colorspace = outlink->colorspace;
     out->alpha_mode = outlink->alpha_mode;
+    if (outlink->chroma_location != AVCHROMA_LOC_UNSPECIFIED)
+        out->chroma_location = outlink->chroma_location;
     if (scale->out_chroma_loc != AVCHROMA_LOC_UNSPECIFIED)
         out->chroma_location = scale->out_chroma_loc;
     if (scale->out_primaries != -1)
@@ -838,6 +851,7 @@ scale:
     }
 
     if (sws_is_noop(out, in)) {
+        in->chroma_location = out->chroma_location;
         av_frame_free(&out);
         in->flags = flags_orig;
         *frame_out = in;
@@ -1030,7 +1044,7 @@ static const AVOption scale_options[] = {
         {"smpte432",     NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE432},      0, 0, FLAGS, .unit = "primaries"},
         {"jedec-p22",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_JEDEC_P22},     0, 0, FLAGS, .unit = "primaries"},
         {"ebu3213",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_EBU3213},       0, 0, FLAGS, .unit = "primaries"},
-    { "in_transfer", "set output color transfer", OFFSET(in_transfer),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_TRC_NB-1, .flags = FLAGS, .unit = "transfer"},
+    { "in_transfer", "set input color transfer",  OFFSET(in_transfer),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_TRC_NB-1, .flags = FLAGS, .unit = "transfer"},
     {"out_transfer", "set output color transfer", OFFSET(out_transfer), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_TRC_NB-1, .flags = FLAGS, .unit = "transfer"},
         {"auto",         NULL,  0, AV_OPT_TYPE_CONST, {.i64=-1},                      0, 0, FLAGS, .unit = "transfer"},
         {"bt709",        NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_BT709},         0, 0, FLAGS, .unit = "transfer"},
@@ -1112,4 +1126,5 @@ const FFFilter ff_vf_scale = {
     FILTER_QUERY_FUNC2(query_formats),
     .activate        = activate,
     .process_command = process_command,
+    .flags_internal  = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };

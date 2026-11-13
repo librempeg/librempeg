@@ -44,9 +44,7 @@ static int read_header(AVFormatContext *s)
     AVIOContext *pb = s->pb;
     AVStream *st;
 
-    avio_rb64(pb);
-    avio_rl32(pb); /* 1.20 */
-    avio_rl32(pb); /* number of samples */
+    avio_skip(pb, 16);
     rate = avio_rl32(pb);
     if (rate <= 0)
         return AVERROR_INVALIDDATA;
@@ -67,8 +65,7 @@ static int read_header(AVFormatContext *s)
     av_channel_layout_default(&st->codecpar->ch_layout, channels);
 
     st->codecpar->bits_per_coded_sample = 4;
-    st->codecpar->bit_rate = (int64_t)st->codecpar->bits_per_coded_sample * channels
-                          * st->codecpar->sample_rate;
+    st->codecpar->bit_rate = (int64_t)st->codecpar->bits_per_coded_sample * channels * rate;
     st->codecpar->block_align = 1;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);

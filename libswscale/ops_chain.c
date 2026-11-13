@@ -20,7 +20,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
-#include "libavutil/rational.h"
+#include "libavutil/refstruct.h"
 
 #include "ops_chain.h"
 
@@ -35,83 +35,44 @@ void ff_sws_op_chain_free_cb(void *ptr)
         return;
 
     SwsOpChain *chain = ptr;
-    for (int i = 0; i < chain->num_impl + 1; i++) {
-        if (chain->free[i])
-            chain->free[i](&chain->impl[i].priv);
-    }
+    for (int i = 0; i < chain->num_ref; i++)
+        av_refstruct_unref(&chain->ref[i]);
 
     av_free(chain);
 }
 
-int ff_sws_op_chain_append(SwsOpChain *chain, SwsFuncPtr func,
-                           void (*free)(SwsOpPriv *), const SwsOpPriv *priv)
+int ff_sws_op_chain_append(SwsOpChain *chain, SwsFuncPtr func, const void *ref,
+                           const void *data, size_t data_size)
 {
-    const int idx = chain->num_impl;
-    if (idx == SWS_MAX_OPS)
+    /* Ensures each SwsOpImpl is stored aligned, so that we can deref it */
+    const size_t op_size = FFALIGN(offsetof(SwsOpImpl, priv) + data_size,
+                                   alignof(SwsOpImpl));
+
+    if (chain->impl_size + op_size > sizeof(chain->impl))
+        return AVERROR(EINVAL);
+    if (ref && chain->num_ref >= FF_ARRAY_ELEMS(chain->ref))
         return AVERROR(EINVAL);
 
-    av_assert1(func);
-    chain->impl[idx].cont = func;
-    chain->impl[idx + 1].priv = *priv;
-    chain->free[idx + 1] = free;
-    chain->num_impl++;
+    SwsOpImpl *impl = (SwsOpImpl *) &chain->impl[chain->impl_size];
+    impl->func = func;
+    if (data_size)
+        memcpy(&impl->priv, data, data_size);
+    chain->impl_size += op_size;
+    if (ref)
+        chain->ref[chain->num_ref++] = av_refstruct_ref_c(ref);
+
     return 0;
 }
 
-#define q2pixel(type, q) ((q).den ? (type) (q).num / (q).den : 0)
-
-#if ARCH_AARCH64
-int ff_sws_setup_scale(const SwsImplParams *params, SwsImplResult *out)
+void ff_sws_op_chain_attach(const SwsOpChain *chain, SwsCompiledOp *out)
 {
-    const SwsOp *op = params->op;
-    const AVRational64 factor = op->scale.factor;
-    switch (op->type) {
-    case SWS_PIXEL_U8:  out->priv.u8[0]  = q2pixel(uint8_t,  factor); break;
-    case SWS_PIXEL_U16: out->priv.u16[0] = q2pixel(uint16_t, factor); break;
-    case SWS_PIXEL_U32: out->priv.u32[0] = q2pixel(uint32_t, factor); break;
-    case SWS_PIXEL_F32: out->priv.f32[0] = q2pixel(float,    factor); break;
-    default: return AVERROR(EINVAL);
-    }
-
-    return 0;
+    av_assert0(!out->priv);
+    out->priv = (void *) chain;
+    out->free = ff_sws_op_chain_free_cb;
+    out->cpu_flags = chain->cpu_flags;
+    memcpy(out->over_read,  chain->over_read,  sizeof(out->over_read));
+    memcpy(out->over_write, chain->over_write, sizeof(out->over_write));
 }
-
-int ff_sws_setup_clamp(const SwsImplParams *params, SwsImplResult *out)
-{
-    const SwsOp *op = params->op;
-    for (int i = 0; i < 4; i++) {
-        const AVRational64 limit = op->clamp.limit[i];
-        switch (op->type) {
-        case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  limit); break;
-        case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, limit); break;
-        case SWS_PIXEL_U32: out->priv.u32[i] = q2pixel(uint32_t, limit); break;
-        case SWS_PIXEL_F32: out->priv.f32[i] = q2pixel(float,    limit); break;
-        default: return AVERROR(EINVAL);
-        }
-    }
-
-    return 0;
-}
-
-int ff_sws_setup_clear(const SwsImplParams *params, SwsImplResult *out)
-{
-    const SwsOp *op = params->op;
-    for (int i = 0; i < 4; i++) {
-        const AVRational64 value = op->clear.value[i];
-        if (!value.den)
-            continue;
-        switch (op->type) {
-        case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  value); break;
-        case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, value); break;
-        case SWS_PIXEL_U32: out->priv.u32[i] = q2pixel(uint32_t, value); break;
-        case SWS_PIXEL_F32: out->priv.f32[i] = q2pixel(float,    value); break;
-        default: return AVERROR(EINVAL);
-        }
-    }
-
-    return 0;
-}
-#endif
 
 int ff_sws_uop_lookup(SwsContext *ctx, const SwsUOpTable *const tables[],
                       int num_tables, const SwsUOp *uop, const int block_size,
@@ -166,12 +127,10 @@ int ff_sws_uop_lookup(SwsContext *ctx, const SwsUOpTable *const tables[],
     }
 
     ret = ff_sws_op_chain_append(chain, res.func ? res.func : match->func,
-                                 res.free, &res.priv);
-    if (ret < 0) {
-        if (res.free)
-            res.free(&res.priv);
+                                 res.ref, res.priv, res.priv_size);
+    av_refstruct_unref(&res.ref);
+    if (ret < 0)
         return ret;
-    }
 
     for (int i = 0; i < 4; i++) {
         chain->over_read[i]  = FFMAX(chain->over_read[i],  res.over_read[i]);
@@ -187,10 +146,10 @@ int ff_sws_setup_scalar(const SwsImplParams *params, SwsImplResult *out)
     const SwsUOp *uop = params->uop;
     const SwsPixel scalar = uop->data.scalar;
     switch (uop->type) {
-    case SWS_PIXEL_U8:  out->priv.u8[0]  = scalar.u8;  break;
-    case SWS_PIXEL_U16: out->priv.u16[0] = scalar.u16; break;
-    case SWS_PIXEL_U32: out->priv.u32[0] = scalar.u32; break;
-    case SWS_PIXEL_F32: out->priv.f32[0] = scalar.f32; break;
+    case SWS_PIXEL_U8:  SWS_OP_PRIV_PACK(out, scalar.u8);  break;
+    case SWS_PIXEL_U16: SWS_OP_PRIV_PACK(out, scalar.u16); break;
+    case SWS_PIXEL_U32: SWS_OP_PRIV_PACK(out, scalar.u32); break;
+    case SWS_PIXEL_F32: SWS_OP_PRIV_PACK(out, scalar.f32); break;
     default: return AVERROR(EINVAL);
     }
 
@@ -203,10 +162,10 @@ int ff_sws_setup_vec4(const SwsImplParams *params, SwsImplResult *out)
     for (int i = 0; i < 4; i++) {
         const SwsPixel vi = uop->data.vec4[i];
         switch (uop->type) {
-        case SWS_PIXEL_U8:  out->priv.u8[i]  = vi.u8;  break;
-        case SWS_PIXEL_U16: out->priv.u16[i] = vi.u16; break;
-        case SWS_PIXEL_U32: out->priv.u32[i] = vi.u32; break;
-        case SWS_PIXEL_F32: out->priv.f32[i] = vi.f32; break;
+        case SWS_PIXEL_U8:  SWS_OP_PRIV_PACK(out, vi.u8);  break;
+        case SWS_PIXEL_U16: SWS_OP_PRIV_PACK(out, vi.u16); break;
+        case SWS_PIXEL_U32: SWS_OP_PRIV_PACK(out, vi.u32); break;
+        case SWS_PIXEL_F32: SWS_OP_PRIV_PACK(out, vi.f32); break;
         default: return AVERROR(EINVAL);
         }
     }

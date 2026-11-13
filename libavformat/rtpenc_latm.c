@@ -33,14 +33,13 @@ void ff_rtp_send_latm(AVFormatContext *s1, const uint8_t *buff, int size)
     int offset = 0;
     int len    = 0;
 
-    /* skip ADTS header, if present */
-    if ((s1->streams[0]->codecpar->extradata_size) == 0) {
-        size -= 7;
-        buff += 7;
-    }
-
     /* PayloadLengthInfo() */
     header_size = size/0xFF + 1;
+    if (header_size >= s->max_payload_size) {
+        av_log(s1, AV_LOG_ERROR, "LATM length header of %d bytes does not fit "
+               "the RTP payload of %d bytes\n", header_size, s->max_payload_size);
+        return;
+    }
     memset(s->buf, 0xFF, header_size - 1);
     s->buf[header_size - 1] = size % 0xFF;
 

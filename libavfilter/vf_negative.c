@@ -139,8 +139,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     for (int p = 0; p < 3; p++) {
         const int w = in->width;
         const int h = in->height;
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
         const float Dmin = s->dmin[p];
         const float wb_high = s->wbh[p];
         const float offset = s->offset[p];

@@ -1005,8 +1005,8 @@ static int dng_decode_tiles(AVCodecContext *avctx, AVFrame *frame,
     has_height_leftover = (s->height % s->tile_length != 0);
 
     /* Calculate tile counts (round up) */
-    tile_count_x = (s->width + s->tile_width - 1) / s->tile_width;
-    tile_count_y = (s->height + s->tile_length - 1) / s->tile_length;
+    tile_count_x = (s->width - 1) / s->tile_width + 1;
+    tile_count_y = (s->height - 1) / s->tile_length + 1;
 
     /* Iterate over the number of tiles */
     for (tile_idx = 0; tile_idx < tile_count_x * tile_count_y; tile_idx++) {
@@ -2028,7 +2028,7 @@ again:
 
     if (s->get_thumbnail && !s->is_thumbnail) {
         av_log(avctx, AV_LOG_INFO, "No embedded thumbnail present\n");
-        return AVERROR_EOF;
+        return 0;
     }
 
     /** whether we should process this IFD's SubIFD */
@@ -2217,7 +2217,7 @@ again:
             s->avctx->pix_fmt == AV_PIX_FMT_RGBA) {
             stride = stride * 5 / 4;
             five_planes =
-            dst = av_malloc(stride * s->height);
+            dst = av_calloc(s->height, stride);
             if (!dst)
                 return AVERROR(ENOMEM);
         }

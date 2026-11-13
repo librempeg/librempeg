@@ -25,6 +25,8 @@
  * MPEG Audio decoder
  */
 
+#include <math.h>
+
 #include "config_components.h"
 
 #include "libavutil/attributes.h"
@@ -32,7 +34,6 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/crc.h"
 #include "libavutil/float_dsp.h"
-#include "libavutil/libm.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/thread.h"
@@ -1327,7 +1328,9 @@ static int mp_decode_layer3(MPADecodeContext *s)
 
         memcpy(s->last_buf + s->last_buf_size, ptr, s->extrasize);
         s->in_gb = s->gb;
-        init_get_bits(gb, s->last_buf, (s->last_buf_size + s->extrasize) * 8);
+        ret = init_get_bits8(gb, s->last_buf, s->last_buf_size + s->extrasize);
+        if (ret < 0)
+            return ret;
         s->last_buf_size <<= 3;
         for (gr = 0; gr < nb_granules && (s->last_buf_size >> 3) < main_data_begin; gr++) {
             for (ch = 0; ch < s->nb_channels; ch++) {

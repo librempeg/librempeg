@@ -20,6 +20,8 @@
  * with Librempeg; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
+
+#include <limits.h>
 #include <stdbool.h>
 
 #include "libavcodec/cbs_h266.h"
@@ -437,28 +439,27 @@ static int pps_single_slice_picture(VVCPPS *pps, int *off)
     return 0;
 }
 
+static int tile_at_or_after(const uint16_t *bd, const int num_tiles, const int ctb_pos)
+{
+    int tile = 0;
+
+    while (tile < num_tiles && bd[tile] < ctb_pos)
+        tile++;
+
+    return tile;
+}
+
 static void subpic_tiles(int *tile_x, int *tile_y, int *tile_x_end, int *tile_y_end,
     const VVCSPS *sps, const VVCPPS *pps,  const int i)
 {
+    const H266RawPPS *r = pps->r;
     const int rx = sps->r->sps_subpic_ctu_top_left_x[i];
     const int ry = sps->r->sps_subpic_ctu_top_left_y[i];
 
-    *tile_x = *tile_y = 0;
-
-    while (pps->col_bd[*tile_x] < rx)
-        (*tile_x)++;
-
-    while (pps->row_bd[*tile_y] < ry)
-        (*tile_y)++;
-
-    *tile_x_end = (*tile_x);
-    *tile_y_end = (*tile_y);
-
-    while (pps->col_bd[*tile_x_end] < rx + sps->r->sps_subpic_width_minus1[i] + 1)
-        (*tile_x_end)++;
-
-    while (pps->row_bd[*tile_y_end] < ry + sps->r->sps_subpic_height_minus1[i] + 1)
-        (*tile_y_end)++;
+    *tile_x     = tile_at_or_after(pps->col_bd, r->num_tile_columns, rx);
+    *tile_y     = tile_at_or_after(pps->row_bd, r->num_tile_rows,    ry);
+    *tile_x_end = tile_at_or_after(pps->col_bd, r->num_tile_columns, rx + sps->r->sps_subpic_width_minus1[i] + 1);
+    *tile_y_end = tile_at_or_after(pps->row_bd, r->num_tile_rows,    ry + sps->r->sps_subpic_height_minus1[i] + 1);
 }
 
 static int pps_subpic_less_than_one_tile_slice(VVCPPS *pps, const VVCSPS *sps, const int i, const int tx, const int ty, int *off)
@@ -927,7 +928,7 @@ static int ph_max_num_subblock_merge_cand(const H266RawSPS *sps, const H266RawPi
     return sps->sps_sbtmvp_enabled_flag && ph->ph_temporal_mvp_enabled_flag;
 }
 
-static int ph_vb_pos(uint16_t *vbs, uint8_t *num_vbs, const uint16_t *pos_minus_1, const uint8_t num_pos, uint16_t max, const int ctb_size_y)
+static int ph_vb_pos(uint16_t *vbs, uint8_t *num_vbs, const uint16_t *pos_minus_1, const uint8_t num_pos, int max, const int ctb_size_y)
 {
     max = FF_CEIL_RSHIFT(max, 3) - 2;
     for (int i = 0; i < num_pos; i++) {
@@ -1045,14 +1046,39 @@ static void decode_recovery_flag(VVCContext *s)
         s->no_output_before_recovery_flag = s->last_eos;
 }
 
-static void decode_recovery_poc(VVCContext *s, const VVCPH *ph)
+static int decode_recovery_poc(VVCContext *s, const VVCFrameParamSets *fps)
 {
+    const VVCPH *ph = &fps->ph;
+
+    if (IS_GDR(s)) {
+        const uint32_t recovery_poc_cnt     = ph->r->ph_recovery_poc_cnt;
+        const uint32_t max_recovery_poc_cnt = fps->sps->max_pic_order_cnt_lsb - 1;
+
+        const int64_t recovery_poc = (int64_t)ph->poc + recovery_poc_cnt;
+        if (recovery_poc < INT_MIN || recovery_poc > INT_MAX) {
+            av_log(s->avctx, AV_LOG_ERROR, "Recovery point POC out of range: %"PRId64".\n", recovery_poc);
+            return AVERROR_INVALIDDATA;
+        }
+
+        if (recovery_poc_cnt > max_recovery_poc_cnt) {
+            const int strict = s->avctx->strict_std_compliance >= FF_COMPLIANCE_STRICT;
+            av_log(s->avctx, strict ? AV_LOG_ERROR : AV_LOG_WARNING,
+                   "ph_recovery_poc_cnt out of range: %"PRIu32
+                   ", expected [0, %"PRIu32"].\n", recovery_poc_cnt, max_recovery_poc_cnt);
+            if (strict)
+                return AVERROR_INVALIDDATA;
+        }
+
+        if (s->no_output_before_recovery_flag)
+            s->gdr_recovery_point_poc = recovery_poc;
+    }
+
     if (s->no_output_before_recovery_flag) {
-        if (IS_GDR(s))
-            s->gdr_recovery_point_poc = ph->poc + ph->r->ph_recovery_poc_cnt;
         if (!GDR_IS_RECOVERED(s) && s->gdr_recovery_point_poc <= ph->poc)
             GDR_SET_RECOVERED(s);
     }
+
+    return 0;
 }
 
 int ff_vvc_decode_frame_ps(struct VVCFrameContext *fc, struct VVCContext *s)
@@ -1071,8 +1097,10 @@ int ff_vvc_decode_frame_ps(struct VVCFrameContext *fc, struct VVCContext *s)
         return ret;
 
     ret = decode_frame_ps(fps, ps, sc, s->poc_tid0, is_clvss, s);
-    decode_recovery_poc(s, &fps->ph);
-    return ret;
+    if (ret < 0)
+        return ret;
+
+    return decode_recovery_poc(s, fps);
 }
 
 void ff_vvc_frame_ps_free(VVCFrameParamSets *fps)
@@ -1346,6 +1374,8 @@ static int sh_slice_address(VVCSH *sh, const H266RawSPS *sps, const VVCPPS *pps)
         int pic_level_slice_idx = slice_address;
         for (int j = 0; j < sh->r->curr_subpic_idx; j++)
             pic_level_slice_idx += pps->r->num_slices_in_subpic[j];
+        if (pic_level_slice_idx > pps->r->pps_num_slices_in_pic_minus1)
+            return AVERROR_INVALIDDATA;
         sh->ctb_addr_in_curr_slice = pps->ctb_addr_in_slice + pps->slice_start_offset[pic_level_slice_idx];
         sh->num_ctus_in_curr_slice = pps->num_ctus_in_slice[pic_level_slice_idx];
     } else {
@@ -1439,10 +1469,11 @@ static void sh_partition_constraints(VVCSH *sh, const H266RawSPS *sps, const H26
     sh->min_qt_size[CHROMA] = 1 << min_qt_log2_size_y[CHROMA];
 }
 
-static void sh_entry_points(VVCSH *sh, const H266RawSPS *sps, const VVCPPS *pps)
+static int sh_entry_points(VVCSH *sh, const H266RawSPS *sps, const VVCPPS *pps)
 {
     if (sps->sps_entry_point_offsets_present_flag) {
-        for (int i = 1, j = 0; i < sh->num_ctus_in_curr_slice; i++) {
+        int j = 0;
+        for (int i = 1; i < sh->num_ctus_in_curr_slice; i++) {
             const int pre_ctb_addr_x = sh->ctb_addr_in_curr_slice[i - 1] % pps->ctb_width;
             const int pre_ctb_addr_y = sh->ctb_addr_in_curr_slice[i - 1] / pps->ctb_width;
             const int ctb_addr_x     = sh->ctb_addr_in_curr_slice[i] % pps->ctb_width;
@@ -1450,10 +1481,16 @@ static void sh_entry_points(VVCSH *sh, const H266RawSPS *sps, const VVCPPS *pps)
             if (pps->ctb_to_row_bd[ctb_addr_y] != pps->ctb_to_row_bd[pre_ctb_addr_y] ||
                 pps->ctb_to_col_bd[ctb_addr_x] != pps->ctb_to_col_bd[pre_ctb_addr_x] ||
                 (ctb_addr_y != pre_ctb_addr_y && sps->sps_entropy_coding_sync_enabled_flag)) {
+                if (j >= VVC_MAX_ENTRY_POINTS)
+                    return AVERROR_INVALIDDATA;
                 sh->entry_point_start_ctu[j++] = i;
             }
         }
+        if (j != sh->r->num_entry_points)
+            return AVERROR_INVALIDDATA;
     }
+
+    return 0;
 }
 
 static int sh_derive(VVCSH *sh, const VVCFrameParamSets *fps)
@@ -1473,7 +1510,9 @@ static int sh_derive(VVCSH *sh, const VVCFrameParamSets *fps)
     sh_qp_y(sh, pps, ph);
     sh_deblock_offsets(sh);
     sh_partition_constraints(sh, sps, ph);
-    sh_entry_points(sh, sps, fps->pps);
+    ret = sh_entry_points(sh, sps, fps->pps);
+    if (ret < 0)
+        return ret;
 
     return 0;
 }

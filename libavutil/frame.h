@@ -305,6 +305,13 @@ enum AVFrameSideDataType {
      * The data is the AVDownmixMatrix struct defined in libavutil/downmix_info.h.
      */
     AV_FRAME_DATA_DOWNMIX_MATRIX,
+
+    /**
+     * Parameters describing how to combine this gain map with its base image
+     * to form an alternate rendition. The payload is the AVGainMapParams
+     * struct defined in libavutil/gain_map.h.
+     */
+    AV_FRAME_DATA_GAIN_MAP_PARAMS,
 };
 
 enum AVActiveFormatDescription {
@@ -719,6 +726,9 @@ typedef struct AVFrame {
      * MPEG vs JPEG YUV range.
      * - encoding: Set by user
      * - decoding: Set by libavcodec
+     *
+     * @note This field is ignored for floating point pixel formats, which
+     *       are always full range. See AVColorRange.
      */
     enum AVColorRange color_range;
 

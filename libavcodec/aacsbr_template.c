@@ -77,8 +77,7 @@ av_cold int AAC_RENAME(ff_aac_sbr_ctx_alloc_init)(AACDecContext *ac,
 
     if (!ext)
         return AVERROR(ENOMEM);
-    *che = &ext->ch;
-    sbr  = &ext->sbr;
+    sbr = &ext->sbr;
     ext->ch.ch[0].AAC_RENAME(predictor_state) = ext->predictor_state[0];
     ext->ch.ch[1].AAC_RENAME(predictor_state) = ext->predictor_state[1];
 
@@ -96,20 +95,25 @@ av_cold int AAC_RENAME(ff_aac_sbr_ctx_alloc_init)(AACDecContext *ac,
                      USE_FIXED ? AV_TX_INT32_MDCT : AV_TX_FLOAT_MDCT,
                      1, 64, &scale, 0);
     if (ret < 0)
-        return ret;
+        goto fail;
 
     scale = USE_FIXED ? -1.0 : -2.0 * 32768;
     ret = av_tx_init(&sbr->mdct_ana, &sbr->mdct_ana_fn,
                      USE_FIXED ? AV_TX_INT32_MDCT : AV_TX_FLOAT_MDCT,
                      1, 64, &scale, 0);
     if (ret < 0)
-        return ret;
+        goto fail;
 
     AAC_RENAME(ff_ps_ctx_init)(&sbr->ps);
     AAC_RENAME(ff_sbrdsp_init)(&sbr->dsp);
     aacsbr_func_ptr_init(&sbr->c);
 
+    *che = &ext->ch;
     return 0;
+fail:
+    av_tx_uninit(&sbr->mdct);
+    av_free(ext);
+    return ret;
 }
 
 av_cold void AAC_RENAME(ff_aac_sbr_ctx_close)(ChannelElement *che)
@@ -117,6 +121,24 @@ av_cold void AAC_RENAME(ff_aac_sbr_ctx_close)(ChannelElement *che)
     SpectralBandReplication *sbr = get_sbr(che);
     av_tx_uninit(&sbr->mdct);
     av_tx_uninit(&sbr->mdct_ana);
+}
+
+av_cold void AAC_RENAME(ff_aac_sbr_ctx_reset)(AACDecContext *ac, ChannelElement *che)
+{
+    SpectralBandReplication *sbr = get_sbr(che);
+    int id_aac = sbr->id_aac;
+
+    /* Discard all inter-frame state. The transform contexts (mdct_ana,
+     * mdct) and the function pointer tables (dsp, c) at the end of the
+     * struct are set up once in ff_aac_sbr_ctx_alloc_init() and hold no
+     * stream state, so they are deliberately left untouched. */
+    memset(sbr, 0, offsetof(SpectralBandReplication, mdct_ana));
+
+    sbr->id_aac = id_aac;
+    sbr_turnoff(sbr);
+    sbr->data[0].synthesis_filterbank_samples_offset = SBR_SYNTHESIS_BUF_SIZE - (1280 - 128);
+    sbr->data[1].synthesis_filterbank_samples_offset = SBR_SYNTHESIS_BUF_SIZE - (1280 - 128);
+    AAC_RENAME(ff_ps_ctx_init)(&sbr->ps);
 }
 
 static int qsort_comparison_function_int16(const void *a, const void *b)
@@ -683,9 +705,8 @@ static int read_sbr_grid(AACDecContext *ac, SpectralBandReplication *sbr,
         ch_data->t_env[0]                   = 0;
         ch_data->t_env[ch_data->bs_num_env] = abs_bord_trail;
 
-        for (i = 0; i < num_rel_trail; i++)
-            ch_data->t_env[ch_data->bs_num_env - 1 - i] =
-                ch_data->t_env[ch_data->bs_num_env - i] - 2 * get_bits(gb, 2) - 2;
+        for (i = num_rel_trail; i > 0; i--)
+            ch_data->t_env[i] = ch_data->t_env[i + 1] - 2 * get_bits(gb, 2) - 2;
 
         bs_pointer = get_bits(gb, ceil_log2[ch_data->bs_num_env]);
 
@@ -718,15 +739,17 @@ static int read_sbr_grid(AACDecContext *ac, SpectralBandReplication *sbr,
                    bs_num_env);
             return -1;
         }
+        /* Make the bounds implied by the two-bit counts explicit for GCC. */
+        if (bs_num_env < 1 || num_rel_trail < 0 || num_rel_trail >= bs_num_env)
+            return AVERROR_INVALIDDATA;
         ch_data->bs_num_env = bs_num_env;
 
         ch_data->t_env[ch_data->bs_num_env] = abs_bord_trail;
 
         for (i = 0; i < num_rel_lead; i++)
             ch_data->t_env[i + 1] = ch_data->t_env[i] + 2 * get_bits(gb, 2) + 2;
-        for (i = 0; i < num_rel_trail; i++)
-            ch_data->t_env[ch_data->bs_num_env - 1 - i] =
-                ch_data->t_env[ch_data->bs_num_env - i] - 2 * get_bits(gb, 2) - 2;
+        for (i = bs_num_env - 1; i >= bs_num_env - num_rel_trail; i--)
+            ch_data->t_env[i] = ch_data->t_env[i + 1] - 2 * get_bits(gb, 2) - 2;
 
         bs_pointer = get_bits(gb, ceil_log2[ch_data->bs_num_env]);
 
@@ -1206,12 +1229,11 @@ int ff_aac_sbr_config_usac(AACDecContext *ac, ChannelElement *che,
     return 0;
 }
 
-int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
-                                AACUsacElemConfig *ue, GetBitContext *gb,
-                                int sbr_ch, int indep_flag)
+static int read_usac_sbr_data(AACDecContext *ac, SpectralBandReplication *sbr,
+                              AACUsacElemConfig *ue, GetBitContext *gb,
+                              int sbr_ch, int indep_flag)
 {
     int ret;
-    SpectralBandReplication *sbr = get_sbr(che);
     int info_present = 1;
     int header_present = 1;
 
@@ -1351,6 +1373,19 @@ int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
     }
 
     return 0;
+}
+
+int ff_aac_sbr_decode_usac_data(AACDecContext *ac, ChannelElement *che,
+                                AACUsacElemConfig *ue, GetBitContext *gb,
+                                int sbr_ch, int indep_flag)
+{
+    SpectralBandReplication *sbr = get_sbr(che);
+    int ret = read_usac_sbr_data(ac, sbr, ue, gb, sbr_ch, indep_flag);
+
+    if (ret < 0)
+        sbr_turnoff(sbr);
+
+    return ret;
 }
 #endif
 

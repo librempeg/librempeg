@@ -2393,7 +2393,7 @@ stream hits EOF.
 @end table
 
 Depending on picked setting it is recommended to upsample input 2x or 4x times
-with @ref{aresample} before applying this filter.
+before applying this filter.
 
 @section allpass
 
@@ -2675,7 +2675,7 @@ Mixes multiple audio inputs into a single output.
 
 Note that this filter only supports float samples (the @var{amerge}
 and @var{pan} audio filters support many formats). If the @var{amix}
-input has integer samples then @ref{aresample} will be automatically
+input has integer samples then @var{asf2sf} will be automatically
 inserted to perform the conversion to float samples.
 
 It accepts the following parameters:
@@ -3250,42 +3250,6 @@ is set to ms.
 Set frequency in Hz. Default is 2. Allowed range is [0.01 - 100]. Only used
 if timing is set to hz.
 @end table
-
-@anchor{aresample}
-@section aresample
-
-Resample the input audio to the specified parameters, using the
-libswresample library. If none are specified then the filter will
-automatically convert between its input and output.
-
-This filter is also able to stretch/squeeze the audio data to make it match
-the timestamps or to inject silence / cut out audio to make it match the
-timestamps, do a combination of both or do neither.
-
-The filter accepts the syntax
-[@var{sample_rate}:]@var{resampler_options}, where @var{sample_rate}
-expresses a sample rate and @var{resampler_options} is a list of
-@var{key}=@var{value} pairs, separated by ":". See the
-@ref{Resampler Options,,"Resampler Options" section in the
-ffmpeg-resampler(1) manual,ffmpeg-resampler}
-for the complete list of supported options.
-
-@subsection Examples
-
-@itemize
-@item
-Resample the input audio to 44100Hz:
-@example
-aresample=44100
-@end example
-
-@item
-Stretch/squeeze samples to the given timestamps, with a maximum of 1000
-samples per second compensation:
-@example
-aresample=async=1000
-@end example
-@end itemize
 
 @section areverse
 
@@ -6120,9 +6084,7 @@ If the specified value is not valid, it is ignored and prior one is kept.
 
 EBU R128 loudness normalization. Includes both dynamic and linear normalization modes.
 Support for both single pass (livestreams, files) and double pass (files) modes.
-This algorithm can target IL, LRA, and maximum true peak. In dynamic mode, to accurately
-detect true peaks, the audio stream will be upsampled to 192 kHz.
-Use the @code{-ar} option or @code{aresample} filter to explicitly set an output sample rate.
+This algorithm can target IL, LRA, and maximum true peak.
 
 The filter accepts the following options:
 
@@ -6992,6 +6954,37 @@ Extreme and fast amplification:
 speechnorm=e=50:r=0.0001:l=1
 @end example
 @end itemize
+
+@section stereofield
+Apply Stereo Field effect.
+
+The filter accepts the following options:
+
+@table @option
+@item d
+Set the depth. This controls correlation between front left and front right channels.
+Allowed range is from 0.0 to 64.0. The default value is 1.0 which keeps correlation as it is.
+The 0.0 value makes channels more correlated, into possitive correlation, and >1.0 values makes
+them less correlated and may even make channels out of phase - into negative correlation.
+
+@item w
+Set the widening. This controls stereo image width, how much power of one channel is bigger
+than other channel. Allowed range is from 0.0 to 16.0. The default value is 1.0 which keeps
+stereo image width unchanged. The 0.0 value changes non-zero width to near zero or minimal,
+and 16.0 value make extreme width differences between two channels. This can only narrow or
+wide already existing stereo width, so if width is already zero output will stay unchanged.
+
+@item p
+Set the panning. This controls panning from left to right channel and other way around.
+Default value is 0.0. Allowed range is from -1.0 to 1.0. The value -1.0 pans to left channel
+and value 1.0 pans to right channel.
+
+@item o
+Set the operating mode. This have fixed values: @code{l}, @code{r} and @code{s}.
+Set what channels to take into processing as reference point when changing correlation between
+channels. The @code{l} value use only left channel as reference, @code{r} uses only right channel as
+reference and @code{s} use both left and right channel. Default value is @code{s}.
+@end table
 
 @section stereotools
 
@@ -7996,7 +7989,7 @@ Set sample rate of output audio stream, default is @code{44100}.
 Set number of samples per each frame in output audio stream. Default is @code{1024}.
 
 @item interp, i
-Set interpolation method for FIR equalizer coefficients. Can be @code{linear} or @code{cubic} or @code{spline}.
+Set interpolation method for FIR equalizer coefficients. Can be @code{linear} or @code{cubic} or @code{cosine} or @code{smooth}.
 
 @item phase, h
 Set phase type of FIR filter. Can be @code{linear} or @code{min}: minimum-phase.
@@ -8277,7 +8270,7 @@ Set window function to be used when generating FIR coefficients.
 
 @section sinc
 
-Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, or band-reject FIR coefficients.
+Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, band-stop, low-shelf, high-shelf or peaking FIR coefficients.
 
 The resulting stream can be used with @ref{afir} filter for filtering the audio signal.
 
@@ -8298,6 +8291,12 @@ Set low-pass frequency. Default is 0.
 If high-pass frequency is lower than low-pass frequency and low-pass frequency
 is higher than 0 then filter will create band-pass filter coefficients,
 otherwise band-reject filter coefficients.
+
+@item gain
+Set peaking or low-shelf or high-shelf filter gain.
+If this value is set to higher value than 0.0, it will generate low-shelf, high-shelf
+or peaking filter FIR coefficients depending upon if @var{lp} or @var{hp} or both are set.
+Peaking filter also needs @var{hp} to be higher value thap @var{lp}.
 
 @item phase
 Set filter phase response. Default is 50. Allowed range is from 0 to 100.
@@ -8581,9 +8580,13 @@ Substation Alpha) subtitles files.
 
 This filter accepts @option{filename}/@option{f}, @option{original_size},
 @option{fontsdir}, and @option{alpha} from the @ref{subtitles} filter, plus the
-following option:
+following options:
 
 @table @option
+@item script
+The ASS script to render, given inline. Exactly one of @option{filename} and
+@option{script} must be set.
+
 @item shaping
 Set the shaping engine.
 
@@ -8601,6 +8604,11 @@ and Thai. Requires libass to be built with HarfBuzz.
 
 The default is @code{auto}.
 @end table
+
+@subsection Commands
+
+This filter supports the @option{script} option as @ref{commands}; the new
+script replaces the one being rendered.
 
 @section atadenoise
 Apply an Adaptive Temporal Averaging Denoiser to the video input.
@@ -8632,6 +8640,14 @@ Valid range is 0 to 0.3.
 Set threshold B for 3rd plane. Default is 0.04.
 Valid range is 0 to 5.
 
+@item 3a
+Set threshold A for 4th plane. Default is 0.02.
+Valid range is 0 to 0.3.
+
+@item 3b
+Set threshold B for 4th plane. Default is 0.04.
+Valid range is 0 to 5.
+
 Threshold A is designed to react on abrupt changes in the input signal and
 threshold B is designed to react on continuous changes in the input signal.
 
@@ -8653,7 +8669,8 @@ will continue processing other side of frames if they are equal or below thresho
 @item 0s
 @item 1s
 @item 2s
-Set sigma for 1st plane, 2nd plane or 3rd plane. Default is 32767.
+@item 3s
+Set sigma for 1st plane, 2nd plane, 3rd plane or 4th plane. Default is 32767.
 Valid range is from 0 to 32767.
 This options controls weight for each pixel in radius defined by size.
 Default value means every pixel have same weight.
@@ -10042,6 +10059,10 @@ premultiplied. Also detects if the alpha plane is fully opaque or not.
 Enable detection of all of the above properties. This is the default.
 @end table
 
+@item threshold
+Allow pixels to exceed the expected bounds by this fraction of the full scale
+value range before treating it as evidence of (respectively) full range or
+straight alpha. Value range is from 0 to 0.05. Defaults to 0.001 (=0.1%).
 @end table
 
 @section colorize
@@ -10890,40 +10911,6 @@ with the reference file @file{ref.mpg}.
 ffmpeg -i main.mpg -i ref.mpg -lavfi corr -f null -
 @end example
 
-@section cover_rect
-
-Cover a rectangular object
-
-It accepts the following options:
-
-@table @option
-@item cover
-Filepath of the optional cover image, needs to be in yuv420.
-
-@item mode
-Set covering mode.
-
-It accepts the following values:
-@table @samp
-@item cover
-cover it by the supplied image
-@item blur
-cover it by interpolating the surrounding pixels
-@end table
-
-Default value is @var{blur}.
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Cover a rectangular object by the supplied image of a given video using @command{ffmpeg}:
-@example
-ffmpeg -i file.ts -vf find_rect=newref.pgm,cover_rect=cover.jpg:mode=cover new.mkv
-@end example
-@end itemize
-
 @section crop
 
 Crop the input video to given dimensions.
@@ -10933,13 +10920,13 @@ It accepts the following parameters:
 @table @option
 @item w, out_w
 The width of the output video. It defaults to @code{iw}.
-This expression is evaluated only once during the filter
-configuration, or when the @samp{w} or @samp{out_w} command is sent.
+This expression is evaluated during the filter configuration, when the
+@samp{w} or @samp{out_w} command is sent, or when the input frame size changes.
 
 @item h, out_h
 The height of the output video. It defaults to @code{ih}.
-This expression is evaluated only once during the filter
-configuration, or when the @samp{h} or @samp{out_h} command is sent.
+This expression is evaluated during the filter configuration, when the
+@samp{h} or @samp{out_h} command is sent, or when the input frame size changes.
 
 @item x
 The horizontal position, in the input video, of the left edge of the output
@@ -11964,57 +11951,7 @@ and size 100x77:
 @example
 delogo=x=0:y=0:w=100:h=77
 @end example
-
 @end itemize
-
-@anchor{derain}
-@section derain
-
-Remove the rain in the input image/video by applying the derain methods based on
-convolutional neural networks. Supported models:
-
-@itemize
-@item
-Recurrent Squeeze-and-Excitation Context Aggregation Net (RESCAN).
-See @url{http://openaccess.thecvf.com/content_ECCV_2018/papers/Xia_Li_Recurrent_Squeeze-and-Excitation_Context_ECCV_2018_paper.pdf}.
-@end itemize
-
-Training as well as model generation scripts are provided in
-the repository at @url{https://github.com/XueweiMeng/derain_filter.git}.
-
-The filter accepts the following options:
-
-@table @option
-@item filter_type
-Specify which filter to use. This option accepts the following values:
-
-@table @samp
-@item derain
-Derain filter. To conduct derain filter, you need to use a derain model.
-
-@item dehaze
-Dehaze filter. To conduct dehaze filter, you need to use a dehaze model.
-@end table
-Default value is @samp{derain}.
-
-@item dnn_backend
-Specify which DNN backend to use for model loading and execution. This option accepts
-the following values:
-
-@table @samp
-@item tensorflow
-TensorFlow backend. To enable this backend you
-need to install the TensorFlow for C library (see
-@url{https://www.tensorflow.org/install/lang_c}) and configure FFmpeg with
-@code{--enable-libtensorflow}
-@end table
-
-@item model
-Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats. TensorFlow can load files for only its format.
-@end table
-
-To get full functionality (such as async execution), please use the @ref{dnn_processing} filter.
 
 @section deshake
 
@@ -12243,164 +12180,6 @@ Add wave effect to rgb input of video size hd720:
 @example
 ffmpeg -i INPUT -f lavfi -i nullsrc=hd720,geq='r=128+80*(sin(sqrt((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2))/220*2*PI+T)):g=128+80*(sin(sqrt((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2))/220*2*PI+T)):b=128+80*(sin(sqrt((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2))/220*2*PI+T))' -lavfi '[1]split[x][y],[0][x][y]displace' OUTPUT
 @end example
-@end itemize
-
-@section dnn_classify
-
-Do classification with deep neural networks based on bounding boxes.
-
-The filter accepts the following options:
-
-@table @option
-@item dnn_backend
-Specify which DNN backend to use for model loading and execution. This option accepts
-only openvino now, tensorflow backends will be added.
-
-@item model
-Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats.
-
-@item input
-Set the input name of the dnn network.
-
-@item output
-Set the output name of the dnn network.
-
-@item confidence
-Set the confidence threshold (default: 0.5).
-
-@item labels
-Set path to label file specifying the mapping between label id and name.
-Each label name is written in one line, tailing spaces and empty lines are skipped.
-The first line is the name of label id 0,
-and the second line is the name of label id 1, etc.
-The label id is considered as name if the label file is not provided.
-
-@item backend_configs
-Set the configs to be passed into backend
-
-For tensorflow backend, you can set its configs with @option{sess_config} options,
-please use tools/python/tf_sess_config.py to get the configs for your system.
-
-@end table
-
-@section dnn_detect
-
-Do object detection with deep neural networks.
-
-The filter accepts the following options:
-
-@table @option
-@item dnn_backend
-Specify which DNN backend to use for model loading and execution. This option accepts
-only openvino now, tensorflow backends will be added.
-
-@item model
-Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats.
-
-@item input
-Set the input name of the dnn network.
-
-@item output
-Set the output name of the dnn network.
-
-@item confidence
-Set the confidence threshold (default: 0.5).
-
-@item labels
-Set path to label file specifying the mapping between label id and name.
-Each label name is written in one line, tailing spaces and empty lines are skipped.
-The first line is the name of label id 0 (usually it is 'background'),
-and the second line is the name of label id 1, etc.
-The label id is considered as name if the label file is not provided.
-
-@item backend_configs
-Set the configs to be passed into backend. To use async execution, set async (default: set).
-Roll back to sync execution if the backend does not support async.
-
-@end table
-
-@anchor{dnn_processing}
-@section dnn_processing
-
-Do image processing with deep neural networks. It works together with another filter
-which converts the pixel format of the Frame to what the dnn network requires.
-
-The filter accepts the following options:
-
-@table @option
-@item dnn_backend
-Specify which DNN backend to use for model loading and execution. This option accepts
-the following values:
-
-@table @samp
-@item tensorflow
-TensorFlow backend. To enable this backend you
-need to install the TensorFlow for C library (see
-@url{https://www.tensorflow.org/install/lang_c}) and configure FFmpeg with
-@code{--enable-libtensorflow}
-
-@item openvino
-OpenVINO backend. To enable this backend you
-need to build and install the OpenVINO for C library (see
-@url{https://github.com/openvinotoolkit/openvino/blob/master/build-instruction.md}) and configure FFmpeg with
-@code{--enable-libopenvino} (--extra-cflags=-I... --extra-ldflags=-L... might
-be needed if the header files and libraries are not installed into system path)
-
-@item torch
-Libtorch backend. To enable this backend you need to build and install Libtroch
-for C++ library. Please download cxx11 ABI version (see
-@url{https://pytorch.org/get-started/locally})
-and configure FFmpeg with @code{--enable-libtorch
---extra-cflags=-I/libtorch_root/libtorch/include
---extra-cflags=-I/libtorch_root/libtorch/include/torch/csrc/api/include
---extra-ldflags=-L/libtorch_root/libtorch/lib/}
-
-@end table
-
-@item model
-Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats. TensorFlow, OpenVINO
-and Libtorch backend can load files for only its format.
-
-@item input
-Set the input name of the dnn network.
-
-@item output
-Set the output name of the dnn network.
-
-@item backend_configs
-Set the configs to be passed into backend. To use async execution, set async (default: set).
-Roll back to sync execution if the backend does not support async.
-
-For tensorflow backend, you can set its configs with @option{sess_config} options,
-please use tools/python/tf_sess_config.py to get the configs of TensorFlow backend for your system.
-
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Remove rain in rgb24 frame with can.pb (see @ref{derain} filter):
-@example
-./ffmpeg -i rain.jpg -vf format=rgb24,dnn_processing=dnn_backend=tensorflow:model=can.pb:input=x:output=y derain.jpg
-@end example
-
-@item
-Handle the Y channel with srcnn.pb (see @ref{sr} filter) for frame with yuv420p (planar YUV formats supported):
-@example
-./ffmpeg -i 480p.jpg -vf format=yuv420p,scale=w=iw*2:h=ih*2,dnn_processing=dnn_backend=tensorflow:model=srcnn.pb:input=x:output=y -y srcnn.jpg
-@end example
-
-@item
-Handle the Y channel with espcn.pb (see @ref{sr} filter), which changes frame size, for format yuv420p (planar YUV formats supported),
-please use tools/python/tf_sess_config.py to get the configs of TensorFlow backend for your system.
-@example
-./ffmpeg -i 480p.jpg -vf format=yuv420p,dnn_processing=dnn_backend=tensorflow:model=espcn.pb:input=x:output=y:backend_configs=sess_config=0x10022805320e09cdccccccccccec3f20012a01303801 -y tmp.espcn.jpg
-@end example
-
 @end itemize
 
 @section drawbox
@@ -13365,40 +13144,6 @@ Painting effect without thresholding:
 edgedetect=mode=colormix:high=0
 @end example
 @end itemize
-
-@section elbg
-
-Apply a posterize effect using the ELBG (Enhanced LBG) algorithm.
-
-For each input image, the filter will compute the optimal mapping from
-the input to the output given the codebook length, that is the number
-of distinct output colors.
-
-This filter accepts the following options.
-
-@table @option
-@item codebook_length, l
-Set codebook length. The value must be a positive integer, and
-represents the number of distinct output colors. Default value is 256.
-
-@item nb_steps, n
-Set the maximum number of iterations to apply for computing the optimal
-mapping. The higher the value the better the result and the higher the
-computation time. Default value is 1.
-
-@item seed, s
-Set a random seed, must be an integer included between 0 and
-UINT32_MAX. If not specified, or if explicitly set to -1, the filter
-will try to use a good random seed on a best effort basis.
-
-@item pal8
-Set pal8 output pixel format. This option does not work with codebook
-length greater than 256. Default is disabled.
-
-@item use_alpha
-Include alpha values in the quantization calculation. Allows creating
-palettized output images (e.g. PNG8) with multiple alpha smooth blending.
-@end table
 
 @section entropy
 
@@ -14463,82 +14208,6 @@ The command accepts the same syntax of the corresponding option.
 If the specified expression is not valid, it is kept at its current
 value.
 
-@section find_rect
-
-Find a rectangular object in the input video.
-
-The object to search for must be specified as a gray8 image specified with the
-@option{object} option.
-
-For each possible match, a score is computed. If the score reaches the specified
-threshold, the object is considered found.
-
-If the input video contains multiple instances of the object, the filter will
-find only one of them.
-
-When an object is found, the following metadata entries are set in the matching
-frame:
-@table @option
-@item lavfi.rect.w
-width of object
-
-@item lavfi.rect.h
-height of object
-
-@item lavfi.rect.x
-x position of object
-
-@item lavfi.rect.y
-y position of object
-
-@item lavfi.rect.score
-match score of the found object
-@end table
-
-It accepts the following options:
-
-@table @option
-@item object
-Filepath of the object image, needs to be in gray8.
-
-@item threshold
-Detection threshold, expressed as a decimal number in the range 0-1.
-
-A threshold value of 0.01 means only exact matches, a threshold of 0.99 means
-almost everything matches.
-
-Default value is 0.5.
-
-@item mipmaps
-Number of mipmaps, default is 3.
-
-@item xmin, ymin, xmax, ymax
-Specifies the rectangle in which to search.
-
-@item discard
-Discard frames where object is not detected. Default is disabled.
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Cover a rectangular object by the supplied image of a given video using @command{ffmpeg}:
-@example
-ffmpeg -i file.ts -vf find_rect=newref.pgm,cover_rect=cover.jpg:mode=cover new.mkv
-@end example
-
-@item
-Find the position of an object in each frame using @command{ffprobe} and write
-it to a log file:
-@example
-ffprobe -f lavfi movie=test.mp4,find_rect=object=object.pgm:threshold=0.3 \
-  -show_entries frame=pkt_pts_time:frame_tags=lavfi.rect.x,lavfi.rect.y \
-  -of csv -o find_rect.csv
-@end example
-
-@end itemize
-
 @section floodfill
 
 Flood area with values of same pixel components with another values.
@@ -14601,6 +14270,10 @@ A '|'-separated list of color range names, such as
 @item alpha_modes
 A '|'-separated list of color range names, such as
 "alpha_modes=straight|premultiplied".
+
+@item chroma_locations
+A '|'-separated list of chroma sample location names, such as
+"chroma_locations=left|topleft".
 
 @end table
 
@@ -14931,7 +14604,7 @@ This filter supports the @option{filter_params} option as @ref{commands}.
 
 @section fspp
 
-Apply fast and simple postprocessing. It is a faster version of @ref{spp}.
+Apply fast and simple postprocessing.
 
 It splits (I)DCT into horizontal/vertical passes. Unlike the simple post-
 processing filter, one of them is performed once per block, not per pixel.
@@ -14959,6 +14632,80 @@ option may cause flicker since the B-Frames have often larger QP. Default is
 @code{0} (not enabled).
 
 @end table
+
+@section gainmap
+
+Compute an HDR gain map from two renditions of the same image, as defined by
+ISO 21496-1.
+
+The first input is the base rendition (typically SDR), and the second input
+is the alternate rendition (typically HDR). Both must have the same
+dimensions. Outputs a gain map, as either @samp{gbrpf32} or @samp{grayf32}
+depending on the chosen @option{mode}.
+
+@table @option
+@item mode
+Controls what quantity the gain map is computed against.
+
+The accepted values are:
+@table @samp
+@item rgb
+One gain map channel per component.
+
+@item luma
+A single gain map channel, computed from the luma.
+
+@item maxrgb
+A single gain map channel, computed from @samp{max(R, G, B)}.
+@end table
+
+Default is @samp{rgb}.
+
+@item colorspace
+Chooses which colorspace to compute the gain map in.
+
+The accepted values are:
+@table @samp
+@item base
+The base rendition's colorspace.
+
+@item alternate
+The alternate rendition's colorspace.
+@end table
+
+Default is @samp{base}.
+
+@item min
+@item max
+Bounds on the encoded gain (log2). If unspecified, these will be
+measured from the frame.
+
+@item gamma
+Encoding gamma of the resulting gain map. If unspecified, this will be
+optimized for the frame in question. Setting this to @code{1.0} will produce
+a linear gain map, which may be more efficient in some applications.
+
+@item base_offset
+@item alt_offset
+Offset to prevent numerical instability near zero. Both default to @code{1/64}.
+
+@item base_nits
+@item alt_nits
+Override the reference luminance of the input, in nits. If unspecified, uses
+the values from the input metadata.
+@end table
+
+The @code{gainmap} filter also supports the @ref{framesync} options.
+
+@subsection Examples
+
+@itemize
+@item
+Compute a gain map between an SDR and an HDR version of the same image:
+@example
+ffmpeg -i $sdr -i $hdr -filter_complex "[0:v][1:v]gainmap" $out
+@end example
+@end itemize
 
 @section gblur
 
@@ -16601,6 +16348,7 @@ ffmpeg -i input.mov -vf lensfun=make=Canon:model="Canon EOS 100D":lens_model="Ca
 
 @end itemize
 
+@anchor{libplacebo}
 @section libplacebo
 
 Flexible GPU-accelerated processing filter based on libplacebo
@@ -16692,6 +16440,10 @@ cropping when the input aspect ratio does not match the output aspect ratio and
 content with black borders, while a value of @code{1.0} always crops off parts
 of the content. Intermediate values are possible, leading to a mix of the two
 approaches.
+
+@item sar
+Force the output sample aspect ratio. The default of @code{0} derives it from
+the input, see @option{reset_sar}.
 
 @item fit_mode
 Specify the content fit strategy according to a list of predefined modes.
@@ -17146,14 +16898,13 @@ is adjusted based on the ratio between the targeted and actual display peak
 luminances.
 @item st2094-10
 EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input signal
-average luminance in addition to the maximum/minimum. The configurable contrast
-parameter influences the slope of the linear output segment, defaulting to
-@code{1.0} for no increase/decrease in contrast. Note that this does not
+average luminance in addition to the maximum/minimum. Note that this does not
 currently include the subjective gain/offset/gamma controls defined in Annex
 B.3.
 @item bt.2390
 EETF from the ITU-R Report BT.2390, a hermite spline roll-off with linear
-segment. The knee point offset is configurable. Note that this parameter
+segment. The knee point offset is configurable using
+@code{tonemapping_knee_offset}. Note that this parameter
 defaults to @code{1.0}, rather than the value of @code{0.5} from the ITU-R
 spec.
 @item bt.2446a
@@ -17162,24 +16913,26 @@ sources. Can be used for both forward and inverse tone mapping. Not
 configurable.
 @item spline
 Simple spline consisting of two polynomials, joined by a single pivot point.
-The parameter gives the pivot point (in PQ space), defaulting to @code{0.30}.
+The knee point is determined from the source scene average brightness,
+falling back to @code{tonemapping_knee_default} (defaulting to @code{0.4}).
 Can be used for both forward and inverse tone mapping.
 @item reinhard
-Simple non-linear, global tone mapping algorithm. The parameter specifies the
-local contrast coefficient at the display peak. Essentially, a parameter of
-@code{0.5} implies that the reference white will be about half as bright as
-when clipping. Defaults to @code{0.5}, which results in the simplest
-formulation of this function.
+Simple non-linear, global tone mapping algorithm. The
+@code{tonemapping_reinhard_contrast} option specifies the local contrast
+coefficient at the display peak. Essentially, a value of @code{0.5} implies
+that the reference white will be about half as bright as when clipping.
+Defaults to @code{0.5}, which results in the simplest formulation of this
+function.
 @item mobius
 Generalization of the reinhard tone mapping algorithm to support an additional
-linear slope near black. The tone mapping parameter indicates the trade-off
-between the linear section and the non-linear section. Essentially, for a given
-parameter @var{x}, every color value below @var{x} will be mapped linearly,
-while higher values get non-linearly tone-mapped. Values near @code{1.0} make
-this curve behave like @code{clip}, while values near @code{0.0} make this
-curve behave like @code{reinhard}. The default value is @code{0.3}, which
-provides a good balance between colorimetric accuracy and preserving
-out-of-gamut details.
+linear slope near black. The @code{tonemapping_linear_knee} option indicates
+the trade-off between the linear section and the non-linear section.
+Essentially, for a given parameter @var{x}, every color value below @var{x}
+will be mapped linearly, while higher values get non-linearly tone-mapped.
+Values near @code{1.0} make this curve behave like @code{clip}, while values
+near @code{0.0} make this curve behave like @code{reinhard}. The default value
+is @code{0.3}, which provides a good balance between colorimetric accuracy
+and preserving out-of-gamut details.
 @item hable
 Piece-wise, filmic tone-mapping algorithm developed by John Hable for use in
 Uncharted 2, inspired by a similar tone-mapping algorithm used by Kodak.
@@ -17191,20 +16944,83 @@ average brightness quite significantly. This is sort of similar to
 Fits a gamma (power) function to transfer between the source and target color
 spaces, effectively resulting in a perceptual hard-knee joining two roughly
 linear sections. This preserves details at all scales fairly accurately, but
-can result in an image with a muted or dull appearance. The parameter is used
-as the cutoff point, defaulting to @code{0.5}.
+can result in an image with a muted or dull appearance. The
+@code{tonemapping_linear_knee} option is used as the cutoff point, defaulting
+to @code{0.3}.
 @item linear
 Linearly stretches the input range to the output range, in PQ space. This will
 preserve all details accurately, but results in a significantly different
 average brightness. Can be used for inverse tone-mapping in addition to regular
-tone-mapping. The parameter can be used as an additional linear gain
-coefficient (defaulting to @code{1.0}).
+tone-mapping. The @code{tonemapping_exposure} option can be used as an additional
+linear gain coefficient (defaulting to @code{1.0}).
 @end table
 
 @item tonemapping_param
 For tunable tone mapping functions, this parameter can be used to fine-tune the
 curve behavior. Refer to the documentation of @code{tonemapping}. The default
-value of @code{0.0} is replaced by the curve's preferred default setting.
+value of @code{0.0} is replaced by the curve's preferred default setting, or by
+@code{tonemapping_*} options below as applicable. This option, if nonzero, takes
+effect over the corresponding values of the other @code{tonemapping_*} options.
+Deprecated, do not use.
+
+@item tonemapping_knee_adaptation
+Controls how strongly the knee point adapts to the source scene average
+brightness, relative to the target average in PQ space. A value of @code{1.0}
+fully adapts the source average to the target average, while @code{0.0}
+disables adaptation. Defaults to @code{0.4}. Affects @code{st2094-40},
+@code{st2094-10} and @code{spline}.
+
+@item tonemapping_knee_minimum
+Sets the minimum knee point as a fraction of the PQ luminance range.
+Limits how low the automatically determined knee point can be.
+Defaults to @code{0.1}.
+
+@item tonemapping_knee_maximum
+Sets the maximum knee point as a fraction of the PQ luminance range.
+Limits how high the automatically determined knee point can be.
+Defaults to @code{0.8}.
+
+@item tonemapping_knee_default
+Sets the fallback knee point used when source scene average brightness
+metadata is unavailable. Normally, the knee point is determined from
+the source scene average instead. The value should be between
+@code{tonemapping_knee_minimum} and @code{tonemapping_knee_maximum}.
+Defaults to @code{0.4}.
+
+@item tonemapping_knee_offset
+Sets the knee point offset for @code{bt.2390}. The ITU-R specification
+defines @code{0.5} as the default, but libplacebo uses @code{1.0}.
+Defaults to @code{1.0}.
+
+@item tonemapping_slope_tuning
+Controls how the slope of the @code{spline} curve is adjusted based on
+the difference between source and target peaks. The tuning aims to
+preserve a slope closer to @code{1.0} for small differences and approach
+linear mapping for larger differences. Defaults to @code{1.5}.
+
+@item tonemapping_slope_offset
+Controls the slope adjustment of the @code{spline} curve, together with
+@code{tonemapping_slope_tuning}. Defaults to @code{0.2}.
+
+@item tonemapping_spline_contrast
+Controls the contrast of the @code{spline} curve. Higher values produce
+a steeper curve, preserving midtone contrast at the cost of shadow and
+highlight detail. Lower values produce a shallower curve, preserving
+highlights at the cost of midtone contrast. Values above @code{1.0}
+can increase contrast beyond that of the source. Defaults to @code{0.5}.
+
+@item tonemapping_reinhard_contrast
+Sets the local contrast coefficient at the display peak for @code{reinhard}.
+A value of @code{0.5} makes reference white approximately half as bright
+as when clipping. Defaults to @code{0.5}.
+
+@item tonemapping_linear_knee
+Sets the knee point for the legacy @code{mobius} and @code{gamma} curves,
+which operate on linear light. Defaults to @code{0.3}.
+
+@item tonemapping_exposure
+Sets the linear exposure or gain applied by the @code{linear} tone-mapping
+method. Defaults to @code{1.0}.
 
 @item inverse_tonemapping
 If enabled, this filter will also attempt stretching SDR signals to fill HDR
@@ -17294,7 +17110,10 @@ offering the maximum possible speed.
 @end table
 
 @subsection Commands
-This filter supports almost all of the above options as @ref{commands}.
+This filter supports almost all of the above options as @ref{commands}. The
+options negotiated with the filtergraph, @option{format}, @option{colorspace},
+@option{range}, @option{chroma_location} and @option{alpha_mode}, are fixed
+once the filtergraph is configured and can not be changed with commands.
 
 @subsection Examples
 @itemize
@@ -17350,6 +17169,60 @@ Interop with VAAPI hwdec to avoid round-tripping through RAM:
 ffmpeg -init_hw_device vulkan -hwaccel vaapi -hwaccel_output_format vaapi ... -vf libplacebo
 @end example
 @end itemize
+
+@section libplacebo_scene
+Composite one or more inputs onto a canvas of fixed size and frame rate,
+according to a JSON scene graph. See https://libplacebo.org/json/ for more
+information.
+
+@subsection Options
+@table @option
+@item scene
+JSON scene graph description. Required. Use @code{/scene=file.json} to load it
+from a file.
+
+@item w
+@item h
+Output frame width and height. Required. Constant expressions are accepted.
+
+@item fps
+Output frame rate. Required.
+
+@item sar
+Output sample aspect ratio. The default of @code{0} means 1:1.
+
+@item format
+@item colorspace
+@item range
+@item color_primaries
+@item color_trc
+@item chroma_location
+@item alpha_mode
+@item inherit_device
+@item shader_cache
+@item apply_filmgrain
+@item apply_dolbyvision
+Same as for the @ref{libplacebo} filter.
+@end table
+
+The output color properties default to the scene's @code{color}, @code{repr}
+and @code{chroma_location}. They only control the output frame tags; rendering
+always follows the scene, including any animated changes.
+
+@subsection Example
+Show a second input in the bottom right quarter between 1 and 3 seconds:
+@example
+ffmpeg -i main.mkv -i overlay.mkv -filter_complex \
+  "[0][1]libplacebo_scene=w=1920:h=1080:fps=25:/scene=scene.json" out.mkv
+@end example
+with @file{scene.json} containing:
+@example
+@{ "inputs": [
+    @{ @},
+    @{ "start_pts": 1, "stop_pts": 3,
+      "dst_rect": @{ "x0": 0.5, "y0": 0.5 @} @}
+] @}
+@end example
 
 @anchor{libvmaf}
 @section libvmaf
@@ -17491,10 +17364,14 @@ The filter accepts the following options:
 
 @table @option
 @item min
-Lower bound. Defaults to the lowest allowed value for the input.
+Lower bound. Defaults to the lowest representable value for the input.
+Set to @var{auto} to use the minimum signal level for the input colorspace
+(only affects TV-range YUV signals).
 
 @item max
-Upper bound. Defaults to the highest allowed value for the input.
+Upper bound. Defaults to the highest representable value for the input.
+Set to @var{auto} to use the maximum signal level for the input colorspace
+(only affects TV-range YUV signals).
 
 @item planes
 Specify which planes will be processed. Defaults to all available.
@@ -18045,50 +17922,6 @@ Typically useful for scene changes when used in combination with @code{tblend} f
 @subsection Commands
 
 This filter supports the all above options as @ref{commands}.
-
-@section mcdeint
-
-Apply motion-compensation deinterlacing.
-
-It needs one field per frame as input and must thus be used together
-with yadif=1/3 or equivalent.
-
-This filter accepts the following options:
-@table @option
-@item mode
-Set the deinterlacing mode.
-
-It accepts one of the following values:
-@table @samp
-@item fast
-@item medium
-@item slow
-use iterative motion estimation
-@item extra_slow
-like @samp{slow}, but use multiple reference frames.
-@end table
-Default value is @samp{fast}.
-
-@item parity
-Set the picture field parity assumed for the input video. It must be
-one of the following values:
-
-@table @samp
-@item 0, tff
-assume top field first
-@item 1, bff
-assume bottom field first
-@end table
-
-Default value is @samp{bff}.
-
-@item qp
-Set per-block quantization parameter (QP) used by the internal
-encoder.
-
-Higher values should result in a smoother motion vector field but less
-optimal individual vectors. Default value is 1.
-@end table
 
 @section median
 
@@ -19873,9 +19706,7 @@ Set window Y position, relative offset on Y axis.
 This filter supports same @ref{commands} as options.
 
 @section pp7
-Apply Postprocessing filter 7. It is variant of the @ref{spp} filter,
-similar to spp = 6 with 7 point DCT, where only the center sample is
-used after IDCT.
+Apply Postprocessing filter 7.
 
 The filter accepts the following options:
 
@@ -20481,36 +20312,6 @@ Small edge and halo removal, but reputed useless.
 Similar as 23.
 @end table
 
-@section removelogo
-
-Suppress a TV station logo, using an image file to determine which
-pixels comprise the logo. It works by filling in the pixels that
-comprise the logo with neighboring pixels.
-
-The filter accepts the following options:
-
-@table @option
-@item filename, f
-Set the filter bitmap file, which can be any image format supported by
-libavformat. The width and height of the image file must match those of the
-video stream being processed.
-@end table
-
-Pixels in the provided bitmap image with a value of zero are not
-considered part of the logo, non-zero pixels are considered part of
-the logo. If you use white (255) for the logo and black (0) for the
-rest, you will be safe. For making the filter bitmap, it is
-recommended to take a screen capture of a black frame with the logo
-visible, and then using a threshold filter followed by the erode
-filter once or twice.
-
-If needed, little splotches can be fixed manually. Remember that if
-logo pixels are not covered, the filter quality will be much
-reduced. Marking too many pixels as part of the logo does not hurt as
-much, but it will increase the amount of blurring needed to cover over
-the image and will destroy more information than necessary, and extra
-pixels will slow things down on a large logo.
-
 @section repeatfields
 
 This filter uses the repeat_field flag from the Video ES headers and hard repeats
@@ -20944,8 +20745,12 @@ Set "MPEG" range (16-235 in case of 8-bit luma).
 
 @item in_chroma_loc
 @item out_chroma_loc
-Set in/output chroma sample location. If not specified, center-sited chroma
-is used by default. Possible values:
+Set in/output chroma sample location. If @option{in_chroma_loc} is not
+specified, the chroma location tagged on the input frame is used, and untagged
+input is assumed to be sited like the output, so it is tagged but not converted.
+If @option{out_chroma_loc} is not specified, the output is converted to the
+chroma location negotiated with the rest of the filtergraph, or keeps the input
+location if none was negotiated. Possible values:
 
 @table @samp
 @item auto, unknown
@@ -21314,7 +21119,20 @@ set with @option{param}; the default is 3.
 Controls the output pixel format. By default, or if none is specified, the input
 pixel format is used.
 
-The filter does not support converting between YUV and RGB pixel formats.
+Converting between @code{yuv420p}, @code{yuv422p}, @code{yuv444p},
+@code{yuv420p10}, @code{yuv422p10}, @code{yuv444p10}, @code{nv12}, @code{nv16},
+@code{p010} or @code{p210} and @code{bgra}, @code{rgba}, @code{bgr0} or
+@code{rgb0} is supported, also together with resizing. Resizing is then done
+on the RGB side, after converting from YUV or before converting to YUV, and
+always uses the generic filters selected with @option{interp_algo}. Resizing
+the YUV side in a separate instance instead needs less intermediate memory and
+may be faster, but filters chroma differently.
+YUV to RGB conversion uses the YCbCr matrix and range of the input, RGB to YUV
+conversion those selected for the output (see @option{out_color_matrix} and
+@option{out_range}). An unspecified matrix is treated as BT.601 and an
+unspecified range as limited. The conversion samples chroma independently of
+@option{interp_algo}: YUV to RGB conversion uses the nearest chroma sample, RGB
+to YUV conversion averages, which centers the chroma samples.
 
 @item passthrough
 If set to 0, every frame is processed, even if no conversion is necessary.
@@ -21329,7 +21147,8 @@ If set to 1, filter with a generic weight LUT instead of using fixed-function
 shader kernels. May be faster or slower depending on the hardware. A value
 of @code{auto} (the default) enables this automatically when required for
 correct anti-aliasing when downscaling, and for high-quality Lanczos scaling.
-Set this to 0 to use the legacy fixed 4-tap Lanczos kernel.
+Set this to 0 to use the legacy fixed 4-tap Lanczos kernel. Resizing during
+YUV to RGB or RGB to YUV conversion always uses the generic filters.
 
 @item param
 Algorithm-specific parameter. For @var{bicubic}, this affects the filter
@@ -21342,6 +21161,28 @@ Work the same as the identical @ref{scale} filter options.
 
 @item reset_sar
 Works the same as the identical @ref{scale} filter option.
+
+@item out_range
+Set the output YCbCr sample range. One of @code{auto} (the default),
+@code{jpeg}/@code{full}/@code{pc}, or @code{mpeg}/@code{limited}/@code{tv}.
+
+@item out_color_matrix
+Set the output YCbCr matrix. One of @code{auto} (the default), @code{bt601},
+@code{smpte170m}, @code{bt470}, @code{bt470bg}, @code{bt709}, @code{fcc},
+@code{smpte240m}, @code{ycgco}, @code{bt2020} or @code{bt2020nc}.
+
+With @code{auto}, @option{out_range} and @option{out_color_matrix} are left to
+filter-graph negotiation. They follow a single range and matrix negotiated for
+the input, as for decoded video, and otherwise prefer BT.601 limited range. For
+RGB to YUV conversion, @code{auto} thus means BT.601 limited range, unless the
+filter graph requires otherwise; converting full range YUV to RGB and back keeps
+the full range.
+
+Outside RGB to YUV conversion, these options describe the existing samples
+without remapping them; an unspecified input description may adopt the
+negotiated output description, while conflicting specified descriptions are
+rejected. Both options can only be used with YUV output; RGB output is full
+range.
 
 @end table
 
@@ -21366,6 +21207,19 @@ This can be useful to deal with a filter and encode chain that otherwise exhaust
 decoders frame pool.
 @example
 scale_cuda=passthrough=0
+@end example
+
+@item
+Convert BT.709 input to RGB for a filter that requires it, then back to
+BT.709 NV12 with limited range.
+@example
+scale_cuda=format=bgra,scale_cuda=format=nv12:out_color_matrix=bt709:out_range=limited
+@end example
+
+@item
+Scale to 720p while converting to RGB.
+@example
+scale_cuda=-2:720:format=bgra
 @end example
 @end itemize
 
@@ -22674,100 +22528,6 @@ Set value which will be added to filtered result.
 
 This filter supports the all above options as @ref{commands}.
 
-@anchor{spp}
-@section spp
-
-Apply a simple postprocessing filter that compresses and decompresses the image
-at several (or - in the case of @option{quality} level @code{6} - all) shifts
-and average the results.
-
-The filter accepts the following options:
-
-@table @option
-@item quality
-Set quality. This option defines the number of levels for averaging. It accepts
-an integer in the range 0-6. If set to @code{0}, the filter will have no
-effect. A value of @code{6} means the higher quality. For each increment of
-that value the speed drops by a factor of approximately 2.  Default value is
-@code{3}.
-
-@item qp
-Force a constant quantization parameter. If not set, the filter will use the QP
-from the video stream (if available).
-
-@item mode
-Set thresholding mode. Available modes are:
-
-@table @samp
-@item hard
-Set hard thresholding (default).
-@item soft
-Set soft thresholding (better de-ringing effect, but likely blurrier).
-@end table
-
-@item use_bframe_qp
-Enable the use of the QP from the B-Frames if set to @code{1}. Using this
-option may cause flicker since the B-Frames have often larger QP. Default is
-@code{0} (not enabled).
-@end table
-
-@subsection Commands
-
-This filter supports the following commands:
-@table @option
-@item quality, level
-Set quality level. The value @code{max} can be used to set the maximum level,
-currently @code{6}.
-@end table
-
-@anchor{sr}
-@section sr
-
-Scale the input by applying one of the super-resolution methods based on
-convolutional neural networks. Supported models:
-
-@itemize
-@item
-Super-Resolution Convolutional Neural Network model (SRCNN).
-See @url{https://arxiv.org/abs/1501.00092}.
-
-@item
-Efficient Sub-Pixel Convolutional Neural Network model (ESPCN).
-See @url{https://arxiv.org/abs/1609.05158}.
-@end itemize
-
-Training scripts as well as scripts for model file (.pb) saving can be found at
-@url{https://github.com/XueweiMeng/sr/tree/sr_dnn_native}. Original repository
-is at @url{https://github.com/HighVoltageRocknRoll/sr.git}.
-
-The filter accepts the following options:
-
-@table @option
-@item dnn_backend
-Specify which DNN backend to use for model loading and execution. This option accepts
-the following values:
-
-@table @samp
-@item tensorflow
-TensorFlow backend. To enable this backend you
-need to install the TensorFlow for C library (see
-@url{https://www.tensorflow.org/install/lang_c}) and configure FFmpeg with
-@code{--enable-libtensorflow}
-@end table
-
-@item model
-Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats. TensorFlow, OpenVINO backend
-can load files for only its format.
-
-@item scale_factor
-Set scale factor for SRCNN model. Allowed values are @code{2}, @code{3} and @code{4}.
-Default value is @code{2}. Scale factor is necessary for SRCNN model, because it accepts
-input upscaled using bicubic upscaling with proper scale factor.
-@end table
-
-To get full functionality (such as async execution), please use the @ref{dnn_processing} filter.
-
 @anchor{sr_amf}
 @section sr_amf
 
@@ -22799,9 +22559,21 @@ This is a default value
 
 @item point
 Point
+AMF returns an unwritten surface for this algorithm when the format is
+@code{nv12} or @code{p010}, so software input in those formats is converted to
+a packed RGB format (@code{rgba}, @code{bgra}, @code{x2bgr10le} or
+@code{rgbaf16le}) automatically and a hardware surface in them is rejected.
 
 @item sr1-1
 Video SR1.1
+This algorithm only supports packed RGB formats and requires a DirectX 11 or
+DirectX 12 device, so it is available on Windows only. Software input in
+another format such as @code{nv12} or @code{p010} is converted to a packed RGB
+format (@code{rgba}, @code{bgra}, @code{x2bgr10le} or @code{rgbaf16le})
+automatically; a hardware surface in such a format is rejected.
+Note that the VideoSR algorithms (@code{sr1-0} and @code{sr1-1}) do not
+preserve the alpha channel (it is left zeroed); append e.g. @code{format=rgb24}
+downstream if an opaque result is required.
 
 @end table
 
@@ -24482,36 +24254,7 @@ ffmpeg -r 1 -i image.jpg -vf untile=1x25 movie.mkv
 @end example
 @end itemize
 
-@section uspp
-
-Apply ultra slow/simple postprocessing filter that compresses and decompresses
-the image at several (or - in the case of @option{quality} level @code{8} - all)
-shifts and average the results.
-
-The way this differs from the behavior of spp is that uspp actually encodes &
-decodes each case with libavcodec Snow, whereas spp uses a simplified intra only 8x8
-DCT similar to MJPEG.
-
-This filter is not available in ffmpeg versions between 5.0 and 6.0.
-
-The filter accepts the following options:
-
-@table @option
-@item quality
-Set quality. This option defines the number of levels for averaging. It accepts
-an integer in the range 0-8. If set to @code{0}, the filter will have no
-effect. A value of @code{8} means the higher quality. For each increment of
-that value the speed drops by a factor of approximately 2.  Default value is
-@code{3}.
-
-@item qp
-Force a constant quantization parameter. If not set, the filter will use the QP
-from the video stream (if available).
-
-@item codec
-Use specified codec instead of snow.
-@end table
-
+@anchor{v360}
 @section v360
 
 Convert 360 videos between various formats.
@@ -25500,9 +25243,26 @@ The larger the distance from the central point, the brighter the image becomes.
 This can be used to reverse a vignette effect, though there is no automatic
 detection to extract the lens @option{angle} and other settings (yet). It can
 also be used to create a burning effect.
+
+@item wavelet
+Like @samp{backward}, but the noise amplified in the dark areas is suppressed
+in a 9/7 wavelet domain, undecimated by default: detail coefficients are
+shrunk toward 0 according to the local attenuation and the @option{noise}
+level, while the low frequencies, which average over larger areas, are kept.
+It needs about 150 bytes of memory per pixel.
 @end table
 
 Default value is @samp{forward}.
+
+@item noise
+Set the standard deviation of the input noise in 8-bit levels, used by the
+@samp{wavelet} mode. Quantization alone contributes about 0.3-0.4.
+Default is @code{0.5}.
+
+@item decimated
+Use a decimated instead of an undecimated wavelet transform in the
+@samp{wavelet} mode. Several times faster and needs about 20 bytes of memory
+per pixel, the result has slightly more artifacts. Default is @code{0}.
 
 @item eval
 Set evaluation mode for the expressions (@option{angle}, @option{x0}, @option{y0}).
@@ -26986,6 +26746,17 @@ pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
 horizontal and vertical output chroma subsample values. For example for the
 pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
 @end table
+
+@subsection Examples
+
+Convert a full-range, 8-bit YCgCo input to RGB and extract its first frame as
+a PNG:
+@example
+ffmpeg -i input.mov -vf "zscale=matrixin=ycgco:rangein=full:matrix=gbr:range=full,format=gbrp" -frames:v 1 output.png
+@end example
+The planar RGB format @code{gbrp} makes @ref{zscale} perform the color
+conversion before the automatic conversion to a pixel format supported by
+the PNG encoder. Set @option{rangein} to match the input's actual range.
 
 @subsection Commands
 
@@ -28808,6 +28579,113 @@ Preserve landscape geometry (when @var{width} >= @var{height}).
 
 @end table
 
+@anchor{v360_vulkan}
+@section v360_vulkan
+
+Convert 360 videos between various formats.
+Supported formats (projections) are subset of @ref{v360} filter,
+that are most popular 360-degree video formats.
+
+The filter accepts subset of @ref{v360} options:
+
+@table @option
+
+@item input
+@item output
+Set format of the input/output video.
+
+@table @samp
+
+@item e
+@item equirect
+Equirectangular projection.
+
+@item eac
+Equi-Angular Cubemap. (Output only)
+
+@b{FIXME}: current output doesn't contain padding.
+
+@item flat
+Regular video.
+
+@item dfisheye
+Dual fisheye.
+
+@item sg
+Stereographic format.
+
+@item fisheye
+Fisheye projection.
+
+@item gopromax
+GoPro Max .360 format. (Input only)
+
+A .360 video file contains two video streams (front and rear);
+with this input projection the filter takes two inputs and combines
+them into a single stream. See the @option{overlap} option.
+@end table
+
+@item w
+@item h
+Set the output video resolution.
+See @ref{v360} options.
+
+@item yaw
+@item pitch
+@item roll
+@item rorder
+Set rotation for the output video.
+See @ref{v360} options.
+
+@item h_fov
+@item v_fov
+Set output horizontal/vertical field of view.
+See @ref{v360} options.
+
+@item ih_fov
+@item iv_fov
+Set input horizontal/vertical field of view.
+See @ref{v360} options.
+
+@item overlap
+Set number of overlapped pixels on input .360 video.
+Only used with @code{input=gopromax}.
+
+The GoPro Max .360 video contains overlapped area
+(See @url{https://gopro.com/news/max-tech-specs-stitching-resolution}).
+The filter blends overlapped images in these two areas.
+
+The number of pixels of overlapped areas depends on the video resolution.
+In most cases, the value is automatically calculated based on input video size,
+but it may be changed on GoPro Max2 or future models.
+The option is to adjust for unknown video resolutions.
+
+@end table
+
+@subsection Examples
+Special notes exist to use with @code{input=gopromax}.
+
+The GoPro Max .360 video file contains two video streams,
+and the stream number must be specified.
+The stream number (e.g., @code{[0:5]}) depends on the model and shooting mode.
+Please check actual stream number with @code{ffprobe} command.
+
+@itemize
+@item
+Convert GoPro Max (8bit color depth) .360 to Equirectangular projection.
+GoPro Max uses obsolete yuvj420p pixel format, thus convert the format to yuv420p before this filter.
+@example
+ffmpeg -init_hw_device vulkan -i INPUT.360 -filter_complex "[0:0]format=yuv420p,hwupload[vf],[0:5]format=yuv420p,hwupload[vr], [vf][vr]v360_vulkan=input=gopromax:output=e, hwdownload,format=yuv420p" OUTPUT.mkv
+@end example
+
+@item
+Convert GoPro Max2 (10bit color depth) .360 to Dual fisheye projection.
+GoPro Max2 uses yuv420p10le pixel format.
+@example
+ffmpeg -init_hw_device vulkan -i INPUT.360 -filter_complex "[0:0]hwupload[vf],[0:4]hwupload[vr], [vf][vr]v360_vulkan=input=gopromax:output=dfisheye, hwdownload,format=yuv420p10le" OUTPUT.mkv
+@end example
+@end itemize
+
 @c man end VULKAN VIDEO FILTERS
 
 @chapter QSV Video Filters
@@ -28950,6 +28828,13 @@ name.
 A string representing the alpha mode of the buffered video frames.
 It may be a number corresponding to an alpha mode, or an alpha mode
 name.
+
+@item chroma_location
+A string representing the chroma sample location of the buffered video
+frames. It may be a number corresponding to a chroma sample location, or a
+chroma sample location name. When it is not set, the filtergraph chooses the
+chroma sample location of the output. Frames without a chroma sample location
+are tagged with the one negotiated for the output.
 
 @item pixel_aspect, sar
 The sample (pixel) aspect ratio of the input video.
@@ -29271,6 +29156,8 @@ window matching the provided regular expressions is captured.
 This source does NOT hold a stable FPS. It returns frames at whatever rate the compositor
 provides them, only capped by the @option{max_framerate}.
 If you need a stable rate, you need to add an fps filter to drop/duplicate frames as needed.
+Note that a static source may not deliver any frames at all, which also stalls
+the fps filter; see @option{dup_frames}.
 
 If the capture source disappears mid-capture (window closed, monitor disconnected), the filter will return EOF.
 
@@ -29344,6 +29231,13 @@ Crop this many pixels from the left side of the captured frames.
 @item premultiplied
 If set to 1, return frames with premultiplied alpha. Default is 0 (straight
 alpha).
+
+@item dup_frames
+If enabled (the default), the last frame is output again whenever the source
+delivered no new frame within one @option{max_framerate} interval, and black
+frames are output until the source delivered its first frame. This keeps the
+output flowing while the captured content is static. The output rate is still
+not constant, add an @code{fps} filter if needed.
 
 @item resize_mode
 Defines how the captured content is fitted into the output canvas size.
@@ -29424,7 +29318,7 @@ value is "25".
 @item c0, c1, c2, c3, c4, c5, c6, c7
 Set 8 colors. Default values for colors is to pick random one.
 
-@item x0, y0, y0, y1
+@item x0, y0, x1, y1
 Set gradient line source and destination points. If negative or out of range, random ones
 are picked.
 
@@ -30770,7 +30664,8 @@ do not have exactly the same duration in the first file.
 This filter supports the following commands:
 @table @option
 @item next
-Close the current segment and step to the next one
+Close the current segment and step to the next one.
+Fails if the current segment is the last one.
 @end table
 
 @anchor{ebur128}
@@ -30780,11 +30675,6 @@ EBU R128 scanner filter. This filter takes an audio stream and analyzes its loud
 level. By default, it logs a message at a frequency of 10Hz with the
 Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
 Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
-
-The filter can only analyze streams which have
-sample format is double-precision floating point. The input stream will be converted to
-this specification, if needed. Users may need to insert aformat and/or aresample filters
-after this filter to obtain the original parameters.
 
 The filter also has a video output (see the @var{video} option) with a real
 time graph to observe the loudness evolution. The graphic contains the logged
@@ -30859,10 +30749,8 @@ for sample-peak (identified by @code{SPK}).
 @item true
 Enable true-peak mode.
 
-If enabled, the peak lookup is done on an over-sampled version of the input
-stream for better peak accuracy. It logs a message for true-peak.
+If enabled, the true peak is estimated. It logs a message for true-peak.
 (identified by @code{TPK}) and true-peak per frame (identified by @code{FTPK}).
-This mode requires a build with @code{libswresample}.
 @end table
 
 @item dualmono
@@ -31085,15 +30973,6 @@ Float representation of @code{value} from metadata key.
 Float representation of @code{value} as supplied by user in @code{value} option.
 @end table
 
-@item file
-If specified in @code{print} mode, output is written to the named file. Instead of
-plain filename any writable url can be specified. Filename ``-'' is a shorthand
-for standard output. If @code{file} option is not set, output is written to the log
-with AV_LOG_INFO loglevel.
-
-@item direct
-Reduces buffering in print mode when output is written to a URL set using @var{file}.
-
 @end table
 
 @subsection Examples
@@ -31104,16 +30983,6 @@ Print all metadata values for frames with key @code{lavfi.signalstats.YDIF} with
 between 0 and 1.
 @example
 signalstats,metadata=print:key=lavfi.signalstats.YDIF:value=0:function=expr:expr='between(VALUE1,0,1)'
-@end example
-@item
-Print silencedetect output to file @file{metadata.txt}.
-@example
-silencedetect,ametadata=mode=print:file=metadata.txt
-@end example
-@item
-Direct all metadata to a pipe with file descriptor 4.
-@example
-metadata=mode=print:file='pipe\:4'
 @end example
 @end itemize
 
@@ -31981,8 +31850,7 @@ which makes it computed automatically. Acceptable range is @code{[0, 10]}.
 @item fontfile
 Specify font file for use with freetype to draw the axis. If not specified,
 use embedded font. Note that drawing with font file or embedded font is not
-implemented with custom @var{basefreq} and @var{endfreq}, use @var{axisfile}
-option instead.
+implemented with custom @var{basefreq} and @var{endfreq}.
 
 @item font
 Specify fontconfig pattern. This has lower priority than @var{fontfile}. The
@@ -32009,13 +31877,9 @@ Default value is @code{st(0, (midi(f)-59.5)/12);
 st(1, if(between(ld(0),0,1), 0.5-0.5*cos(2*PI*ld(0)), 0));
 r(1-ld(1)) + b(ld(1))}.
 
-@item axisfile
-Specify image file to draw the axis. This option override @var{fontfile} and
-@var{fontcolor} option.
-
 @item axis, text
 Enable/disable drawing text to the axis. If it is set to @code{0}, drawing to
-the axis is disabled, ignoring @var{fontfile} and @var{axisfile} option.
+the axis is disabled, ignoring @var{fontfile} option.
 Default value is @code{1}.
 
 @item csp
@@ -32120,12 +31984,6 @@ fontcolor='if(mod(floor(midi(f)+0.5),12), 0x0000FF, g(1))':fontfile=myfont.ttf
 Custom font using fontconfig:
 @example
 font='Courier New,Monospace,mono|bold'
-@end example
-
-@item
-Custom frequency range with custom axis using image file:
-@example
-axisfile=myaxis.png:basefreq=40:endfreq=10000
 @end example
 @end itemize
 
@@ -32236,6 +32094,8 @@ Show cool intensity for stereo channels.
 Show colors representing auto correlation for mono channel.
 @item stereocorr
 Show colors representing cross correlation for stereo channels.
+@item stereoquad
+Show colors representing hybrid between cross correlation and L/R magnitude difference for stereo channels.
 @end table
 
 Default value is @code{magnitude}.
@@ -32480,11 +32340,11 @@ Set output fade step.
 Set output color mode.
 @end table
 
-@anchor{showspectrum}
-@section showspectrum
+@anchor{aspectrogram}
+@section aspectrogram
 
 Convert input audio to a video output, representing the audio frequency
-spectrum.
+spectrogram.
 
 The filter accepts the following options:
 
@@ -32495,7 +32355,7 @@ Specify the video size for the output. For the syntax of this option, check the
 Default value is @code{640x512}.
 
 @item slide
-Specify how the spectrum should slide along the window.
+Specify how the spectrogram should slide along the window.
 
 It accepts the following values:
 @table @samp
@@ -32690,21 +32550,21 @@ section.
 @item
 Large window with logarithmic color scaling:
 @example
-showspectrum=s=1280x480:scale=log
+aspectrogram=s=1280x480:scale=log
 @end example
 
 @item
-Complete example for a colored and sliding spectrum per channel using @command{ffplay}:
+Complete example for a colored and sliding spectrogram per channel using @command{ffplay}:
 @example
 ffplay -f lavfi 'amovie=input.mp3, asplit [a][out1];
-             [a] showspectrum=mode=separate:color=intensity:slide=1:scale=cbrt [out0]'
+             [a] aspectrogram=mode=separate:color=intensity:slide=1:scale=cbrt [out0]'
 @end example
 @end itemize
 
-@section showspectrumpic
+@section aspectrogrampic
 
 Convert input audio to a single video frame, representing the audio frequency
-spectrum.
+spectrogram.
 
 The filter accepts the following options:
 
@@ -32873,7 +32733,7 @@ Set opacity strength when using pixel format output with alpha component.
 Extract an audio spectrogram of a whole audio track
 in a 1024x1024 picture using @command{ffmpeg}:
 @example
-ffmpeg -i audio.flac -lavfi showspectrumpic=s=1024x1024 spectrogram.png
+ffmpeg -i audio.flac -lavfi aspectrogrampic=s=1024x1024 spectrogram.png
 @end example
 @end itemize
 
@@ -33187,6 +33047,7 @@ Possible values are:
 @item DYNAMIC_HDR_VIVID
 @item AMBIENT_VIEWING_ENVIRONMENT
 @item VIDEO_HINT
+@item GAIN_MAP_PARAMS
 @end table
 
 @end table
@@ -33198,13 +33059,13 @@ magnitude across time and second represents phase across time.
 The filter will transform from frequency domain as displayed in videos back
 to time domain as presented in audio output.
 
-This filter is primarily created for reversing processed @ref{showspectrum}
+This filter is primarily created for reversing processed @ref{aspectrogram}
 filter outputs, but can synthesize sound from other spectrograms too.
 But in such case results are going to be poor if the phase data is not
 available, because in such cases phase data need to be recreated, usually
 it's just recreated from random noise.
 For best results use gray only output (@code{channel} color mode in
-@ref{showspectrum} filter) and @code{log} scale for magnitude video and
+@ref{aspectrogram} filter) and @code{log} scale for magnitude video and
 @code{lin} scale for phase video. To produce phase, for 2nd video, use
 @code{data} option. Inputs videos should generally use @code{fullframe}
 slide mode as that saves resources needed for decoding video.
@@ -33247,8 +33108,8 @@ Default is @code{vertical}.
 First create magnitude and phase videos from audio, assuming audio is stereo with 44100 sample rate,
 then resynthesize videos back to audio with spectrumsynth:
 @example
-ffmpeg -i input.flac -lavfi showspectrum=mode=separate:scale=log:overlap=0.875:color=channel:slide=fullframe:data=magnitude -an -c:v rawvideo magnitude.nut
-ffmpeg -i input.flac -lavfi showspectrum=mode=separate:scale=lin:overlap=0.875:color=channel:slide=fullframe:data=phase -an -c:v rawvideo phase.nut
+ffmpeg -i input.flac -lavfi aspectrogram=mode=separate:scale=log:overlap=0.875:color=channel:slide=fullframe:data=magnitude -an -c:v rawvideo magnitude.nut
+ffmpeg -i input.flac -lavfi aspectrogram=mode=separate:scale=lin:overlap=0.875:color=channel:slide=fullframe:data=phase -an -c:v rawvideo phase.nut
 ffmpeg -i magnitude.nut -i phase.nut -lavfi spectrumsynth=channels=2:sample_rate=44100:win_func=hann:overlap=0.875:slide=fullframe output.flac
 @end example
 @end itemize

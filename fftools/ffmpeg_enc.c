@@ -338,18 +338,7 @@ static int enc_reopen(void *opaque, const AVFrame *frame,
         enc_ctx->color_trc              = frame->color_trc;
         enc_ctx->colorspace             = frame->colorspace;
         enc_ctx->alpha_mode             = frame->alpha_mode;
-
-        /* Video properties which are not part of filter graph negotiation */
-        if (enc_ctx->chroma_sample_location == AVCHROMA_LOC_UNSPECIFIED) {
-            enc_ctx->chroma_sample_location = frame->chroma_location;
-        } else if (enc_ctx->chroma_sample_location != frame->chroma_location &&
-                   frame->chroma_location != AVCHROMA_LOC_UNSPECIFIED) {
-            av_log(e, AV_LOG_WARNING,
-                   "Requested chroma sample location '%s' does not match the "
-                   "frame tagged sample location '%s'; result may be incorrect.\n",
-                   av_chroma_location_name(enc_ctx->chroma_sample_location),
-                   av_chroma_location_name(frame->chroma_location));
-        }
+        enc_ctx->chroma_sample_location = frame->chroma_location;
 
         if (enc_ctx->flags & (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME) ||
             (frame->flags & AV_FRAME_FLAG_INTERLACED)) {
@@ -525,7 +514,7 @@ static int do_subtitle_out(OutputFile *of, OutputStream *ost, const AVSubtitle *
 
         av_shrink_packet(pkt, subtitle_out_size);
         pkt->time_base = AV_TIME_BASE_Q;
-        pkt->pts       = sub->pts;
+        pkt->pts       = pts;
         pkt->duration = av_rescale_q(sub->end_display_time, (AVRational){ 1, 1000 }, pkt->time_base);
         if (enc->codec_id == AV_CODEC_ID_DVB_SUBTITLE) {
             /* XXX: the pts correction is handled here. Maybe handling

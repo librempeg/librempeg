@@ -39,8 +39,8 @@
 #define ARIBC_BPRINT_SIZE_INIT         64
 #define ARIBC_BPRINT_SIZE_MAX          (8 * 1024)
 #define ARIBC_ALPHA_MAX_NUM            4
-#define ARIBC_ALPHA_DEFAULT_FRONT      0xFF
-#define ARIBC_ALPHA_DEFAULT_BACK       0x80
+#define ARIBC_ALPHA_DEFAULT_FRONT      0xFFu
+#define ARIBC_ALPHA_DEFAULT_BACK       0x80u
 
 #define ARIBCC_COLOR_RGB(c)            ((c) & 0xFFFFFF)
 #define ARIBCC_COLOR_DIFF_RGB(c1,c2)   (((c1) ^ (c2)) & 0x00FFFFFF)
@@ -250,57 +250,49 @@ static uint8_t clut_pick_or_set(ARIBCaptionContext *ctx, int r, int g, int b, in
     return c;
 }
 
-/* initialize CLUT with each character colors */
-static void clut_init(ARIBCaptionContext *ctx, aribcc_caption_region_t *region)
+/* initialize CLUT with only the transparent color */
+static void clut_reset(ARIBCaptionContext *ctx)
 {
-    aribcc_color_t text_color, back_color, stroke_color;
-    uint32_t rgba;
-
     ctx->clut[0] = CLUT_RGBA(0,0,0,0); /* transparent */
+    memset(ctx->clut_alpha, 0, sizeof(ctx->clut_alpha));
     ctx->clut_alpha[0] = 0xFF;
     ctx->clut_idx = 1;
     ctx->clut_overflow = 0;
-    text_color = region->chars[0].text_color;
-    back_color = region->chars[0].back_color;
-    stroke_color = region->chars[0].stroke_color;
-    rgba = ARIBCC_COLOR_TO_CLUT_RGBA(text_color, ARIBC_ALPHA_DEFAULT_FRONT);
-    ctx->clut[ctx->clut_idx++] = rgba;
-    clut_set_alpha(ctx, CLUT_A(rgba));
-    rgba = ARIBCC_COLOR_TO_CLUT_RGBA(back_color, ARIBC_ALPHA_DEFAULT_BACK);
-    ctx->clut[ctx->clut_idx++] = rgba;
-    clut_set_alpha(ctx, CLUT_A(rgba));
-    rgba = ARIBCC_COLOR_TO_CLUT_RGBA(stroke_color, ARIBC_ALPHA_DEFAULT_FRONT);
-    if (clut_find(ctx, rgba) < 0) {
-        ctx->clut[ctx->clut_idx++] = rgba;
-        clut_set_alpha(ctx, CLUT_A(rgba));
-    }
+}
 
-    for (int i = 1; i < region->char_count; i++) {
-        if (region->chars[i].text_color != text_color) {
-            rgba = ARIBCC_COLOR_TO_CLUT_RGBA(region->chars[i].text_color,
-                                             ARIBC_ALPHA_DEFAULT_FRONT);
-            if (clut_find(ctx, rgba) < 0) {
-                ctx->clut[ctx->clut_idx++] = rgba;
-                clut_set_alpha(ctx, CLUT_A(rgba));
-            }
-        }
-        if (region->chars[i].back_color != back_color) {
-            rgba = ARIBCC_COLOR_TO_CLUT_RGBA(region->chars[i].back_color,
-                                             ARIBC_ALPHA_DEFAULT_BACK);
-            if (clut_find(ctx, rgba) < 0) {
-                ctx->clut[ctx->clut_idx++] = rgba;
-                clut_set_alpha(ctx, CLUT_A(rgba));
-            }
-        }
-        if (region->chars[i].stroke_color != stroke_color) {
-            rgba = ARIBCC_COLOR_TO_CLUT_RGBA(region->chars[i].stroke_color,
-                                             ARIBC_ALPHA_DEFAULT_FRONT);
-            if (clut_find(ctx, rgba) < 0) {
-                if (ctx->clut_idx < AVPALETTE_COUNT)
-                    ctx->clut[ctx->clut_idx++] = rgba;
-                clut_set_alpha(ctx, CLUT_A(rgba));
-            }
-        }
+/* add a color to the CLUT unless it is already there or the CLUT is full */
+static void clut_add(ARIBCaptionContext *ctx, uint32_t rgba)
+{
+    if (clut_find(ctx, rgba) >= 0)
+        return;
+    if (ctx->clut_idx >= AVPALETTE_COUNT) {
+        ctx->clut_overflow++;
+        return;
+    }
+    ctx->clut[ctx->clut_idx++] = rgba;
+    clut_set_alpha(ctx, CLUT_A(rgba));
+}
+
+/* whether a region is left out: no character, or ruby when ruby is ignored */
+static int region_left_out(const aribcc_caption_region_t *region, int ignore_ruby)
+{
+    return !region->char_count || (region->is_ruby && ignore_ruby);
+}
+
+static int region_skipped(const ARIBCaptionContext *ctx,
+                          const aribcc_caption_region_t *region)
+{
+    return region_left_out(region, ctx->ignore_ruby);
+}
+
+/* add the character colors of a region to the CLUT */
+static void clut_add_region(ARIBCaptionContext *ctx, aribcc_caption_region_t *region)
+{
+    for (int i = 0; i < region->char_count; i++) {
+        aribcc_caption_char_t *ch = &region->chars[i];
+        clut_add(ctx, ARIBCC_COLOR_TO_CLUT_RGBA(ch->text_color, ARIBC_ALPHA_DEFAULT_FRONT));
+        clut_add(ctx, ARIBCC_COLOR_TO_CLUT_RGBA(ch->back_color, ARIBC_ALPHA_DEFAULT_BACK));
+        clut_add(ctx, ARIBCC_COLOR_TO_CLUT_RGBA(ch->stroke_color, ARIBC_ALPHA_DEFAULT_FRONT));
     }
 }
 
@@ -310,7 +302,7 @@ static void clut_init(ARIBCaptionContext *ctx, aribcc_caption_region_t *region)
  * Transfer decoded subtitle to AVSubtitle with corresponding subtitle type.
  *
  * @param ctx pointer to the ARIBCaptionContext
- * @return > 0 number of rectangles to be displayed
+ * @return > 0 subtitle event produced (possibly with zero rectangles for clear)
  *         = 0 no subtitle
  *         < 0 error code
  */
@@ -318,7 +310,7 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
 {
     int ret = 0;
     AVSubtitle *sub = ctx->sub;
-    int status, rect_idx;
+    int status, rect_idx, image_count = 0, seed_idx, seed_overflow;
     int old_width = ctx->frame_width;
     int old_height = ctx->frame_height;
 
@@ -359,8 +351,8 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
         return 0;
 
     case ARIBCC_RENDER_STATUS_NO_IMAGE:
-        ff_dlog(ctx, "no image\n");
-        return 0;
+        /* the result holds no image, handled below */
+        break;
 
     case ARIBCC_RENDER_STATUS_ERROR:
         av_log(ctx, AV_LOG_ERROR,
@@ -375,18 +367,30 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
     }
 
     if (!ctx->render_result.image_count || ctx->render_result.images == NULL) {
-        aribcc_render_result_cleanup(&ctx->render_result);
         ff_dlog(ctx, "no image (%d)\n", ctx->render_result.image_count);
+        aribcc_render_result_cleanup(&ctx->render_result);
+        /* A caption carrying an explicit clear screen (CS) may produce no
+           image. Report an empty subtitle so that the previously displayed
+           bitmap is erased; the TEXT path already does this by emitting "".
+           Do not treat every caption without image as a clear: a statement
+           containing only TIME also decodes to zero regions but must not
+           erase the display. */
+        if (ctx->caption.flags & ARIBCC_CAPTIONFLAGS_CLEARSCREEN) {
+            sub->format = 0; /* graphic */
+            sub->num_rects = 0;
+            return 1;
+        }
         return 0;
     }
 
+    image_count = ctx->render_result.image_count;
     sub->format = 0; /* graphic */
-    sub->rects = av_calloc(ctx->render_result.image_count, sizeof(*sub->rects));
+    sub->rects = av_calloc(image_count, sizeof(*sub->rects));
     if (!sub->rects) {
         ret = AVERROR(ENOMEM);
         goto fail;
     }
-    for (int i = 0; i < ctx->render_result.image_count; i++) {
+    for (int i = 0; i < image_count; i++) {
         sub->rects[i] = av_mallocz(sizeof(*sub->rects[i]));
         if (!sub->rects[i]) {
             ret = AVERROR(ENOMEM);
@@ -394,12 +398,24 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
         }
     }
 
-    for (rect_idx = 0; rect_idx < ctx->caption.region_count; rect_idx++) {
+    /* The renderer drops ruby regions with ignore_ruby and regions too small
+       to draw, without telling which region an image comes from. Seed the
+       CLUT with the colors of every region that may be drawn, once. Each
+       image only appends colors past the seed, so dropping them restores it. */
+    clut_reset(ctx);
+    for (int i = 0; i < ctx->caption.region_count; i++)
+        if (!region_skipped(ctx, &ctx->caption.regions[i]))
+            clut_add_region(ctx, &ctx->caption.regions[i]);
+    seed_idx = ctx->clut_idx;
+    seed_overflow = ctx->clut_overflow;
+
+    for (rect_idx = 0; rect_idx < image_count; rect_idx++) {
         AVSubtitleRect *rect = sub->rects[rect_idx];
         aribcc_image_t *image = &ctx->render_result.images[rect_idx];
         int w, h, shrink_height, dst_idx;
 
-        clut_init(ctx, &ctx->caption.regions[rect_idx]);
+        ctx->clut_idx = seed_idx;
+        ctx->clut_overflow = seed_overflow;
 
         rect->w = image->width * ctx->bitmap_plane_width / ctx->frame_width;
         rect->h = image->height * ctx->bitmap_plane_height / ctx->frame_height;
@@ -459,7 +475,7 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
             /* ARIB TR-B14 version 3.8 Fascicle 1-(2/2) Volume 3 [Section 4] */
             /* No position information is provided for profile C */
             rect->x = (ctx->frame_width - rect->w) / 2;
-            rect->y = ctx->frame_height - rect->h * (ctx->caption.region_count - rect_idx);
+            rect->y = ctx->frame_height - rect->h * (image_count - rect_idx);
         } else {
             rect->x = image->dst_x * ctx->bitmap_plane_width / ctx->frame_width;
             rect->y = image->dst_y * ctx->bitmap_plane_height / ctx->frame_height;
@@ -468,8 +484,7 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
         rect->linesize[0] = rect->w;
         rect->nb_colors = 256;
 
-        ff_dlog(ctx, "BITMAP subtitle%s (%d,%d) %dx%d -> (%d,%d) %dx%d [%d]: %d colors\n",
-                (ctx->caption.regions[rect_idx].is_ruby) ? " (ruby)" : "",
+        ff_dlog(ctx, "BITMAP subtitle (%d,%d) %dx%d -> (%d,%d) %dx%d [%d]: %d colors\n",
                 image->dst_x, image->dst_y, image->width, image->height,
                 rect->x, rect->y, rect->w, rect->h,
                 rect_idx, ctx->clut_idx);
@@ -477,12 +492,13 @@ static int aribcaption_trans_bitmap_subtitle(ARIBCaptionContext *ctx)
             av_log(ctx, AV_LOG_WARNING, "CLUT overflow (%d).\n", ctx->clut_overflow);
     }
     sub->num_rects = rect_idx;
+    aribcc_render_result_cleanup(&ctx->render_result);
 
     return rect_idx;
 
 fail:
     if (sub->rects) {
-        for (int i = 0; i < ctx->caption.region_count; i++) {
+        for (int i = 0; i < image_count; i++) {
             if (sub->rects[i]) {
                 av_freep(&sub->rects[i]->data[0]);
                 av_freep(&sub->rects[i]->data[1]);
@@ -492,6 +508,7 @@ fail:
         av_freep(&sub->rects);
     }
     sub->num_rects = 0;
+    aribcc_render_result_cleanup(&ctx->render_result);
 
     return ret;
 }
@@ -579,11 +596,21 @@ static void set_ass_color(AVBPrint *buf, int color_num,
                                           0xFF - ARIBCC_COLOR_A(new_color));
 }
 
+/* position of a region, keeping the existing wrapping of negative values
+   in ass mode */
+static void region_position(const ARIBCaptionContext *ctx,
+                            const aribcc_caption_region_t *region, int *x, int *y)
+{
+    *x = region->x < 0 ? region->x + ctx->plane_width  : region->x;
+    *y = region->y < 0 ? region->y + ctx->plane_height : region->y;
+}
+
 static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
 {
     AVSubtitle *sub = ctx->sub;
     AVBPrint buf;
     bool single_rect = ctx->ass_single_rect;
+    bool emitted = false;
     int ret = 0, rect_idx;
 
     if (ctx->caption.plane_width > 0 && ctx->caption.plane_height > 0 &&
@@ -601,11 +628,6 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
         single_rect = true;
 
     sub->format = 1; /* text */
-    if (ctx->caption.region_count == 0) {
-        /* clear previous caption for indefinite duration  */
-        ff_ass_add_rect(sub, "", ctx->readorder++, 0, NULL, NULL);
-        return 1;
-    }
 
     av_bprint_init(&buf, ARIBC_BPRINT_SIZE_INIT, ARIBC_BPRINT_SIZE_MAX);
 
@@ -614,16 +636,15 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
         x = ctx->plane_width;
         y = ctx->plane_height;
         for (int i = 0; i < ctx->caption.region_count; i++) {
-            rx = ctx->caption.regions[i].x;
-            ry = ctx->caption.regions[i].y;
+            if (region_skipped(ctx, &ctx->caption.regions[i]))
+                continue;
+            region_position(ctx, &ctx->caption.regions[i], &rx, &ry);
             if (rx < x)
                 x = rx;
             if (ry < y)
                 y = ry;
         }
         av_bprintf(&buf, "{\\an7}");
-        if (y < 0)
-            y += ctx->plane_height;
         if (x > 0 || y > 0)
             av_bprintf(&buf, "{\\pos(%d,%d)}", x, y);
     }
@@ -642,16 +663,16 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
         int char_height = ctx->font_size;
         int char_horizontal_spacing = 0;
 
-        if (region->is_ruby && ctx->ignore_ruby)
+        if (region_skipped(ctx, region))
             continue;
 
+        if (single_rect && emitted)
+            av_bprintf(&buf, "{\\r}\\N");
+        emitted = true;
+
         if (!single_rect) {
-            int x = region->x;
-            int y = region->y;
-            if (x < 0)
-                x += ctx->plane_width;
-            if (y < 0)
-                y += ctx->plane_height;
+            int x, y;
+            region_position(ctx, region, &x, &y);
             av_bprint_clear(&buf);
             av_bprintf(&buf, "{\\an7}");
             if (x > 0 || y > 0)
@@ -735,12 +756,9 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
         }
 
         if (single_rect) {
-            if (i + 1 < ctx->caption.region_count)
-                av_bprintf(&buf, "{\\r}\\N");
-            ff_dlog(ctx, "ASS subtitle%s (%d,%d) %dx%d [%d]\n",
+            ff_dlog(ctx, "ASS subtitle%s (%d,%d) %dx%d [region %d]\n",
                     (region->is_ruby) ? " (ruby)" : "",
-                    region->x, region->y, region->width, region->height,
-                    rect_idx);
+                    region->x, region->y, region->width, region->height, i);
         } else {
             if (!av_bprint_is_complete(&buf)) {
                 ret = AVERROR(ENOMEM);
@@ -756,6 +774,21 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
                 goto fail;
             rect_idx++;
         }
+    }
+    if (!emitted) {
+        /* Nothing to show: there is no region, or every region was skipped
+           as ruby. Only an explicit clear screen (CS) erases the previous
+           caption, for indefinite duration; a statement containing only
+           TIME also has no region. */
+        if (!(ctx->caption.flags & ARIBCC_CAPTIONFLAGS_CLEARSCREEN)) {
+            av_bprint_finalize(&buf, NULL);
+            return 0;
+        }
+        ret = ff_ass_add_rect(sub, "", ctx->readorder++, 0, NULL, NULL);
+        if (ret < 0)
+            goto fail;
+        av_bprint_finalize(&buf, NULL);
+        return 1;
     }
     if (single_rect) {
         if (!av_bprint_is_complete(&buf)) {
@@ -775,7 +808,7 @@ static int aribcaption_trans_ass_subtitle(ARIBCaptionContext *ctx)
 
 fail:
     if (sub->rects) {
-        for (int i = 0; i < ctx->caption.region_count; i++) {
+        for (int i = 0; i < sub->num_rects; i++) {
             if (sub->rects[i]) {
                 av_freep(&sub->rects[i]->ass);
                 av_freep(&sub->rects[i]);
@@ -793,10 +826,25 @@ static int aribcaption_trans_text_subtitle(ARIBCaptionContext *ctx)
 {
     AVSubtitle *sub = ctx->sub;
     AVSubtitleRect *rect;
-    int ret = 0;
-    const char *text;
+    int ret = 0, has_text = 0;
+    const char *text = ctx->caption.text ? ctx->caption.text : "";
 
-    sub->rects = av_calloc(ctx->caption.region_count, sizeof(*sub->rects));
+    /* The text leaves ruby out (except a placeholder for an unknown DRCS)
+       and may hold line breaks without any character, so decide on the
+       regions. */
+    for (int i = 0; i < ctx->caption.region_count && !has_text; i++)
+        has_text = !region_left_out(&ctx->caption.regions[i], 1);
+
+    if (!has_text) {
+        /* Nothing to show: there is no region, or only ruby. Only an
+           explicit clear screen (CS) erases the previous caption, with an
+           empty text; a statement containing only TIME also has no region. */
+        if (!(ctx->caption.flags & ARIBCC_CAPTIONFLAGS_CLEARSCREEN))
+            return 0;
+        text = "";
+    }
+
+    sub->rects = av_calloc(1, sizeof(*sub->rects));
     if (!sub->rects) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -810,12 +858,7 @@ static int aribcaption_trans_text_subtitle(ARIBCaptionContext *ctx)
     }
     rect = sub->rects[0];
 
-    if (ctx->caption.region_count == 0)
-        text = ""; /* clear previous caption */
-    else {
-        text = ctx->caption.text;
-        ff_dlog(ctx, "TEXT subtitle: %s\n", text);
-    }
+    ff_dlog(ctx, "TEXT subtitle: %s\n", text);
     rect->text = av_strdup(text);
     if (!rect->text) {
         ret = AVERROR(ENOMEM);

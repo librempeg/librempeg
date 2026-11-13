@@ -31,7 +31,6 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
-#include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -132,8 +131,6 @@ void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl,
     offset[2] = (y >> vshift) * src->linesize[1];
     for (int i = 3; i < AV_NUM_DATA_POINTERS; i++)
         offset[i] = 0;
-
-    emms_c();
 
     avctx->draw_horiz_band(avctx, src, offset,
                            y, h->picture_structure, height);
@@ -580,12 +577,68 @@ static void debug_green_metadata(const H264SEIGreenMetaData *gm, void *logctx)
     }
 }
 
+/**
+ * Attach the partitions B and C immediately following the partition A at idx.
+ * Arbitrary slice order may separate them (7.4.1.2.5); that is not supported.
+ *
+ * @return index of the last NAL absorbed, or idx if there were none.
+ */
+static int h264_attach_partitions(const H264Context *h, H264SliceContext *sl,
+                                  int idx)
+{
+    while (idx + 1 < h->pkt.nb_nals) {
+        const H2645NAL *nal = &h->pkt.nals[idx + 1];
+
+        if (nal->type != H264_NAL_DPB && nal->type != H264_NAL_DPC)
+            break;
+        if (ff_h264_attach_slice_partition(h, sl, nal) < 0)
+            break;
+        idx++;
+    }
+
+    return idx;
+}
+
+static int h264_decode_sei(H264Context *h, H2645NAL *nal)
+{
+    AVCodecContext *const avctx = h->avctx;
+    int ret;
+
+    ret = ff_h264_sei_decode(&h->sei, &nal->gb, &h->ps, avctx);
+    h->has_recovery_point = h->has_recovery_point || h->sei.recovery_point.recovery_frame_cnt != -1;
+    if (avctx->debug & FF_DEBUG_GREEN_MD)
+        debug_green_metadata(&h->sei.green_metadata, avctx);
+    if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
+        return ret;
+
+    return 0;
+}
+
+/* Decode the SEI NAL units following the slice at idx. */
+static int h264_decode_late_sei(H264Context *h, int idx)
+{
+    for (int i = idx + 1; i < h->pkt.nb_nals; i++) {
+        H2645NAL *nal = &h->pkt.nals[i];
+        int ret;
+
+        if (nal->type != H264_NAL_SEI)
+            continue;
+
+        ret = h264_decode_sei(h, nal);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 static int decode_nal_units(H264Context *h, AVBufferRef *buf_ref,
                             const uint8_t *buf, int buf_size)
 {
     AVCodecContext *const avctx = h->avctx;
     int nals_needed = 0; ///< number of NALs that need decoding before the next frame thread starts
     int idr_cleared=0;
+    int dp_attached_to = -1; ///< index of the last partition B/C claimed
     int i, ret = 0;
 
     h->has_slice = 0;
@@ -621,6 +674,7 @@ static int decode_nal_units(H264Context *h, AVBufferRef *buf_ref,
 
     for (i = 0; i < h->pkt.nb_nals; i++) {
         H2645NAL *nal = &h->pkt.nals[i];
+        H264SliceContext *queued;
         int max_slice_ctx, err;
 
         if (avctx->skip_frame >= AVDISCARD_NONREF &&
@@ -647,17 +701,44 @@ static int decode_nal_units(H264Context *h, AVBufferRef *buf_ref,
             h->has_recovery_point = 1;
             av_fallthrough;
         case H264_NAL_SLICE:
+        case H264_NAL_DPA:
             h->has_slice = 1;
 
-            if ((err = ff_h264_queue_decode_slice(h, nal))) {
+            if (nal->type == H264_NAL_DPA) {
+                /* partitioned streams all come from JM or a derivative */
+                if (h->workaround_bugs & FF_BUG_AUTODETECT)
+                    h->workaround_bugs |= FF_BUG_H264_DP_NNZ;
+
+                /* hwaccels take one self-contained slice NAL, not three */
+                if (avctx->hwaccel) {
+                    avpriv_request_sample(avctx, "hardware accelerated data partitioning");
+                    ret = AVERROR_PATCHWELCOME;
+                    goto end;
+                }
+                /* the lookahead needs all three partitions in one packet */
+                if (avctx->flags2 & AV_CODEC_FLAG2_CHUNKS) {
+                    av_log(avctx, AV_LOG_ERROR, "Decoding in chunks is not "
+                           "supported for partitioned slices\n");
+                    ret = AVERROR(ENOSYS);
+                    goto end;
+                }
+            }
+
+            if ((err = ff_h264_queue_decode_slice(h, nal, &queued))) {
                 H264SliceContext *sl = h->slice_ctx + h->nb_slice_ctx_queued;
                 sl->ref_count[0] = sl->ref_count[1] = 0;
                 break;
             }
 
+            if (nal->type == H264_NAL_DPA && queued)
+                dp_attached_to = h264_attach_partitions(h, queued, i);
+
             if (h->current_slice == 1) {
                 if (avctx->active_thread_type & FF_THREAD_FRAME &&
                     i >= nals_needed && !h->setup_finished && h->cur_pic_ptr) {
+                    ret = h264_decode_late_sei(h, i);
+                    if (ret < 0)
+                        goto end;
                     ff_thread_finish_setup(avctx);
                     h->setup_finished = 1;
                 }
@@ -679,21 +760,20 @@ static int decode_nal_units(H264Context *h, AVBufferRef *buf_ref,
                     goto end;
             }
             break;
-        case H264_NAL_DPA:
         case H264_NAL_DPB:
         case H264_NAL_DPC:
-            avpriv_request_sample(avctx, "data partitioning");
+            /* not claimed by the lookahead above, so it has no partition A */
+            if (i > dp_attached_to)
+                av_log(avctx, AV_LOG_WARNING, "Ignoring slice data partition "
+                       "%c without a matching partition A\n",
+                       nal->type == H264_NAL_DPB ? 'B' : 'C');
             break;
         case H264_NAL_SEI:
-            if (h->setup_finished) {
-                avpriv_request_sample(avctx, "Late SEI");
+            /* already decoded by h264_decode_late_sei() */
+            if (h->setup_finished)
                 break;
-            }
-            ret = ff_h264_sei_decode(&h->sei, &nal->gb, &h->ps, avctx);
-            h->has_recovery_point = h->has_recovery_point || h->sei.recovery_point.recovery_frame_cnt != -1;
-            if (avctx->debug & FF_DEBUG_GREEN_MD)
-                debug_green_metadata(&h->sei.green_metadata, h->avctx);
-            if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
+            ret = h264_decode_sei(h, nal);
+            if (ret < 0)
                 goto end;
             break;
         case H264_NAL_SPS: {
@@ -948,8 +1028,8 @@ static int finalize_frame(H264Context *h, AVFrame *dst, H264Picture *out, int *g
             av_log(h->avctx, AV_LOG_DEBUG, "Duplicating field %d to fill missing\n", field);
 
             for (p = 0; p<4; p++) {
-                dst_data[p] = f->data[p] + (field^1)*f->linesize[p];
-                src_data[p] = f->data[p] +  field   *f->linesize[p];
+                dst_data[p] = FF_PTR_ADD(f->data[p], (field^1)*f->linesize[p]);
+                src_data[p] = FF_PTR_ADD(f->data[p],  field   *f->linesize[p]);
                 linesizes[p] = 2*f->linesize[p];
             }
 

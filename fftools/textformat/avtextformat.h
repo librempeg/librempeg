@@ -31,6 +31,12 @@
 
 #define SECTION_MAX_NB_CHILDREN 11
 
+typedef struct AVTextFormatSectionContext {
+    char *context_id;
+    const char *context_type;
+    int context_flags;
+} AVTextFormatSectionContext;
+
 
 typedef struct AVTextFormatSection {
     int id;             ///< unique id identifying a section
@@ -42,18 +48,27 @@ typedef struct AVTextFormatSection {
                                            ///  For these sections the element_name field is mandatory.
 #define AV_TEXTFORMAT_SECTION_FLAG_HAS_TYPE        8 ///< the section contains a type to distinguish multiple nested elements
 #define AV_TEXTFORMAT_SECTION_FLAG_NUMBERING_BY_TYPE 16 ///< the items in this array section should be numbered individually by type
+#define AV_TEXTFORMAT_SECTION_FLAG_IS_SHAPE       32 ///< ...
+#define AV_TEXTFORMAT_SECTION_FLAG_HAS_LINKS      64 ///< ...
+#define AV_TEXTFORMAT_SECTION_PRINT_TAGS         128 ///< ...
+#define AV_TEXTFORMAT_SECTION_FLAG_IS_SUBGRAPH   256 ///< ...
 
     int flags;
     const int children_ids[SECTION_MAX_NB_CHILDREN + 1]; ///< list of children section IDS, terminated by -1
     const char *element_name; ///< name of the contained element, if provided
     const char *unique_name;  ///< unique section name, in case the name is ambiguous
     const char *(*get_type)(const void *data); ///< function returning a type if defined, must be defined when SECTION_FLAG_HAS_TYPE is defined
+    const char *id_key;          ///< name of the key to be used as the id
+    const char *src_id_key;     ///< name of the key to be used as the source id for diagram connections
+    const char *dest_id_key;   ///< name of the key to be used as the target id for diagram connections
+    const char *linktype_key; ///< name of the key to be used as the link type for diagram connections (AVTextFormatLinkType)
 } AVTextFormatSection;
 
 typedef struct AVTextFormatContext AVTextFormatContext;
 
 #define AV_TEXTFORMAT_FLAG_SUPPORTS_OPTIONAL_FIELDS 1
 #define AV_TEXTFORMAT_FLAG_SUPPORTS_MIXED_ARRAY_CONTENT 2
+#define AV_TEXTFORMAT_FLAG_IS_DIAGRAM_FORMATTER         4
 
 typedef enum {
     AV_TEXTFORMAT_STRING_VALIDATION_FAIL,
@@ -62,13 +77,30 @@ typedef enum {
     AV_TEXTFORMAT_STRING_VALIDATION_NB
 } StringValidation;
 
+typedef enum {
+    AV_TEXTFORMAT_LINKTYPE_SRCDEST,
+    AV_TEXTFORMAT_LINKTYPE_DESTSRC,
+    AV_TEXTFORMAT_LINKTYPE_BIDIR,
+    AV_TEXTFORMAT_LINKTYPE_NONDIR,
+    AV_TEXTFORMAT_LINKTYPE_HIDDEN,
+    AV_TEXTFORMAT_LINKTYPE_ONETOMANY = AV_TEXTFORMAT_LINKTYPE_SRCDEST,
+    AV_TEXTFORMAT_LINKTYPE_MANYTOONE = AV_TEXTFORMAT_LINKTYPE_DESTSRC,
+    AV_TEXTFORMAT_LINKTYPE_ONETOONE = AV_TEXTFORMAT_LINKTYPE_BIDIR,
+    AV_TEXTFORMAT_LINKTYPE_MANYTOMANY = AV_TEXTFORMAT_LINKTYPE_NONDIR,
+} AVTextFormatLinkType;
+
+typedef enum {
+    AV_TEXTFORMAT_DATADUMP_XXD,
+    AV_TEXTFORMAT_DATADUMP_BASE64,
+} AVTextFormatDataDump;
+
 typedef struct AVTextFormatter {
     const AVClass *priv_class;      ///< private class of the formatter, if any
     int priv_size;                  ///< private size for the formatter context
     const char *name;
 
     int  (*init)  (AVTextFormatContext *tctx);
-    void (*uninit)(AVTextFormatContext *tctx);
+    int  (*uninit)(AVTextFormatContext *tctx);
 
     void (*print_section_header)(AVTextFormatContext *tctx, const void *data);
     void (*print_section_footer)(AVTextFormatContext *tctx);
@@ -79,6 +111,24 @@ typedef struct AVTextFormatter {
 
 #define SECTION_MAX_NB_LEVELS    12
 #define SECTION_MAX_NB_SECTIONS 100
+
+typedef struct AVTextFormatOptions {
+    /**
+     * Callback to discard certain elements based upon the key used.
+     * It is called before any element with a key is printed.
+     * If this callback is unset, all elements are printed.
+     *
+     * @retval 1 if the element is supposed to be printed
+     * @retval 0 if the element is supposed to be discarded
+     */
+    int (*is_key_selected)(struct AVTextFormatContext *tctx, const char *key);
+    int show_optional_fields;
+    int show_value_unit;
+    int use_value_prefix;
+    int use_byte_value_binary_prefix;
+    int use_value_sexagesimal_format;
+    AVTextFormatDataDump data_dump_format;
+} AVTextFormatOptions;
 
 struct AVTextFormatContext {
     const AVClass *class;              ///< class of the formatter
@@ -102,21 +152,7 @@ struct AVTextFormatContext {
     AVBPrint section_pbuf[SECTION_MAX_NB_LEVELS]; ///< generic print buffer dedicated to each section,
                                                   ///  used by various formatters
 
-    /**
-     * Callback to discard certain elements based upon the key used.
-     * It is called before any element with a key is printed.
-     * If this callback is unset, all elements are printed.
-     *
-     * @retval 1 if the element is supposed to be printed
-     * @retval 0 if the element is supposed to be discarded
-     */
-    int (*is_key_selected)(struct AVTextFormatContext *tctx, const char *key);
-
-    int show_optional_fields;
-    int show_value_unit;
-    int use_value_prefix;
-    int use_byte_value_binary_prefix;
-    int use_value_sexagesimal_format;
+    AVTextFormatOptions opts;
 
     struct AVHashContext *hash;
 
@@ -125,14 +161,13 @@ struct AVTextFormatContext {
     unsigned int string_validation_utf8_flags;
 };
 
-typedef struct AVTextFormatOptions {
-    int (*is_key_selected)(struct AVTextFormatContext *tctx, const char *key);
-    int show_optional_fields;
-    int show_value_unit;
-    int use_value_prefix;
-    int use_byte_value_binary_prefix;
-    int use_value_sexagesimal_format;
-} AVTextFormatOptions;
+typedef enum {
+    AV_TEXTFORMAT_VALUE_FMT_INT,
+    AV_TEXTFORMAT_VALUE_FMT_BYTE,
+    AV_TEXTFORMAT_VALUE_FMT_DOUBLE = 0x100,
+    AV_TEXTFORMAT_VALUE_FMT_SECOND,
+    AV_TEXTFORMAT_VALUE_FMT_DECIBEL,
+} AVTextFormatValueFormat;
 
 #define AV_TEXTFORMAT_PRINT_STRING_OPTIONAL 1
 #define AV_TEXTFORMAT_PRINT_STRING_VALIDATE 2
@@ -140,7 +175,7 @@ typedef struct AVTextFormatOptions {
 int avtext_context_open(AVTextFormatContext **ptctx, const AVTextFormatter *formatter, AVTextWriterContext *writer_context, const char *args,
                         const AVTextFormatSection *sections, int nb_sections, AVTextFormatOptions options, char *show_data_hash);
 
-void avtext_context_close(AVTextFormatContext **tctx);
+int avtext_context_close(AVTextFormatContext **tctx);
 
 
 void avtext_print_section_header(AVTextFormatContext *tctx, const void *data, int section_id);
@@ -151,7 +186,9 @@ void avtext_print_integer(AVTextFormatContext *tctx, const char *key, int64_t va
 
 int avtext_print_string(AVTextFormatContext *tctx, const char *key, const char *val, int flags);
 
-void avtext_print_unit_int(AVTextFormatContext *tctx, const char *key, int64_t value, const char *unit);
+void avtext_print_unit_integer(AVTextFormatContext *tctx, const char *key, int64_t val, AVTextFormatValueFormat fmt, const char *unit);
+
+void avtext_print_unit_double(AVTextFormatContext *tctx, const char *key, double val, AVTextFormatValueFormat fmt, const char *unit);
 
 void avtext_print_rational(AVTextFormatContext *tctx, const char *key, AVRational q, char sep);
 

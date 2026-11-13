@@ -27,7 +27,7 @@ void ff_rtp_send_raw_rfc4175(AVFormatContext *s1, const uint8_t *buf, int size, 
     int width = s1->streams[0]->codecpar->width;
     int height = s1->streams[0]->codecpar->height;
     int xinc, yinc, pgroup;
-    int i = 0;
+    int i = field;
     int offset = 0;
 
     s->timestamp = s->cur_timestamp;
@@ -61,6 +61,11 @@ void ff_rtp_send_raw_rfc4175(AVFormatContext *s1, const uint8_t *buf, int size, 
             return;
     }
 
+    if (s->max_payload_size < 2 + 6 + pgroup) {
+        av_log(s1, AV_LOG_ERROR, "Max payload size %d too low\n", s->max_payload_size);
+        return;
+    }
+
     while (i < height) {
         int left = s->max_payload_size;
         uint8_t *dest = s->buf;
@@ -82,10 +87,10 @@ void ff_rtp_send_raw_rfc4175(AVFormatContext *s1, const uint8_t *buf, int size, 
             length = (pixels * pgroup) / xinc;
 
             left -= head_size;
-            if (left >= length) {
+            if (left >= length && length <= 0xFFFF) {
                 next_line = 1;
             } else {
-                pixels = (left / pgroup) * xinc;
+                pixels = (FFMIN(left, 0xFFFF) / pgroup) * xinc;
                 length = (pixels * pgroup) / xinc;
                 next_line = 0;
             }
@@ -129,7 +134,7 @@ void ff_rtp_send_raw_rfc4175(AVFormatContext *s1, const uint8_t *buf, int size, 
                 l_line = 2 * l_line + l_field;
             copy_offset = (l_line * (int64_t)width + l_off) * pgroup / xinc;
             if (copy_offset + length > size)
-                break;
+                return;
             memcpy (dest, buf + copy_offset, length);
             dest += length;
         } while (cont);

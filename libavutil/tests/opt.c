@@ -130,14 +130,16 @@ typedef struct ChildContext {
     const AVClass *class;
     int64_t child_num64;
     int child_num;
+    unsigned int child_unum;
 } ChildContext;
 
 #undef OFFSET
 #define OFFSET(x) offsetof(ChildContext, x)
 
 static const AVOption child_options[]= {
-    {"child_num64", "set num 64bit", OFFSET(child_num64), AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, 100, 1 },
+    {"child_num64", "set num 64bit", OFFSET(child_num64), AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, 100, 1 | AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY },
     {"child_num",   "set child_num", OFFSET(child_num),   AV_OPT_TYPE_INT,   { .i64 = 1 }, 0, 100, 1 },
+    {"child_unum",  "set child_unum", OFFSET(child_unum),  AV_OPT_TYPE_UINT,  { .i64 = 0 }, 0, 100, AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY },
     { NULL },
 };
 
@@ -383,13 +385,69 @@ int main(void)
             if (ret < 0)
                 printf("Error ret '%d'\n", ret);
             if (av_opt_serialize(&test_ctx, 0, 0, &buf, '=', ',') >= 0) {
-                ChildContext child_ctx = { 0 };
+                ChildContext child_ctx = { .child_num64 = 1, .child_unum = 1 };
                 printf("%s\n", buf);
                 av_free(buf);
                 child_ctx.class = &child_class;
                 test_ctx.child = &child_ctx;
-                if (av_opt_serialize(&test_ctx, 0,
+                printf("Exclude flag EXPORT:\n");
+                if (av_opt_serialize(&test_ctx, AV_OPT_FLAG_EXPORT,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXCLUDE,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Include flag EXPORT:\n");
+                if (av_opt_serialize(&test_ctx, AV_OPT_FLAG_EXPORT,
                                      AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Exclude flag 1:\n");
+                if (av_opt_serialize(&test_ctx, 1,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXCLUDE,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Include flag 1:\n");
+                if (av_opt_serialize(&test_ctx, 1,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Exclude exact match flag 1:\n");
+                if (av_opt_serialize(&test_ctx, 1,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXACT|AV_OPT_SERIALIZE_OPT_FLAGS_EXCLUDE,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Include exact match flag 1:\n");
+                if (av_opt_serialize(&test_ctx, 1,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXACT,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Exclude exact match flag EXPORT|READONLY:\n");
+                if (av_opt_serialize(&test_ctx, AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXACT|AV_OPT_SERIALIZE_OPT_FLAGS_EXCLUDE,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                printf("Include exact match flag EXPORT|READONLY:\n");
+                if (av_opt_serialize(&test_ctx, AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN|
+                                     AV_OPT_SERIALIZE_OPT_FLAGS_EXACT,
                                      &buf, '=', ',') >= 0) {
                     printf("%s\n", buf);
                     av_free(buf);
@@ -421,6 +479,10 @@ int main(void)
             "toggle=100",
             "toggle==1",
             "flags=+mu-lame : num=42: toggle=0",
+            "flags=+1.5",
+            "flags=-1.5",
+            "flags=+100000000000000000000",
+            "flags=-100000000000000000000",
             "num=42 : string=blahblah",
             "rational=0 : rational=1/2 : rational=1/-1",
             "rational=-1/0",
@@ -491,7 +553,9 @@ int main(void)
         av_log_set_level(AV_LOG_QUIET);
 
         for (i=0; i < FF_ARRAY_ELEMS(options); i++) {
-            int silence_log = !strcmp(options[i], "rational=-1/0"); // inf formatting differs between platforms
+            // inf formatting differs between platforms, and so may %f of 1e20
+            int silence_log = !strcmp(options[i], "rational=-1/0") ||
+                              strstr(options[i], "100000000000000000000");
             av_log(&test_ctx, AV_LOG_DEBUG, "Setting options string '%s'\n", options[i]);
             if (silence_log)
                 av_log_set_callback(NULL);
@@ -501,6 +565,8 @@ int main(void)
                 printf("OK    '%s'\n", options[i]);
             av_log_set_callback(log_callback_help);
         }
+        // a rejected +x/-x flags update must leave the value untouched
+        printf("flags=%d\n", test_ctx.flags);
         av_opt_free(&test_ctx);
     }
 
@@ -582,6 +648,49 @@ int main(void)
             printf("OK    '%s'\n", opt->name);
         else
             printf("Error 'foo'\n");
+    }
+
+    printf("\nTesting av_opt_copy() into a memdup'ed object\n");
+    {
+        TestContext test_ctx = { 0 };
+        TestContext *copy;
+        uint8_t *layout_name = NULL;
+
+        test_ctx.class = &test_class;
+        av_opt_set_defaults(&test_ctx);
+        av_opt_set(&test_ctx, "cl", "FL@Left+FR@Right", 0);
+
+        copy = av_memdup(&test_ctx, sizeof(test_ctx));
+        if (!copy)
+            return 1;
+        av_opt_copy(copy, &test_ctx);
+        av_opt_free(&test_ctx);
+
+        av_opt_get(copy, "cl", 0, &layout_name);
+        printf("cl=%s\n", layout_name);
+        av_free(layout_name);
+        av_opt_free(copy);
+        av_free(copy);
+    }
+
+    printf("\nTesting av_opt_copy() of a native layout into a custom layout\n");
+    {
+        TestContext src = { 0 }, dst = { 0 };
+        AVChannelLayout native = { AV_CHANNEL_ORDER_NATIVE };
+
+        src.class = dst.class = &test_class;
+        av_opt_set_defaults(&src);
+        av_opt_set_defaults(&dst);
+        av_opt_set(&dst, "cl", "FL@Left+FR@Right", 0);
+
+        native.u.mask      = (uintptr_t)dst.channel_layout.u.map;
+        native.nb_channels = av_popcount64(native.u.mask);
+        av_opt_set_chlayout(&src, "cl", &native, 0);
+
+        printf("copy: %d\n", av_opt_copy(&dst, &src));
+        printf("same layout: %d\n", !av_channel_layout_compare(&src.channel_layout, &dst.channel_layout));
+        av_opt_free(&src);
+        av_opt_free(&dst);
     }
 
     return 0;

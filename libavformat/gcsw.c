@@ -23,17 +23,22 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('G','C','S','W'))
         return 0;
-    if (p->buf_size < 16)
+
+    if (p->buf_size < 28)
         return 0;
     if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
     if ((int)AV_RB32(p->buf + 12) <= 0)
         return 0;
+    if (AV_RB32(p->buf + 24) == 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
@@ -71,18 +76,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_gcsw_demuxer = {
     .p.name         = "gcsw",
     .p.long_name    = NULL_IF_CONFIG_SMALL("MileStone GCSW"),
@@ -90,5 +83,5 @@ const FFInputFormat ff_gcsw_demuxer = {
     .p.extensions   = "gcw",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

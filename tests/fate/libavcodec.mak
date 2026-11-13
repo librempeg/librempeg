@@ -1,3 +1,7 @@
+FATE_LIBAVCODEC-$(CONFIG_AC3DSP) += fate-ac3-bit-allocation
+fate-ac3-bit-allocation: libavcodec/tests/ac3$(EXESUF)
+fate-ac3-bit-allocation: CMD = run libavcodec/tests/ac3$(EXESUF)
+
 FATE_LIBAVCODEC-$(CONFIG_AV1_VAAPI_ENCODER) += fate-av1-levels
 fate-av1-levels: libavcodec/tests/av1_levels$(EXESUF)
 fate-av1-levels: CMD = run libavcodec/tests/av1_levels$(EXESUF)
@@ -13,6 +17,10 @@ fate-avpacket: libavcodec/tests/avpacket$(EXESUF)
 fate-avpacket: CMD = run libavcodec/tests/avpacket$(EXESUF)
 fate-avpacket: CMP = null
 
+FATE_LIBAVCODEC-yes += fate-packet-side-data-handle
+fate-packet-side-data-handle: libavcodec/tests/packet_side_data_handle$(EXESUF)
+fate-packet-side-data-handle: CMD = run libavcodec/tests/packet_side_data_handle$(EXESUF)
+
 FATE_LIBAVCODEC-yes += fate-bitstream-be
 fate-bitstream-be: libavcodec/tests/bitstream_be$(EXESUF)
 fate-bitstream-be: CMD = run libavcodec/tests/bitstream_be$(EXESUF)
@@ -27,6 +35,11 @@ FATE_LIBAVCODEC-$(CONFIG_CABAC) += fate-cabac
 fate-cabac: libavcodec/tests/cabac$(EXESUF)
 fate-cabac: CMD = run libavcodec/tests/cabac$(EXESUF)
 fate-cabac: CMP = null
+
+FATE_LIBAVCODEC-$(CONFIG_CAVS_DECODER) += fate-cavsdsp
+fate-cavsdsp: libavcodec/tests/cavsdsp$(EXESUF)
+fate-cavsdsp: CMD = run libavcodec/tests/cavsdsp$(EXESUF)
+fate-cavsdsp: CMP = null
 
 FATE_LIBAVCODEC-$(CONFIG_CELP_MATH) += fate-celp_math
 fate-celp_math: libavcodec/tests/celp_math$(EXESUF)
@@ -47,6 +60,10 @@ FATE_LIBAVCODEC-$(CONFIG_DXV_ENCODER) += fate-hashtable
 fate-hashtable: libavcodec/tests/hashtable$(EXESUF)
 fate-hashtable: CMD = run libavcodec/tests/hashtable$(EXESUF)
 fate-hashtable: CMP = null
+
+FATE_LIBAVCODEC-$(CONFIG_ENCODERS) += fate-hw-base-encode
+fate-hw-base-encode: libavcodec/tests/hw_base_encode$(EXESUF)
+fate-hw-base-encode: CMD = run libavcodec/tests/hw_base_encode$(EXESUF)
 
 FATE_LIBAVCODEC-$(CONFIG_IDCTDSP) += fate-idct8x8-0 fate-idct8x8-1 fate-idct8x8-2 fate-idct248
 
@@ -91,6 +108,10 @@ fate-rangecoder: libavcodec/tests/rangecoder$(EXESUF)
 fate-rangecoder: CMD = run libavcodec/tests/rangecoder$(EXESUF)
 fate-rangecoder: CMP = null
 
+FATE_LIBAVCODEC-$(CONFIG_SNOW_ENCODER) += fate-snow-dwt
+fate-snow-dwt: libavcodec/tests/snowenc$(EXESUF)
+fate-snow-dwt: CMD = run libavcodec/tests/snowenc$(EXESUF)
+
 FATE_LIBAVCODEC-yes += fate-mathops
 fate-mathops: libavcodec/tests/mathops$(EXESUF)
 fate-mathops: CMD = run libavcodec/tests/mathops$(EXESUF)
@@ -113,6 +134,14 @@ fate-libavcodec-huffman: CMP = null
 FATE_LIBAVCODEC-yes += fate-libavcodec-htmlsubtitles
 fate-libavcodec-htmlsubtitles: libavcodec/tests/htmlsubtitles$(EXESUF)
 fate-libavcodec-htmlsubtitles: CMD = run libavcodec/tests/htmlsubtitles$(EXESUF)
+
+FATE_SAMPLES_ENC_RECON-$(call DEMDEC, H264, H264, H264_PARSER SNOW_ENCODER SNOW_DECODER SWSCALE) += fate-enc-recon-snow-97 fate-enc-recon-snow-53
+fate-enc-recon-snow-97: CMD = run tools/enc_recon_frame_test$(EXESUF) $(TARGET_SAMPLES)/h264-conformance/SVA_NL2_E.264 snow pred=dwt97
+fate-enc-recon-snow-53: CMD = run tools/enc_recon_frame_test$(EXESUF) $(TARGET_SAMPLES)/h264-conformance/SVA_NL2_E.264 snow pred=dwt53
+$(FATE_SAMPLES_ENC_RECON-yes): tools/enc_recon_frame_test$(EXESUF)
+$(FATE_SAMPLES_ENC_RECON-yes): CMP = null
+FATE_EXTERN-yes += $(FATE_SAMPLES_ENC_RECON-yes)
+fate-enc-recon: $(FATE_SAMPLES_ENC_RECON-yes)
 
 FATE-$(CONFIG_AVCODEC) += $(FATE_LIBAVCODEC-yes)
 fate-libavcodec: $(FATE_LIBAVCODEC-yes)

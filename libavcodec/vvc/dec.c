@@ -301,7 +301,7 @@ static void ibc_tl_init(TabList *l, VVCFrameContext *fc)
     const int has_ibc    = sps ? sps->r->sps_ibc_enabled_flag : 0;
     const int changed    = fc->tab.sz.chroma_format_idc != chroma_idc ||
         fc->tab.sz.ctu_height != ctu_height ||
-        fc->tab.sz.ctu_size != ctu_size ||
+        fc->tab.sz.ctu_size != ctu_size * ctu_size ||
         fc->tab.sz.pixel_shift != ps;
 
     fc->tab.sz.ibc_buffer_width = ctu_size ? 2 * MAX_CTU_SIZE * MAX_CTU_SIZE / ctu_size : 0;
@@ -369,13 +369,11 @@ static int pic_arrays_init(VVCContext *s, VVCFrameContext *fc)
     const VVCPPS *pps            = fc->ps.pps;
     const int ctu_count          = pps->ctb_count;
     const int pic_size_in_min_pu = pps->min_pu_width * pps->min_pu_height;
-    int ret;
 
     free_cus(fc);
 
-    ret = frame_context_for_each_tl(fc, tl_create);
-    if (ret < 0)
-        return ret;
+    if (frame_context_for_each_tl(fc, tl_create) < 0)
+        goto fail;
 
     // for error handling case, we may call free_cus before VVC_TASK_STAGE_INIT, so we need to set cus to 0 here
     memset(fc->tab.cus, 0, sizeof(*fc->tab.cus) * ctu_count);
@@ -386,7 +384,7 @@ static int pic_arrays_init(VVCContext *s, VVCFrameContext *fc)
         av_refstruct_pool_uninit(&fc->rpl_tab_pool);
         fc->rpl_tab_pool = av_refstruct_pool_alloc(ctu_count * sizeof(RefPicListTab), 0);
         if (!fc->rpl_tab_pool)
-            return AVERROR(ENOMEM);
+            goto fail;
     }
 
     if (fc->tab.sz.pic_size_in_min_pu != pic_size_in_min_pu) {
@@ -394,7 +392,7 @@ static int pic_arrays_init(VVCContext *s, VVCFrameContext *fc)
         fc->tab_dmvr_mvf_pool = av_refstruct_pool_alloc(
             pic_size_in_min_pu * sizeof(MvField), AV_REFSTRUCT_POOL_FLAG_ZERO_EVERY_TIME);
         if (!fc->tab_dmvr_mvf_pool)
-            return AVERROR(ENOMEM);
+            goto fail;
     }
 
     fc->tab.sz.ctu_count          = pps->ctb_count;
@@ -410,6 +408,11 @@ static int pic_arrays_init(VVCContext *s, VVCFrameContext *fc)
     fc->tab.sz.pixel_shift        = sps->pixel_shift;
 
     return 0;
+
+fail:
+    fc->tab.sz.ctu_count = 0;
+    pic_arrays_free(fc);
+    return AVERROR(ENOMEM);
 }
 
 int ff_vvc_per_frame_init(VVCFrameContext *fc)
@@ -825,8 +828,12 @@ static int frame_start(VVCContext *s, VVCFrameContext *fc, SliceContext *sc)
 
     av_frame_unref(fc->output_frame);
 
-    if ((ret = ff_vvc_output_frame(s, fc, fc->output_frame,rsh->sh_no_output_of_prior_pics_flag, 0)) < 0)
-        goto fail;
+    /* Do not abort the current picture when outputting an earlier one
+     * fails: decode and submit it, then report the error afterwards. */
+    fc->output_error = ff_vvc_output_frame(s, fc, fc->output_frame,
+                                          rsh->sh_no_output_of_prior_pics_flag, 0);
+    if (fc->output_error < 0)
+        av_frame_unref(fc->output_frame);
 
     if ((ret = ff_vvc_frame_rpl(s, fc, sc)) < 0)
         goto fail;
@@ -946,6 +953,9 @@ static int decode_slice(VVCContext *s, VVCFrameContext *fc, AVBufferRef *buf_ref
     SliceContext *sc;
     const int is_first_slice = !fc->nb_slices;
 
+    if (fc->nb_slices >= VVC_MAX_SLICES)
+        return AVERROR_INVALIDDATA;
+
     ret = slices_realloc(fc);
     if (ret < 0)
         return ret;
@@ -958,6 +968,15 @@ static int decode_slice(VVCContext *s, VVCFrameContext *fc, AVBufferRef *buf_ref
         ret = frame_setup(fc, s);
         if (ret < 0)
             return ret;
+    } else {
+        const H266RawSlice *first = fc->slices[0]->ref;
+        const H266RawSlice *slice = sc->ref;
+
+        if (slice->ph != first->ph || slice->pps != first->pps) {
+            av_log(fc->log_ctx, AV_LOG_ERROR,
+                   "Slice does not use the PH and PPS of the first slice.\n");
+            return AVERROR_INVALIDDATA;
+        }
     }
 
     ret = slice_start(sc, s, fc, unit, is_first_slice);
@@ -1127,6 +1146,8 @@ static int wait_delayed_frame(VVCContext *s, AVFrame *output, int *got_output)
 
     if (!ret) {
         ret = frame_end(s, delayed);
+        if (ret >= 0 && delayed->output_error < 0)
+            ret = delayed->output_error;
         if (ret >= 0 && delayed->output_frame->buf[0] && output) {
             av_frame_move_ref(output, delayed->output_frame);
             *got_output = 1;
@@ -1142,14 +1163,14 @@ static int submit_frame(VVCContext *s, VVCFrameContext *fc, AVFrame *output, int
     int ret;
 
     if (s->avctx->hwaccel) {
-        if (ret = FF_HW_SIMPLE_CALL(s->avctx, end_frame) < 0) {
+        if ((ret = FF_HW_SIMPLE_CALL(s->avctx, end_frame)) < 0) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "Hardware accelerator failed to decode picture\n");
             ff_vvc_unref_frame(fc, fc->ref, ~0);
             return ret;
         }
     } else {
-        if (ret = ff_vvc_frame_submit(s, fc) < 0) {
+        if ((ret = ff_vvc_frame_submit(s, fc)) < 0) {
             ff_vvc_report_frame_finished(fc->ref);
             return ret;
         }

@@ -35,7 +35,7 @@
 #include "config.h"
 #include "swscale_internal.h"
 #include "swscale.h"
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
 #include "vulkan/ops.h"
 #endif
 
@@ -252,6 +252,23 @@ static void lumRangeFromJpeg16_c(int16_t *_dst, int width,
     int32_t *dst = (int32_t *) _dst;
     for (i = 0; i < width; i++)
         dst[i] = ((int64_t) dst[i] * coeff + offset) >> 18;
+}
+
+static void round_xyz12(uint8_t *plane, int stride, int width, int height, int y,
+                        int big_endian)
+{
+    uint8_t *ptr = plane + stride * y;
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < 3 * width; j++) {
+            unsigned v = big_endian ? AV_RB16(ptr + 2 * j) : AV_RL16(ptr + 2 * j);
+            v = FFMIN(v + 8, UINT16_MAX) & 0xFFF0;
+            if (big_endian)
+                AV_WB16(ptr + 2 * j, v);
+            else
+                AV_WL16(ptr + 2 * j, v);
+        }
+        ptr += stride;
+    }
 }
 
 
@@ -552,6 +569,11 @@ int ff_swscale(SwsInternal *c, const uint8_t *const src[], const int srcStride[]
             fillPlane(dst[3], dstStride[3], length, height, offset, 255);
     }
 
+    /* XYZ is scaled on its codes like 16-bit RGB */
+    if (c->srcXYZ && c->dstXYZ)
+        round_xyz12(dst[0], dstStride[0], dstW, dstY - lastDstY, lastDstY - dstSliceY,
+                    isBE(dstFormat));
+
 #if HAVE_MMXEXT_INLINE
     if (av_get_cpu_flags() & AV_CPU_FLAG_MMXEXT)
         __asm__ volatile ("sfence" ::: "memory");
@@ -576,6 +598,7 @@ int ff_swscale(SwsInternal *c, const uint8_t *const src[], const int srcStride[]
  */
 static void solve_range_convert(uint16_t src_min, uint16_t src_max,
                                 uint16_t dst_min, uint16_t dst_max,
+                                uint16_t src_ref, uint16_t dst_ref,
                                 int src_bits, int src_shift, int mult_shift,
                                 uint32_t *coeff, int64_t *offset)
 {
@@ -583,8 +606,8 @@ static void solve_range_convert(uint16_t src_min, uint16_t src_max,
     uint16_t dst_range = dst_max - dst_min;
     int total_shift = mult_shift + src_shift;
     *coeff = AV_CEIL_RSHIFT(((uint64_t) dst_range << total_shift) / src_range, src_shift);
-    *offset = ((int64_t) dst_max << total_shift) -
-              ((int64_t) src_max << src_shift) * *coeff +
+    *offset = ((int64_t) dst_ref << total_shift) -
+              ((int64_t) src_ref << src_shift) * *coeff +
               (1U << (mult_shift - 1));
 }
 
@@ -597,6 +620,7 @@ static void init_range_convert_constants(SwsInternal *c)
     const uint16_t mpeg_min = 16U << (bit_depth - 8);
     const uint16_t mpeg_max_lum = 235U << (bit_depth - 8);
     const uint16_t mpeg_max_chr = 240U << (bit_depth - 8);
+    const uint16_t chr_center = 128U << (bit_depth - 8);
     const uint16_t jpeg_max = (1U << bit_depth) - 1;
     uint16_t src_min, src_max_lum, src_max_chr;
     uint16_t dst_min, dst_max_lum, dst_max_chr;
@@ -616,9 +640,11 @@ static void init_range_convert_constants(SwsInternal *c)
         dst_max_chr = jpeg_max;
     }
     solve_range_convert(src_min, src_max_lum, dst_min, dst_max_lum,
+                        src_max_lum, dst_max_lum,
                         src_bits, src_shift, mult_shift,
                         &c->lumConvertRange_coeff, &c->lumConvertRange_offset);
     solve_range_convert(src_min, src_max_chr, dst_min, dst_max_chr,
+                        chr_center, chr_center,
                         src_bits, src_shift, mult_shift,
                         &c->chrConvertRange_coeff, &c->chrConvertRange_offset);
 }
@@ -627,7 +653,7 @@ av_cold void ff_sws_init_range_convert(SwsInternal *c)
 {
     c->lumConvertRange = NULL;
     c->chrConvertRange = NULL;
-    if (c->opts.src_range != c->opts.dst_range && !isAnyRGB(c->opts.dst_format) && c->dstBpc < 32) {
+    if (c->opts.src_range != c->opts.dst_range && !isAnyRGB(c->opts.dst_format)) {
         init_range_convert_constants(c);
         if (c->dstBpc <= 14) {
             if (c->opts.src_range) {
@@ -726,7 +752,7 @@ static void reset_ptr(const uint8_t *src[], enum AVPixelFormat format)
 }
 
 static int check_image_pointers(const uint8_t * const data[4], enum AVPixelFormat pix_fmt,
-                                const int linesizes[4])
+                                const int linesizes[4], int h)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
     int i;
@@ -735,7 +761,7 @@ static int check_image_pointers(const uint8_t * const data[4], enum AVPixelForma
 
     for (i = 0; i < 4; i++) {
         int plane = desc->comp[i].plane;
-        if (!data[plane] || !linesizes[plane])
+        if (!data[plane] || !linesizes[plane] || FFABS((int64_t)linesizes[plane]) * h > INT_MAX)
             return 0;
     }
 
@@ -1060,12 +1086,12 @@ static int scale_internal(SwsContext *sws,
         return AVERROR(EINVAL);
     }
 
-    if (!check_image_pointers(srcSlice, sws->src_format, srcStride)) {
-        av_log(c, AV_LOG_ERROR, "bad src image pointers\n");
+    if (!check_image_pointers(srcSlice, sws->src_format, srcStride, sws->src_h)) {
+        av_log(c, AV_LOG_ERROR, "bad src image pointers or strides\n");
         return AVERROR(EINVAL);
     }
-    if (!check_image_pointers((const uint8_t* const*)dstSlice, sws->dst_format, dstStride)) {
-        av_log(c, AV_LOG_ERROR, "bad dst image pointers\n");
+    if (!check_image_pointers((const uint8_t* const*)dstSlice, sws->dst_format, dstStride, sws->dst_h)) {
+        av_log(c, AV_LOG_ERROR, "bad dst image pointers or strides\n");
         return AVERROR(EINVAL);
     }
 
@@ -1108,7 +1134,7 @@ static int scale_internal(SwsContext *sws,
         int x,y;
 
         av_fast_malloc(&c->rgb0_scratch, &c->rgb0_scratch_allocated,
-                       FFABS(srcStride[0]) * srcSliceH + 32);
+                       FFABS((int64_t)srcStride[0]) * srcSliceH + 32);
         if (!c->rgb0_scratch)
             return AVERROR(ENOMEM);
 
@@ -1123,11 +1149,11 @@ static int scale_internal(SwsContext *sws,
         src2[0] = base;
     }
 
-    if (c->srcXYZ && !(c->dstXYZ && sws->src_w==sws->dst_w && sws->src_h==sws->dst_h)) {
+    if (c->srcXYZ && !c->dstXYZ) {
         uint8_t *base;
 
         av_fast_malloc(&c->xyz_scratch, &c->xyz_scratch_allocated,
-                       FFABS(srcStride[0]) * srcSliceH + 32);
+                       FFABS((int64_t)srcStride[0]) * srcSliceH + 32);
         if (!c->xyz_scratch)
             return AVERROR(ENOMEM);
 
@@ -1191,7 +1217,7 @@ static int scale_internal(SwsContext *sws,
                          dst2, dstStride2, dstSliceY, dstSliceH);
     }
 
-    if (c->dstXYZ && !(c->srcXYZ && sws->src_w==sws->dst_w && sws->src_h==sws->dst_h)) {
+    if (c->dstXYZ && !c->srcXYZ) {
         uint8_t *dst;
 
         if (scale_dst) {
@@ -1282,8 +1308,7 @@ static int frame_alloc_buffers(SwsContext *sws, AVFrame *frame)
         buf_start++;
     int nb_bufs = 0;
 
-    const int nb_planes = av_pix_fmt_count_planes(frame->format);
-    for (int i = 0; i < nb_planes; i++) {
+    for (int i = 0; i < 4 && pool->pools[i]; i++) {
         if (frame->data[i])
             continue; /* already ref'd by frame_ref */
 
@@ -1402,6 +1427,14 @@ int sws_receive_slice(SwsContext *sws, unsigned int slice_start,
                           dst, c->frame_dst->linesize, slice_start, slice_height);
 }
 
+static int frame_strides_fit(const AVFrame *frame)
+{
+    for (int i = 0; i < FF_ARRAY_ELEMS(frame->linesize); i++)
+        if (FFABS((int64_t)frame->linesize[i]) * frame->height > INT_MAX)
+            return 0;
+    return 1;
+}
+
 int sws_scale_frame(SwsContext *sws, AVFrame *dst, const AVFrame *src)
 {
     int ret, allocated = 0;
@@ -1431,6 +1464,11 @@ int sws_scale_frame(SwsContext *sws, AVFrame *dst, const AVFrame *src)
 
     if (!src->data[0])
         return 0;
+
+    if (!frame_strides_fit(src) || (dst->data[0] && !frame_strides_fit(dst))) {
+        av_log(sws, AV_LOG_ERROR, "Frame planes larger than INT_MAX bytes are not supported\n");
+        return AVERROR(EINVAL);
+    }
 
     const SwsGraph *top = c->graph[FIELD_TOP];
     const SwsGraph *bot = c->graph[FIELD_BOTTOM];
@@ -1497,6 +1535,12 @@ static int validate_params(SwsContext *ctx)
     return 0;
 }
 
+static int bottom_field_fits(const AVFrame *frame, const SwsFormat *field)
+{
+    const int vsub = field->desc->log2_chroma_h;
+    return 2 * AV_CEIL_RSHIFT(field->height, vsub) <= AV_CEIL_RSHIFT(frame->height, vsub);
+}
+
 int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
 {
     SwsInternal *s = sws_internal(ctx);
@@ -1508,10 +1552,22 @@ int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
     if ((ret = validate_params(ctx)) < 0)
         return ret;
 
+    const AVPixFmtDescriptor *src_desc = av_pix_fmt_desc_get(src->format);
+    const AVPixFmtDescriptor *dst_desc = av_pix_fmt_desc_get(dst->format);
+    av_assert0(src_desc);
+    av_assert0(dst_desc);
+
+    const int src_is_hwaccel = !!(src_desc->flags & AV_PIX_FMT_FLAG_HWACCEL);
+    const int dst_is_hwaccel = !!(dst_desc->flags & AV_PIX_FMT_FLAG_HWACCEL);
+    if (src_is_hwaccel && !src->hw_frames_ctx)
+        return AVERROR(EINVAL);
+    if (dst_is_hwaccel && !dst->hw_frames_ctx)
+        return AVERROR(EINVAL);
+
     /* For now, if a single frame has a context, then both need a context */
-    if (!!src->hw_frames_ctx != !!dst->hw_frames_ctx) {
+    if (src_is_hwaccel ^ dst_is_hwaccel) {
         return AVERROR(ENOTSUP);
-    } else if (!!src->hw_frames_ctx) {
+    } else if (src_is_hwaccel) {
         /* Both hardware frames must already be allocated */
         if (!src->data[0] || !dst->data[0])
             return AVERROR(EINVAL);
@@ -1530,7 +1586,7 @@ int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
         if (dev_ctx->type != AV_HWDEVICE_TYPE_VULKAN)
             return AVERROR(ENOTSUP);
 
-#if CONFIG_UNSTABLE && CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
         ret = ff_sws_vk_init(ctx, src_hwfc->device_ref);
         if (ret < 0)
             return ret;
@@ -1546,6 +1602,19 @@ int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
 
         if ((src->flags ^ dst->flags) & AV_FRAME_FLAG_INTERLACED) {
             err_msg = "Cannot convert interlaced to progressive frames or vice versa.\n";
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+
+        if (src_fmt.height <= 0 || dst_fmt.height <= 0) {
+            err_msg = "Interlaced frames need at least two lines";
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+
+        if (field == FIELD_BOTTOM &&
+            (!bottom_field_fits(src, &src_fmt) || !bottom_field_fits(dst, &dst_fmt))) {
+            err_msg = "The bottom field has fewer chroma rows than its height requires";
             ret = AVERROR(EINVAL);
             goto fail;
         }

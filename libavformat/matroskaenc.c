@@ -39,7 +39,7 @@
 #include "mux.h"
 #include "riff.h"
 #include "version.h"
-#include "vorbiscomment.h"
+#include "libavformat/vorbis/comment.h"
 #include "vvc.h"
 #include "wv.h"
 
@@ -1097,7 +1097,7 @@ static int put_flac_codecpriv(AVFormatContext *s, AVIOContext *pb,
         snprintf(buf, sizeof(buf), "0x%"PRIx64, par->ch_layout.u.mask);
         av_dict_set(&dict, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK", buf, 0);
 
-        len = ff_vorbiscomment_length(dict, vendor, NULL, 0);
+        len = ff_vorbis_comment_length(dict, vendor, NULL, 0);
         if (len < 0)
             return len;
         av_assert1(len < (1 << 24) - 4);
@@ -1105,7 +1105,7 @@ static int put_flac_codecpriv(AVFormatContext *s, AVIOContext *pb,
         avio_w8(pb, 0x84);
         avio_wb24(pb, len);
 
-        ff_vorbiscomment_write(pb, dict, vendor, NULL, 0);
+        ff_vorbis_comment_write(pb, dict, vendor, NULL, 0);
 
         av_dict_free(&dict);
     }
@@ -1735,10 +1735,6 @@ static void mkv_write_blockadditionmapping(AVFormatContext *s, const MatroskaMux
                                            const AVCodecParameters *par, AVIOContext *pb,
                                            mkv_track *track, const AVStream *st)
 {
-#if CONFIG_MATROSKA_MUXER
-    const AVDOVIDecoderConfigurationRecord *dovi;
-    const AVPacketSideData *sd;
-
     if (IS_SEEKABLE(s->pb, mkv)) {
         track->blockadditionmapping_offset = avio_tell(pb);
         // We can't know at this point if there will be a block with BlockAdditions, so
@@ -1754,13 +1750,16 @@ static void mkv_write_blockadditionmapping(AVFormatContext *s, const MatroskaMux
         }
     }
 
-    sd = av_packet_side_data_get(par->coded_side_data, par->nb_coded_side_data,
+#if CONFIG_MATROSKA_MUXER
+    const AVPacketSideData *sd =
+        av_packet_side_data_get(par->coded_side_data, par->nb_coded_side_data,
                                  AV_PKT_DATA_DOVI_CONF);
 
     if (!sd)
         return;
 
-    dovi = (const AVDOVIDecoderConfigurationRecord *)sd->data;
+    const AVDOVIDecoderConfigurationRecord *dovi =
+        (const AVDOVIDecoderConfigurationRecord *)sd->data;
     if (dovi->dv_profile <= 10) {
         ebml_master mapping;
         uint8_t buf[ISOM_DVCC_DVVC_SIZE];
@@ -3149,7 +3148,12 @@ static int mkv_write_packet_internal(AVFormatContext *s, const AVPacket *pkt)
             ret = mkv_end_cluster(s);
             if (ret < 0)
                 return ret;
-            av_log(s, AV_LOG_WARNING, "Starting new cluster due to timestamp\n");
+            av_log(s, AV_LOG_WARNING,
+                   "Starting new cluster due to %s timestamp jump in stream %d: "
+                   "timestamp %"PRId64" ms, current cluster timestamp %"PRId64
+                   " ms, delta %"PRId64" ms outside the signed 16-bit range\n",
+                   cluster_time < 0 ? "backward" : "forward", pkt->stream_index,
+                   ts, mkv->cluster_pts, cluster_time);
         }
     }
 

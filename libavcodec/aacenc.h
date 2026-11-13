@@ -71,6 +71,8 @@ typedef struct AACEncOptions {
     int mid_side;
     int intensity_stereo;
     int nmr_speed;          ///< NMR coder speed level: 0 = slowest/best, higher is faster
+    int allow_71wide;
+    int rc;                 ///< rate-control mode: 0 = cbr (corridor+bucket), 1 = abr (nd-target + slow servo)
 } AACEncOptions;
 
 /**
@@ -158,6 +160,8 @@ typedef struct AACCoefficientsEncoder {
 
 extern const AACCoefficientsEncoder ff_aac_coders[];
 
+void ff_aac_coder_init_tables(void);
+
 typedef struct AACQuantizeBandCostCacheEntry {
     float rd;
     float energy;
@@ -199,6 +203,7 @@ typedef struct NMRSlot {
     float pener[128];                            ///< band energy (PNS noise target)
     float pspread[128];                          ///< band tonality spread (1 = noise)
     uint8_t is_pns[128];                         ///< band coded as noise
+    uint8_t hftx[128];                           ///< band strongly HF-tapered: excluded from the nd stat (deficit is by design)
 } NMRSlot;
 
 typedef struct AACNMRCurves {
@@ -232,15 +237,32 @@ typedef struct AACNMRCurves {
     int64_t rc_frame_num;                        ///< frame the reservoir was last advanced for
     float   lam_rc;                              ///< global-lambda rate control: operating lambda, 0 until bootstrapped
     int     rc_fill;                             ///< virtual bit reservoir fill, + = bits saved vs nominal
+    int     rc_satrun;                           ///< consecutive frames with saturated reservoir debt (cap escalation)
+    int     rc_sat_frame;                        ///< the current frame hit a saturated overage
     int     frames_since_short;                  ///< long-block frames since the last short run (the "gap"): large = isolated transient
     int     prev_was_short;                      ///< previous frame was a short block (for run-start detection)
+    int64_t win_frame_num;                       ///< frame the window history was last advanced for
     float   run_burst;                           ///< transient bit-burst factor, set at run start and held across the short run
     float   lam_slew;                            ///< final operating lambda of the previous RC frame (slew-limiter state)
+    float   lam_slew_ch[16];                     ///< per-channel slew state for decoupled solo solves (a shared slew cross-contaminates the pair)
+    float   vbr_infl[16];                        ///< per-channel grouped-stat inflation measured at shorts-run entry
     float   nd_ema;                              ///< smoothed achieved distortion/real-mask over long-frame coded bands (1 = at threshold; >>1 flags psy-unreliable noise-class content)
     float   press;                               ///< rate-pressure ramp [0,1]: lambda EMA against anchors that scale up when nd_ema flags noise-class content (psy masks unreliable there, lambda reads inflated)
     float   lam_short_ema;                       ///< smoothed operating lambda of short frames
     float   lam_long_ema;                        ///< smoothed operating lambda of long frames
     float   lam_floor;                           ///< lambda min-tracker (snaps down, +2%/frame up): sustained-strain floor; bursty spikes at a comfortable rate cannot raise it
+
+    /* ABR: nd-target set-point servoed to hold the long-run mean rate */
+    float   abr_t;                     ///< current nd target (log2 dist/mask)
+    float   abr_glide;                 ///< pending set-point correction, drained per-frame (no discrete quality steps)
+    float   abr_ema;                   ///< EMA of real frame bits
+    float   abr_acc;                   ///< accumulated set-point correction
+    int     abr_hold;                  ///< frames since the target last stepped
+    int     abr_booted;                ///< seed correction applied (re-armed while the rate is still off)
+    int     abr_boots;                 ///< open-loop corrections fired so far
+    float   abr_alloc_ema;             ///< EMA of psy bit demand (fill shaping)
+    int     abr_longs;                 ///< long frames seen during bootstrap
+    int64_t abr_frame_num;             ///< once-per-frame servo guard
 } AACNMRCurves;
 
 typedef struct AACPCEInfo {

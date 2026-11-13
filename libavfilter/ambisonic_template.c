@@ -41,6 +41,22 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+static void fn(vector_mul_scalar)(AmbisonicContext *s, ftype *dst, const ftype *src, const ftype mul, const int N)
+{
+    VECTOR_MUL_SCALAR(dst, src, mul, N & ~15);
+
+    for (int n = N & ~15; n < N; n++)
+        dst[n] = src[n] * mul;
+}
+
+static void fn(vector_mac_scalar)(AmbisonicContext *s, ftype *dst, const ftype *src, const ftype mul, const int N)
+{
+    VECTOR_MAC_SCALAR(dst, src, mul, N & ~15);
+
+    for (int n = N & ~15; n < N; n++)
+        dst[n] += src[n] * mul;
+}
+
 static int fn(scale)(AVFilterContext *ctx, void *arg,
                      const int jobnr, const int nb_jobs)
 {
@@ -57,7 +73,7 @@ static int fn(scale)(AVFilterContext *ctx, void *arg,
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype mul = s->norm_tab[s->scaling_norm][s->seq_map[ch]];
 
-        VECTOR_MUL_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
+        fn(vector_mul_scalar)(s, dst, src, mul, nb_samples);
     }
 
     return 0;
@@ -80,13 +96,13 @@ static int fn(transform)(AVFilterContext *ctx, void *arg,
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype mul0 = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
 
-        VECTOR_MUL_SCALAR(dst, src0, mul0, FFALIGN(nb_samples, 16));
+        fn(vector_mul_scalar)(s, dst, src0, mul0, nb_samples);
 
         for (int ch2 = 1; ch2 < nb_channels; ch2++) {
             const ftype *src = (const ftype *)in->extended_data[ch2];
             const ftype mul = s->transform_mat[s->seq_map[ch]][s->seq_map[ch2]];
 
-            VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
+            fn(vector_mac_scalar)(s, dst, src, mul, in->nb_samples);
         }
     }
 
@@ -116,7 +132,7 @@ static int fn(multiply)(AVFilterContext *ctx, void *arg,
             const ftype gain = gains_tab ? gains_tab[ch2] : F(1.0);
             const ftype mul = s->norm_decode_mat[ch][ch2] * gain;
 
-            VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(in->nb_samples, 16));
+            fn(vector_mac_scalar)(s, dst, src, mul, out->nb_samples);
         }
     }
 
@@ -209,7 +225,7 @@ static int fn(level)(AVFilterContext *ctx, void *arg,
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype mul = s->level_tab[ch];
 
-        VECTOR_MUL_SCALAR(dst, dst, mul, FFALIGN(nb_samples, 16));
+        fn(vector_mul_scalar)(s, dst, dst, mul, nb_samples);
     }
 
     return 0;

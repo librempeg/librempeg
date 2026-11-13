@@ -571,9 +571,9 @@ av_cold int ff_rate_control_init(MPVMainEncContext *const m)
         char *p;
 
         /* find number of pics */
-        p = avctx->stats_in;
-        for (i = -1; p; i++)
-            p = strchr(p + 1, ';');
+        for (i = 0, p = avctx->stats_in;
+             i < INT_MAX / sizeof(RateControlEntry) && p && (p = strchr(p, ';')); i++)
+            p++;
         i += m->max_b_frames;
         if (i <= 0 || i >= INT_MAX / sizeof(RateControlEntry))
             return -1;
@@ -607,9 +607,11 @@ av_cold int ff_rate_control_init(MPVMainEncContext *const m)
                 next++;
             }
             e = sscanf(p, " in:%d ", &picture_number);
-
-            av_assert0(picture_number >= 0);
-            av_assert0(picture_number < rcc->num_entries);
+            if (e != 1 || picture_number < 0 || picture_number >= rcc->num_entries) {
+                av_log(avctx, AV_LOG_ERROR,
+                       "statistics are damaged at line %d, parser out=%d\n", i, e);
+                return -1;
+            }
             rce = &rcc->entry[picture_number];
 
             e += sscanf(p, " in:%*d out:%*d type:%d q:%f itex:%d ptex:%d "
@@ -626,6 +628,16 @@ av_cold int ff_rate_control_init(MPVMainEncContext *const m)
                 av_log(avctx, AV_LOG_ERROR,
                        "statistics are damaged at line %d, parser out=%d\n",
                        i, e);
+                return -1;
+            }
+            if (rce->pict_type < AV_PICTURE_TYPE_I || rce->pict_type > AV_PICTURE_TYPE_B) {
+                av_log(avctx, AV_LOG_ERROR, "invalid picture type %d at line %d\n",
+                       rce->pict_type, i);
+                return -1;
+            }
+            if ((unsigned)rce->f_code > MAX_FCODE || (unsigned)rce->b_code > MAX_FCODE) {
+                av_log(avctx, AV_LOG_ERROR, "invalid fcode %d / bcode %d at line %d\n",
+                       rce->f_code, rce->b_code, i);
                 return -1;
             }
 
@@ -893,14 +905,21 @@ static void adaptive_quantization(RateControlContext *const rcc,
     }
 }
 
-void ff_get_2pass_fcode(MPVMainEncContext *const m)
+int ff_get_2pass_fcode(MPVMainEncContext *const m)
 {
     MPVEncContext *const s = &m->s;
     const RateControlContext *rcc = &m->rc_context;
-    const RateControlEntry   *rce = &rcc->entry[s->picture_number];
+    const RateControlEntry   *rce;
+
+    if (s->picture_number >= rcc->num_entries) {
+        av_log(s->c.avctx, AV_LOG_ERROR, "Input is longer than 2-pass log file\n");
+        return AVERROR(EINVAL);
+    }
+    rce = &rcc->entry[s->picture_number];
 
     s->f_code = rce->f_code;
     s->b_code = rce->b_code;
+    return 0;
 }
 
 // FIXME rd or at least approx for dquant
@@ -964,14 +983,14 @@ float ff_rate_estimate_qscale(MPVMainEncContext *const m, int dry_run)
             wanted_bits_double = m->bit_rate * (double)picture_number / fps;
         else
             wanted_bits_double = m->bit_rate * (double)dts_pic->f->pts / fps;
-        if (wanted_bits_double > INT64_MAX) {
+        if (wanted_bits_double >= 0x1p63) {
             av_log(s->c.avctx, AV_LOG_WARNING, "Bits exceed 64bit range\n");
             wanted_bits = INT64_MAX;
         } else
-            wanted_bits = (int64_t)wanted_bits_double;
+            wanted_bits = FFMAX(wanted_bits_double, INT64_MIN);
     }
 
-    diff = m->total_bits - wanted_bits;
+    diff = (double)m->total_bits - wanted_bits;
     br_compensation = (a->bit_rate_tolerance - diff) / a->bit_rate_tolerance;
     if (br_compensation <= 0.0)
         br_compensation = 0.001;

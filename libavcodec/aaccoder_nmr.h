@@ -73,6 +73,9 @@
  * energy-matched noise (PNS); an audible hole sounds worse than matched noise. */
 #define NMR_PNS_HOLE_FRAC   0.5f
 #define NMR_PNS_HOLE_SPREAD 0.5f
+/* Hole fill applies at any operating lambda above this (comfortable rates
+ * included): sparse-line renditions of noise are audible at every rate. */
+#define NMR_PNS_HOLE_LAM    20.0f
 
 /* RC servo gain: scale the corridor centre by exp2(-K*fill/R) each frame to hold
  * the long-run mean rate; without it a bad centre drifts for dozens of frames. */
@@ -82,6 +85,50 @@
 /* Corridor: bisect within [lam_rc/NMR_RC_CORR, lam_rc*NMR_RC_CORR] so quality stays
  * smooth while per-frame demand is tracked; 1.5 cuts lambda jitter ~25%. */
 #define NMR_RC_CORR   1.5f
+/* Reservoir-cap re-solve coarsens at most this far past the corridor per
+ * escalation step; the residual overage rides as reservoir debt. */
+#define NMR_RC_CAPK   3.0f
+
+/* Quality-target calibration anchor: the nd set-point of -q:a 1, which lands
+ * near 128-136 kbps stereo on the tuning corpora with the q ladder's own
+ * bandwidth. The ABR servo seeds off the same constant (referenced to 81.5
+ * kbps/ch, where it measured before the bandwidth retune; the boot corrects
+ * the per-content seed error), so they are one constant. It moved
+ * -2.1 -> -0.75 with the quality-target mask floor (PSY_THRFL_QUALITY), which
+ * lowers thr_real and so lifts the whole statistic.
+ * The reachable-range clamps did NOT move
+ * with it: their floors are set by the stat's -4/band sub-mask clip, which the
+ * mask floor does not touch. Targets below them are asymptotically unreachable
+ * - the bisect rails at the finest lambda, the frame exceeds the decoder buffer
+ * and the outer re-encode loop never converges (the 384k stall). Raising them
+ * with the anchor railed the ABR servo instead: it wanted a finer target to
+ * meet its rate ask on easy content and could not ask for one. */
+#define NMR_VBR_ANCHOR (-0.75f)
+#define NMR_VBR_TMIN   (-3.8f)
+/* ABR set-point range. The coarse end is a quality guard: set-points past it
+ * buy little rate for a lot of quality (2.5 -> 6.0 at a 48k ask: -5% rate,
+ * +32% Zimtohrli), so asks below ~56 kbps stereo land above the ask - CBR
+ * is the mode for those rates. At the fine end, easy content can fall short
+ * of very high asks (no padding). */
+#define NMR_ABR_TMIN   (-3.0f)
+#define NMR_ABR_TMAX     2.5f
+
+/* ABR servo: integrator gain on the log rate error, rate EMA weight after the
+ * boot, set-point step size and minimum frames between steps */
+#define NMR_ABR_K         0.003f
+#define NMR_ABR_EMA       0.0023f
+#define NMR_ABR_STEP      0.15f
+#define NMR_ABR_HOLD      120
+/* ABR boot: open-loop correction gain over the nominal loop gain, the rate
+ * error that re-arms it, the re-arm budget and the settle time before one */
+#define NMR_ABR_BOOT_GAIN 1.2f
+#define NMR_ABR_TOL       0.02f
+#define NMR_ABR_BOOTS     6
+#define NMR_ABR_SETTLE    100
+
+/* VBR shorts: the measured stat inflation counts fully once this share of
+ * the frame's energy sits above 6 kHz */
+#define NMR_INFL_HF 0.10f
 
 /* Reservoir half-window (bits/ch); swept 512/1536/3072, 1536 optimal. */
 #define NMR_CBR_BUF   1536
@@ -98,6 +145,15 @@
 /* Zero-decision hysteresis: previously-coded bands need this margin below
  * threshold to zero (marginal bands flicker audibly otherwise). */
 #define NMR_ZERO_STICKY 0.5f
+
+/* Short-window groups keep a borderline window coded down to this fraction
+ * of its zero threshold rather than muting it inside a coded group. */
+#define NMR_GROUP_KEEP 0.25f
+
+/* HF precision taper: thresholds rise by NMR_HF_TAPER dB per kHz^2 above the
+ * knee (Apple's measured HF precision rolloff). */
+#define NMR_HF_TAPER      0.08f
+#define NMR_HF_TAPER_KNEE 8000.0f
 
 /* Transient bit-burst: an isolated onset (preceded by >= NMR_BURST_GAP long frames)
  * is coded NMR_BURST_GAIN x finer, held uniform across the run, repaid from steady stretches. */
@@ -235,6 +291,63 @@ static void nmr_bail_channel(SingleChannelElement *sce)
     }
 }
 
+/* Zero coded band b, subwindow flags included (the group flag is re-derived
+ * by ANDing). */
+static void nmr_drop_band(NMRSlot *t, int b)
+{
+    for (int w2 = 0; w2 < t->sce->ics.group_len[t->bw[b]]; w2++)
+        t->sce->zeroes[(t->bw[b] + w2)*16 + t->bg[b]] = 1;
+}
+
+/* Keep the coding sequence act[] scalefactor-chain legal on grid `step`.
+ * A band's candidates only reach up to where it quantizes to zero, so two
+ * neighbours more than SCALE_MAX_DIFF apart leave the trellis without any
+ * legal path: every later state stays FLT_MAX and the backtrack returns the
+ * finest candidates, an oversized frame. Walk the chain tracking the
+ * scalefactor range still reachable from its start, and drop the quieter
+ * band of a pair that cannot connect: within reach it would quantize to
+ * zero anyway. A no-op on a legal chain. */
+static void nmr_chain_repair(NMRSlot *t, int step)
+{
+    int rlo[128], rhi[128], n = 0;
+
+    for (int k = 0; k < t->nact; k++) {
+        const int b = t->act[k];
+        const int lo = t->blo[b], hi = lo + (t->bnc[b] - 1)*step;
+        int clo = lo, chi = hi, keep = 1;
+        while (n) {
+            const int p = t->act[n - 1];
+            clo = FFMAX(lo, rlo[n - 1] - SCALE_MAX_DIFF);
+            chi = FFMIN(hi, rhi[n - 1] + SCALE_MAX_DIFF);
+            clo = lo + (clo - lo + step - 1) / step * step;
+            if (clo <= chi) {
+                chi = lo + (chi - lo) / step * step;
+                break;
+            }
+            if (t->maxvals[t->bidx[p]] > t->maxvals[t->bidx[b]]) {
+                keep = 0;
+                break;
+            }
+            nmr_drop_band(t, p);
+            n--;
+        }
+        if (!keep) {
+            nmr_drop_band(t, b);
+            continue;
+        }
+        if (!n) {
+            clo = lo;
+            chi = hi;
+        }
+        /* n <= k: compacting in place never overwrites an unread entry */
+        t->act[n] = b;
+        rlo[n]    = clo;
+        rhi[n]    = chi;
+        n++;
+    }
+    t->nact = n;
+}
+
 /* Per-channel setup into slot t: short-block threshold shaping, the
  * allocation law, zero decisions, and the PASS 1 coarse candidate curves.
  * Returns the coded-band count; 0 = nothing codeable (caller bails). */
@@ -297,7 +410,10 @@ static int nmr_setup_channel(AVCodecContext *avctx, AACEncContext *s,
 
     /* Allocation law; short frames blend to softer energy exponents under
      * pressure (roll anti-starvation, see memory). */
-    float a_ae = 0.443f, a_at = 0.111f;
+    /* The Apple-RE constants (0.443/0.111) describe THEIR bit distribution,
+     * not this trellis's optimum: more psy-threshold influence is worth -38%
+     * Zim / +0.06 ViSQOL at 128k stereo and -15% at 64k, flat plateau beyond. */
+    float a_ae = 0.50f, a_at = 0.18f;
     if (sce->ics.num_windows == 8 && s->nmr) {
         /* blend to mask-weighted exponents under rate pressure */
         a_ae += (0.35f - a_ae) * s->nmr->press;
@@ -331,6 +447,17 @@ static int nmr_setup_channel(AVCodecContext *avctx, AACEncContext *s,
                 ratio = eside / FFMAX(mb->energy * sce->ics.group_len[w], 1e-9f);
                 zthr_mul *= 0.25f + 0.75f * av_clipf(ratio / 0.3f, 0.0f, 1.0f);
             }
+            /* HF precision taper (bitstream RE): at 128k Apple codes
+             * 7.5-12.6k ~6dB coarser and 12.6k+ ~28dB coarser than we do,
+             * funding their LF/mid SNR edge; a quadratic thr rise above the
+             * knee reproduces that rolloff */
+            float hftdb;
+            {
+                float bfreq = start * (avctx->sample_rate * (sce->ics.num_windows == 8 ? 4.0f : 0.5f)) / 1024.0f;
+                float k = FFMAX(0.0f, bfreq - NMR_HF_TAPER_KNEE) / 1000.0f;
+                hftdb = NMR_HF_TAPER * k * k;
+            }
+            t->hftx[w*16+g] = 0;
             for (int w2 = 0; w2 < sce->ics.group_len[w]; w2++) {
                 FFPsyBand *band = &s->psy.ch[s->cur_channel].psy_bands[(w+w2)*16+g];
                 ener   += band->energy;
@@ -343,11 +470,36 @@ static int nmr_setup_channel(AVCodecContext *avctx, AACEncContext *s,
                 uplim += band->threshold;
                 nz = 1;
             }
+            if (nz && sce->ics.group_len[w] > 1) {
+                /* a coded group must not mute individual borderline windows:
+                 * they share the group's scalefactor (near-free to keep) and
+                 * a 3-6ms in-band mute right before an attack reads as a
+                 * gated crunch on every beat */
+                for (int w2 = 0; w2 < sce->ics.group_len[w]; w2++) {
+                    FFPsyBand *band = &s->psy.ch[s->cur_channel].psy_bands[(w+w2)*16+g];
+                    if (sce->zeroes[(w+w2)*16+g] && start < cutoff &&
+                        band->threshold > 0.0f &&
+                        band->energy > band->threshold * zthr_mul * NMR_GROUP_KEEP) {
+                        sce->zeroes[(w+w2)*16+g] = 0;
+                        uplim += band->threshold;
+                    }
+                }
+            }
             zprev[w*16+g] = !nz;
             sce->zeroes[w*16+g] = !nz;
             t->thr_real[w*16+g] = uplim;    /* real mask, before the allocation law (PNS gate) */
-            if (nz && ener > 0.0f && uplim > 0.0f)   /* allocation law */
+            if (nz && ener > 0.0f && uplim > 0.0f) { /* allocation law */
                 uplim = expf(a_ae * logf(ener) + a_at * logf(uplim));
+                if (hftdb != 0.0f) {
+                    uplim *= powf(10.0f, hftdb * 0.1f);
+                    /* a band pushed well past its real mask reads as huge
+                     * achieved-nd; keep the deliberate deficit out of the
+                     * psy-reliability stat or press ramps into noise-class
+                     * RC on clean tonal content */
+                    if (hftdb > 2.0f)
+                        t->hftx[w*16+g] = 1;
+                }
+            }
             t->thr[w*16+g]     = uplim;
             t->pener[w*16+g]   = ener;
             t->pspread[w*16+g] = spread;
@@ -451,6 +603,9 @@ static int nmr_setup_channel(AVCodecContext *avctx, AACEncContext *s,
         t->is_pns[b] = 0;
     }
     t->nact = nbnd;
+    /* the fine pass refines around the coarse solve, so a chain legal on
+     * the coarse grid stays legal there */
+    nmr_chain_repair(t, cstep);
     return nbnd;
 }
 
@@ -502,6 +657,55 @@ static float nmr_solve_slots(AACEncContext *s, NMRSlot *const *sl, int nsl, int 
     return lam;
 }
 
+/* Mean log2 achieved dist/real-mask over the active bands of all slots at
+ * their current chosen[] - average dB-distance from the mask (Brandenburg
+ * mean-NMR). Log compression keeps unavoidably-loud bands from swamping the
+ * statistic. NAN when nothing is coded. */
+static float nmr_nd_stat(AACEncContext *s, NMRSlot *const *sl, int nsl)
+{
+    float ndsum = 0.0f;
+    int n = 0;
+    for (int k = 0; k < nsl; k++) {
+        NMRSlot *t = sl[k];
+        const float (*ndk)[NMR_NCAND] = (const float (*)[NMR_NCAND])s->nmr->nd[t->si];
+        for (int b_ = 0; b_ < t->nact; b_++) {
+            int b = t->act[b_], bi = t->bidx[b];
+            if (t->thr_real[bi] > 0.0f && t->thr[bi] > 0.0f) {
+                /* floor the sub-mask credit: a flat sf-chain over-codes
+                 * quiet bands and their unbounded negative log2 would let a
+                 * COARSER lambda read as a finer statistic */
+                ndsum += FFMAX(log2f(FFMAX(ndk[b][t->chosen[b]] * t->thr[bi] /
+                                           t->thr_real[bi], 1e-6f)), -4.0f);
+                n++;
+            }
+        }
+    }
+    return n ? ndsum / n : NAN;
+}
+
+/* Bisect ONE shared lambda across the slots so the achieved noise-to-mask
+ * statistic meets the target: quality-domain VBR. Monotone: coarser lambda ->
+ * more distortion. */
+static float nmr_solve_slots_nd(AACEncContext *s, NMRSlot *const *sl, int nsl,
+                                int step, float target, float lo_l, float hi_l,
+                                int iters)
+{
+    float lam = 1.0f;
+    for (int it = 0; it < iters; it++) {
+        float st;
+        lam = sqrtf(lo_l * hi_l);
+        nmr_eval_slots(s, sl, nsl, step, lam);
+        st = nmr_nd_stat(s, sl, nsl);
+        if (isnan(st) || it == iters - 1)
+            break;
+        if (st > target)
+            hi_l = lam;
+        else
+            lo_l = lam;
+    }
+    return lam;
+}
+
 /* Write a solved slot back into its channel: band types, scalefactors, and the
  * SCALE_MAX_DIFF legality fixups. Verbatim from the pre-pool single-channel tail. */
 static void nmr_commit_channel(AACEncContext *s, NMRSlot *t)
@@ -521,19 +725,10 @@ static void nmr_commit_channel(AACEncContext *s, NMRSlot *t)
     }
 
 
-    {   /* record the bits this solve accounted for; the encoder compares them
-         * against the channel's real output to keep the budget honest */
-        int tot = 0, prevb = -1;
-        for (int b = 0; b < t->nbnd; b++) {
-            if (t->is_pns[b])
-                continue;
-            tot += nb[b][t->chosen[b]];
-            if (prevb >= 0)
-                tot += NMR_SFBITS((t->blo[b]+t->chosen[b]*NMR_STEP) - (t->blo[prevb]+t->chosen[prevb]*NMR_STEP));
-            prevb = b;
-        }
-        s->nmr->counted[t->cur_ch] = tot;
-    }
+    /* record the bits this solve accounted for; the encoder compares them
+     * against the channel's real output to keep the budget honest. Only the
+     * surviving active bands are coded: bands shed for legality are not. */
+    s->nmr->counted[t->cur_ch] = nmr_slot_bits(t, nb, NMR_STEP);
 
     /* SCALE_MAX_DIFF condition:
      * re-clamp, codebook fixup, drop uncodeable, set global gain
@@ -603,9 +798,22 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
     int is8_any = 0;
     float lam;
     float rc_off = 1.0f, lam_dem = 0.0f;
+    /* the outer loop's starting lambda: legality caps scale with lambda
+     * relative to it, so they only shrink on a hard-overflow retry */
+    const float lam_ref = (avctx->flags & AV_CODEC_FLAG_QSCALE) && avctx->global_quality > 0 ?
+                          avctx->global_quality : 120.0f;
 
     for (int k = 0; k < nsl; k++)
         is8_any |= sl[k]->is8;
+
+    /* decoupled solo solves keep per-channel slew state: sharing one
+     * lam_slew clamps each channel against the OTHER's operating lambda */
+    float *vslew_st = &s->nmr->lam_slew;
+    if (nsl == 1 && s->channels > 1) {
+        vslew_st = &s->nmr->lam_slew_ch[sl[0]->cur_ch & 15];
+        if (*vslew_st <= 0.0f)
+            *vslew_st = s->nmr->lam_slew;
+    }
 
     if (s->psy.bitres.alloc >= 0)
         destbits = s->psy.bitres.alloc *
@@ -632,7 +840,92 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
         destbits = av_clip(destbits + FFMIN(extra, avail), 64, 6800 * chans);
     }
 
-    if (rc_global) {
+    int vbr = (avctx->flags & AV_CODEC_FLAG_QSCALE) && s->nmr;
+    int abr = !vbr && s->options.rc == 1 && avctx->bit_rate > 0 && s->nmr;
+    int vbr_subst = 1;
+    float vbr_t = 0.0f;
+    if (abr) {
+        /* ABR: same quality-target solve, set-point owned by the rate servo */
+        vbr_t = s->nmr->abr_t;
+        vbr   = 1;
+    } else if (vbr) {
+        /* nd-target VBR: constant achieved noise-to-mask, bits float. */
+        /* target in log2(dist/real-mask), anchored so -q:a 1 lands near
+         * 128 kbps stereo on the tuning corpus; higher q is finer, each q
+         * doubling ~ -1.2 */
+        vbr_t = FFMAX(NMR_VBR_ANCHOR - 1.2f * log2f(avctx->global_quality > 0 ?
+                                            avctx->global_quality / (float)FF_QP2LAMBDA : 1.0f),
+                      NMR_VBR_TMIN);
+    }
+    if (vbr && is8_any) {
+        /* short frames: the grouped-band statistic is inflated (same reason
+         * nd_ema excludes shorts), so they bisect against an offset target
+         * rather than the long-frame one - and never write solver state
+         * (transient-dense content would otherwise starve the long-frame
+         * warm start of updates). Warm off the surrounding operating point. */
+        float lam0 = *vslew_st > 0.0f ? FFMIN(*vslew_st, 1e4f) : 0.0f;
+        float *infl = &s->nmr->vbr_infl[sl[0]->cur_ch & 15];
+        if (lam0 > 0.0f) {
+            /* measured stat offset, decided at shorts-run entry: evaluate
+             * the grouped stat at the long-anchor lambda - continuity says
+             * true quality is on target there, so any excess IS this
+             * content's inflation. Broadband beats (velvet) measure +2..+4,
+             * tonal musical decays measure none; the old fixed +3 picked
+             * one class and audibly damaged the other. Re-measured every
+             * short frame: run-entry-only attribution tars a whole tonal
+             * decay run with its mini-attack entry frame. */
+            float st0, ehf = 0.0f, etot = 0.0f, hfw;
+            nmr_eval_slots(s, sl, nsl, cstep, lam0);
+            st0 = nmr_nd_stat(s, sl, nsl);
+            /* the stat reads inflated on BOTH classes; audibility does not.
+             * Coarse shorts hide under HF-dominant transients (hats, claps)
+             * and stick out on LF/mid tonal material - weight the offset by
+             * the frame's HF energy share. */
+            for (int k = 0; k < nsl; k++)
+                for (int b_ = 0; b_ < sl[k]->nact; b_++) {
+                    int b = sl[k]->act[b_], bi = sl[k]->bidx[b];
+                    float en = sl[k]->pener[bi];
+                    int bin = sl[k]->bst[b] - sl[k]->bw[b]*128;
+                    etot += en;
+                    if (bin * (avctx->sample_rate * 4.0f) / 1024.0f > 6000.0f)
+                        ehf += en;
+                }
+            hfw = etot > 0.0f ? av_clipf(ehf / (etot * NMR_INFL_HF), 0.0f, 1.0f) : 1.0f;
+            *infl = isnan(st0) ? 0.0f : av_clipf(st0 - vbr_t, 0.0f, 4.0f) * hfw;
+        }
+        if (lam0 > 0.0f)
+            lam = nmr_solve_slots_nd(s, sl, nsl, cstep, vbr_t + *infl,
+                                     lam0/32.0f, FFMIN(lam0*32.0f, 1e4f), NMR_CWARM + 2);
+        else
+            lam = nmr_solve_slots_nd(s, sl, nsl, cstep, vbr_t, 1e-9f, 1e4f, NMR_ITERS);
+        if (lam0 > 0.0f) {
+            /* the offset-bisect assumes isolated transients between long
+             * anchors; on continuous-shorts content the per-frame grouped
+             * stat is bisect noise and lambda careens across decades -
+             * audible as whooshing. Hold shorts to the same near-constant
+             * run slew CBR uses (dives toward finer stay free: transient
+             * bits float by design). */
+            float kup = s->nmr->prev_was_short ? NMR_SLEW_RUN : NMR_SLEW;
+            if (lam > lam0 * kup || lam < lam0 / 4.0f) {
+                lam = av_clipf(lam, lam0 / 4.0f, lam0 * kup);
+                nmr_eval_slots(s, sl, nsl, cstep, lam);
+            }
+        }
+        vbr_subst = 0;
+    } else if (vbr) {
+        /* warm-started off the previous frame's lambda */
+        float lam0 = s->nmr->lam[sl[0]->cur_ch];
+        lam = 1.0f;
+        if (lam0 > 0.0f) {
+            lam0 = FFMIN(lam0, 1e4f);
+            lam = nmr_solve_slots_nd(s, sl, nsl, cstep, vbr_t,
+                                     lam0/32.0f, FFMIN(lam0*32.0f, 1e4f), NMR_CWARM + 2);
+            if (lam < lam0/16.0f || lam > lam0*16.0f)
+                lam0 = 0.0f;
+        }
+        if (lam0 <= 0.0f)
+            lam = nmr_solve_slots_nd(s, sl, nsl, cstep, vbr_t, 1e-9f, 1e4f, NMR_ITERS);
+    } else if (rc_global) {
         /* corridor bisect around the servoed centre; pressure = stateless
          * rc_off multiplier (folding it into lam_rc winds up) */
         float R = avctx->bit_rate * 1024.0 / avctx->sample_rate;
@@ -656,7 +949,36 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
         /* legality cap only; no spend-floor (rc_off spends the bank) */
         rc_cap   = FFMIN(hardcap, (s->nmr->rc_fill + rc_rate_frame + rc_bmax) * chans / s->channels);
         if (tot > rc_cap) {
-            lam = nmr_solve_slots(s, sl, nsl, cstep, rc_cap, lam, 1e4f, NMR_CITERS);
+            /* reservoir-empty: coarsen, but never past a bounded excursion
+             * of the corridor. The coarse grid's bit curve is steppy: an
+             * unbounded fit here can jump lambda by orders of magnitude and
+             * potato-frame the burst recovery frame (audible LF scratch).
+             * The fine pass works from the bounded lambda, and the reservoir
+             * cap is enforced once more on the fine grid after it, where the
+             * fit only moves lambda as far as the frame really needs. */
+            lam = nmr_solve_slots(s, sl, nsl, cstep, rc_cap, lam, lam * NMR_RC_CAPK, NMR_CITERS);
+            tot = 0;
+            for (int k = 0; k < nsl; k++)
+                tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], cstep);
+            if (tot > rc_cap && s->nmr->rc_fill <= -(rc_bmax * 9 / 10)) {
+                /* the debt ledger clips at -rc_bmax: with no capacity
+                 * left, further overage would be silently forgiven and
+                 * sustained transient content rides hot forever (a
+                 * castanets roll hit 215 kbps for its first second on a
+                 * 128k ask). A one-frame hard fit trades that for a
+                 * potato frame (audible click); instead the bound
+                 * ESCALATES with consecutive saturated frames - chronic
+                 * rolls converge within a few frames, isolated bursts
+                 * never see more than one escalation step. */
+                float ek = NMR_RC_CAPK * (1 + FFMIN(s->nmr->rc_satrun, 8));
+                lam = nmr_solve_slots(s, sl, nsl, cstep, rc_cap, lam, lam * ek, NMR_CITERS);
+                s->nmr->rc_sat_frame = 1;
+                tot = 0;
+                for (int k = 0; k < nsl; k++)
+                    tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], cstep);
+            }
+            if (tot > hardcap)   /* decoder-buffer legality is absolute */
+                lam = nmr_solve_slots(s, sl, nsl, cstep, hardcap, lam, 1e4f, NMR_CITERS);
         }
     } else {
         /* per-frame bisection, warm-started off the previous frame's lambda;
@@ -704,7 +1026,16 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
             }
         }
         /* fine pass: narrow corridor around the coarse solve */
-        if (rc_global)
+        if (vbr && !vbr_subst) {
+            float infl2 = is8_any ? s->nmr->vbr_infl[sl[0]->cur_ch & 15] : 0.0f;
+            lam = nmr_solve_slots_nd(s, sl, nsl, NMR_STEP, vbr_t + infl2,
+                                     lam/32.0f, FFMIN(lam*32.0f, 1e4f), NMR_IFINE);
+        } else if (vbr)
+            /* wide re-bisect: the fine grid sits systematically finer than
+             * the coarse grid at equal lambda, well past a 1-octave bracket */
+            lam = nmr_solve_slots_nd(s, sl, nsl, NMR_STEP, vbr_t,
+                                     lam/32.0f, FFMIN(lam*32.0f, 1e4f), NMR_IFINE);
+        else if (rc_global)
             lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, destbits, lam/2.0f, lam*2.0f, NMR_RC_FITERS);
         else
             lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, destbits, lam/16.0f, lam*16.0f, NMR_IFINE);
@@ -712,8 +1043,146 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
 
     lam_dem = lam;   /* demand-solved lambda, pre bucket clamp: what content wants */
 
+    if (vbr) {
+        /* quality slew: lambda moves smoothly, bits follow content (the same
+         * anti-flutter rule the CBR path uses; unconstrained per-frame lambda
+         * reads as framerate-rate quality modulation). Low-content frames
+         * (silence, stop-gaps) rail lambda high legitimately - they must
+         * neither be clamped nor write back solver state, or every gap
+         * poisons the slew/warm-start and the solve re-traps at the rail. */
+        int subst = 0;
+        float st_fin = nmr_nd_stat(s, sl, nsl);
+        for (int k = 0; k < nsl; k++)
+            subst += sl[k]->nact;
+        /* a frame counts as an operating point only if it bisected the
+         * statistic (not a short frame holding lambda) and the solve
+         * actually REACHED the target: cheap frames (room tone, gaps) sit
+         * far below it at any lambda and rail high while costing nothing */
+        /* two-sided: a frame railed COARSE (st far above target, e.g. the
+         * first content frames of a quiet channel bisecting from nothing)
+         * is no more an operating point than a railed-fine cheap frame -
+         * writing its rail lambda builds a slew prison the channel then
+         * climbs out of one rung per frame, muffling the stream head */
+        subst = vbr_subst && subst >= 8 && !isnan(st_fin) &&
+                st_fin > vbr_t - 0.5f && st_fin < vbr_t + 0.5f;
+        if (subst) {
+            if (*vslew_st > 0.0f) {
+                /* only bisected LONG frames land here (shorts run free); on
+                 * steady-tonal content per-frame lambda jitter reads as
+                 * framerate-rate noise modulation (see NMR_RC_CORR) */
+                if (lam > *vslew_st * NMR_SLEW || lam < *vslew_st / NMR_SLEW) {
+                    lam = av_clipf(lam, *vslew_st / NMR_SLEW, *vslew_st * NMR_SLEW);
+                    nmr_eval_slots(s, sl, nsl, NMR_STEP, lam);
+                }
+            }
+            *vslew_st = s->nmr->lam_slew = lam;
+        } else if (is8_any && *vslew_st > 0.0f) {
+            /* short frames: PASS 2 re-bisects the inflated grouped stat on
+             * a fresh +-32x bracket, undoing any earlier bound - the clamp
+             * must sit here, after the last solve (love.flac whoosh: lambda
+             * railed at exactly lam*32 through an all-shorts passage) */
+            float kup  = s->nmr->prev_was_short ? NMR_SLEW_RUN : NMR_SLEW;
+            float lam0 = FFMIN(*vslew_st, 1e4f);
+            if (lam > lam0 * kup || lam < lam0 / 4.0f) {
+                lam = av_clipf(lam, lam0 / 4.0f, lam0 * kup);
+                nmr_eval_slots(s, sl, nsl, NMR_STEP, lam);
+            }
+        }
+        vbr_subst = subst;
+    }
+    if (vbr) {
+        /* legality only: a frame may never exceed the bit reservoir bound.
+         * Side bits ride on top of the trellis count; a negative side
+         * estimate must never enlarge the cap. The cap is the format limit
+         * at the reference lambda (the -q:a quality itself for VBR) and
+         * only shrinks on an outer hard-overflow retry, so the retry
+         * converges. */
+        int hardcap = av_clip((int)(5800.f * FFMIN(1.f, lambda / lam_ref)), 256, 5800) * chans;
+        int tot = 0;
+        if (s->nmr->side_inited)
+            hardcap = FFMAX(hardcap - (int)(FFMAX(s->nmr->side_ema, 0.0f) * chans / s->channels), 256);
+        for (int k = 0; k < nsl; k++)
+            tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], NMR_STEP);
+        if (abr && s->nmr->abr_ema < rc_rate_frame) {
+            /* bits-fill: under the long-run target, top an easy frame up
+             * toward the ask by moving lambda FINER only - the quality
+             * target is a floor, never traded away. Spends the rate the
+             * user asked for on sub-mask margin the nd statistic cannot
+             * see (it clips at -4/band); without this, stat-transparent
+             * content caps the rate below any ask. Active from frame one
+             * (the immature EMA reads as a deficit, so the stream head is
+             * held near the ask) and fades continuously as the EMA
+             * converges - a boot-gated fill flips regimes at ~2s, an
+             * audible quality step.
+             * The fill target follows the psy PE demand shape: per-frame
+             * demand carries perceptual information the nd model does not
+             * (the constant-lambda lesson) - and routing it through the
+             * fill keeps the quality floor intact. */
+            float dshape = 1.0f;
+            int fill;
+            if (s->psy.bitres.alloc > 0) {
+                float *aema = &s->nmr->abr_alloc_ema;
+                if (*aema <= 0.0f) *aema = s->psy.bitres.alloc;
+                else *aema += 0.01f * (s->psy.bitres.alloc - *aema);
+                dshape = av_clipf(s->psy.bitres.alloc / *aema, 0.6f, 1.7f);
+            }
+            fill = (int)((rc_rate_frame + (rc_rate_frame - (int)s->nmr->abr_ema)) * dshape) *
+                   chans / s->channels;
+            fill = FFMIN3(fill, 3 * rc_rate_frame * chans / s->channels / 2, hardcap);
+            if (tot < fill) {
+                /* the fill dive is the easy-frame operating point: slew it
+                 * like any other lambda move and let it carry the
+                 * continuity state, or per-frame depth variation reads as
+                 * frame-rate HF wobble */
+                float flo = lam / 64.0f;
+                if (*vslew_st > 0.0f)
+                    flo = FFMIN(FFMAX(flo, *vslew_st / NMR_SLEW), lam);
+                lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, fill, flo, lam, NMR_RC_ITERS);
+                if (!is8_any)
+                    *vslew_st = s->nmr->lam_slew = lam;
+                tot = 0;
+                for (int k = 0; k < nsl; k++)
+                    tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], NMR_STEP);
+            }
+        }
+        if (tot > hardcap) {
+            lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, hardcap, lam, 1e4f, NMR_RC_ITERS);
+            tot = 0;
+            for (int k = 0; k < nsl; k++)
+                tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], NMR_STEP);
+            /* dense short frames at high rates can exceed the decoder
+             * buffer even at the coarsest candidate grid; an illegal frame
+             * traps the outer re-encode loop forever. Shed the highest
+             * bands until the frame fits. act[] runs window group by window
+             * group, so pick the highest band across all groups; the first
+             * band anchors the scalefactor chain and stays. */
+            while (tot > hardcap) {
+                int dropped = 0;
+                for (int k = 0; k < nsl; k++) {
+                    NMRSlot *t = sl[k];
+                    int hi = 1;
+                    if (t->nact <= 1)
+                        continue;
+                    for (int b_ = 2; b_ < t->nact; b_++)
+                        if (t->bg[t->act[b_]] >= t->bg[t->act[hi]])
+                            hi = b_;
+                    nmr_drop_band(t, t->act[hi]);
+                    memmove(&t->act[hi], &t->act[hi + 1], (t->nact - hi - 1) * sizeof(t->act[0]));
+                    t->nact--;
+                    /* the dropped band may have bridged its neighbours */
+                    nmr_chain_repair(t, NMR_STEP);
+                    dropped = 1;
+                }
+                if (!dropped)
+                    break;
+                tot = nmr_eval_slots(s, sl, nsl, NMR_STEP, lam);
+            }
+        }
+    }
+
     if (rc_global) {
-        /* legality clamp, then the quality slew limiter */
+        /* reservoir cap on the fine grid (see the coarse-pass bound above),
+         * then the quality slew limiter */
         int hardcap = av_clip((int)(5800.f * FFMIN(1.f, lambda / 120.f)), 256, 5800) * chans;
         int tot = 0, rc_cap;
         for (int k = 0; k < nsl; k++)
@@ -721,6 +1190,21 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
         rc_cap   = FFMIN(hardcap, (s->nmr->rc_fill + rc_rate_frame + rc_bmax) * chans / s->channels);
         if (tot > rc_cap) {
             lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, rc_cap, lam, 1e4f, NMR_RC_ITERS);
+        }
+        {   /* bucket-full spend floor: bits saved beyond the reservoir's
+             * remaining headroom are simply lost, so with a full bucket the
+             * plan must not sit below nominal minus what can still be
+             * banked. Without this a quiet intro poisons the corridor high
+             * and the loud entrance rate-limits through it - a muffled
+             * first second at the exact moment the listener tunes in. */
+            int headroom = rc_bmax - av_clip(s->nmr->rc_fill, -rc_bmax, rc_bmax);
+            int fbits = (rc_rate_frame - headroom) * chans / s->channels;
+            if (tot < fbits) {
+                lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, fbits, lam / 64.0f, lam, NMR_RC_ITERS);
+                tot = 0;
+                for (int k = 0; k < nsl; k++)
+                    tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], NMR_STEP);
+            }
         }
         if (s->nmr->lam_slew > 0.0f) {
             float kup, kdn;
@@ -740,10 +1224,22 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
             }
         }
         s->nmr->lam_slew = lam;
+    } else if (rc_eligible && !vbr) {
+        /* corridor not yet bootstrapped: the same bucket-full floor, so a
+         * fade-in bootstraps lam_rc at a spending operating point instead
+         * of memorizing the intro's starvation lambda */
+        int headroom = rc_bmax - av_clip(s->nmr->rc_fill, -rc_bmax, rc_bmax);
+        int fbits = (rc_rate_frame - headroom) * chans / s->channels;
+        int tot = 0;
+        for (int k = 0; k < nsl; k++)
+            tot += nmr_slot_bits(sl[k], s->nmr->nb[sl[k]->si], NMR_STEP);
+        if (tot < fbits)
+            lam = nmr_solve_slots(s, sl, nsl, NMR_STEP, fbits, lam / 64.0f, lam, NMR_RC_ITERS);
     }
 
-    for (int k = 0; k < nsl; k++)
-        s->nmr->lam[sl[k]->cur_ch] = lam;   /* warm start for the next frame */
+    if (!vbr || vbr_subst)
+        for (int k = 0; k < nsl; k++)
+            s->nmr->lam[sl[k]->cur_ch] = lam;   /* warm start for the next frame */
     {   /* nd: mean achieved dist/real-mask (dimensionless starvation +
          * noise-class signal) */
         float ndsum = 0.0f; int ndn = 0;
@@ -752,7 +1248,7 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
             float (*ndk)[NMR_NCAND] = s->nmr->nd[t->si];
             for (int b_ = 0; b_ < t->nact; b_++) {
                 int b = t->act[b_], bi = t->bidx[b];
-                if (t->thr_real[bi] > 0.0f && t->thr[bi] > 0.0f) {
+                if (t->thr_real[bi] > 0.0f && t->thr[bi] > 0.0f && !t->hftx[bi]) {
                     ndsum += ndk[b][t->chosen[b]] * t->thr[bi] / t->thr_real[bi];
                     ndn++;
                 }
@@ -816,7 +1312,9 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
                 int bi = t->bidx[b];
                 float spread = t->pspread[bi];
                 float nmr_pns, cost_keep, cost_pns, frac;
-                if (!t->sce->can_pns[bi])
+                /* zeroes[] is only set on a coded band when it was shed for
+                 * legality; such a band must not come back as noise */
+                if (!t->sce->can_pns[bi] || t->sce->zeroes[bi])
                     continue;
 
                 int was  = s->nmr->pns_prev[t->cur_ch & 15][bi];
@@ -826,13 +1324,17 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
                 /* (can_pns was already checked above; gates below fill `want`) */
                 if (t->pener[bi] > NMR_PNS_MAX_ET * t->thr_real[bi]) {
                     force_exit = 1;                       /* loud-band guard */
+                } else if (lam > NMR_PNS_HOLE_LAM &&
+                           (frac = ndk[b][t->chosen[b]] * t->thr[bi] /
+                                   FFMAX(t->pener[bi], 1e-9f)) > NMR_PNS_HOLE_FRAC * (was ? 0.7f : 1.0f) &&
+                           spread > NMR_PNS_HOLE_SPREAD) {
+                    /* Spectral-hole fill: a noise-like band whose chosen
+                     * rendition leaves most of its energy uncoded turns to
+                     * sparse lines - structure damage the NMR objective
+                     * cannot see - at ANY comfortable lambda */
+                    want = 1;
                 } else if (lam > pns_lam) {
-                    /* Spectral-hole fill: a noise-like band left mostly empty */
-                    frac = ndk[b][t->chosen[b]] * t->thr[bi] / FFMAX(t->pener[bi], 1e-9f);
-                    if (spread > NMR_PNS_HOLE_SPREAD &&
-                        frac > NMR_PNS_HOLE_FRAC * (was ? 0.7f : 1.0f)) {
-                        want = 1;
-                    } else if (ndk[b][t->chosen[b]] * t->thr[bi] >
+                    if (ndk[b][t->chosen[b]] * t->thr[bi] >
                                NMR_PNS_NDGATE * t->thr_real[bi] * (was ? 0.5f : 1.0f)) {
                         /* replace only a band coded audibly badly; cost of
                          * energy-matched noise = its non-noise-like fraction */
@@ -851,9 +1353,9 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
                     if (want) { if (*ron  < 255) (*ron)++;  *roff = 0; }
                     else      { if (*roff < 255) (*roff)++; *ron  = 0; }
                     if (force_exit)
-                        want = 0;
+                        want = was && *roff < 2;   /* tolerate 1-frame loudness blips */
                     else if (!was)
-                        want = near ? want : *ron >= NMR_PNS_ON;
+                        want = *ron >= (near ? 2 : NMR_PNS_ON);
                     else if (near)
                         want = 1;   /* physics-hysteresis: noise until audible */
                     else
@@ -865,10 +1367,15 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
                 }
             }
             if (pns_count) {
-                t->nact = 0;
-                for (int b = 0; b < t->nbnd; b++)
-                    if (!t->is_pns[b])
-                        t->act[t->nact++] = b;
+                /* filter the active list rather than rebuilding it from
+                 * nbnd: bands shed for legality must stay out */
+                int n = 0;
+                for (int b_ = 0; b_ < t->nact; b_++)
+                    if (!t->is_pns[t->act[b_]])
+                        t->act[n++] = t->act[b_];
+                t->nact = n;
+                /* noise bands leave the scalefactor chain */
+                nmr_chain_repair(t, NMR_STEP);
             }
             pns_total += pns_count;
         }
@@ -876,7 +1383,7 @@ static void nmr_solve_group(AVCodecContext *avctx, AACEncContext *s,
             /* re-solve over the survivors: at fixed lambda the allocation is
              * the same except for the repaired sf-delta chain; in bisection
              * mode re-spend the freed budget */
-            if (rc_global)
+            if (rc_global || vbr)
                 nmr_eval_slots(s, sl, nsl, NMR_STEP, lam);
             else
                 nmr_solve_slots(s, sl, nsl, NMR_STEP, destbits - pns_total * NMR_PNS_BITS,
@@ -907,7 +1414,7 @@ static void search_for_quantizers_nmr(AVCodecContext *avctx,
     /* Global-lambda RC: one solve per frame at a servoed centre lambda; the reservoir
      * holds the long-run mean rate. Bypassed for VBR (-q:a) and the bootstrap frame. */
     int rc_eligible = !(avctx->flags & AV_CODEC_FLAG_QSCALE) && avctx->bit_rate > 0 &&
-                      avctx->bit_rate_tolerance != 0;
+                      avctx->bit_rate_tolerance != 0 && s->options.rc == 0;
     /* Signed reservoir; soft steering (bounded repay + rc_off), hard cap =
      * legality only. */
     int rc_rate_frame = avctx->bit_rate * 1024.0 / avctx->sample_rate;
@@ -918,6 +1425,108 @@ static void search_for_quantizers_nmr(AVCodecContext *avctx,
 
     s->nmr->counted[s->cur_channel] = 0;
 
+    if (s->options.rc == 1 && !(avctx->flags & AV_CODEC_FLAG_QSCALE) &&
+        avctx->bit_rate > 0 && avctx->frame_num != n->abr_frame_num) {
+        /* ABR servo: integrate the log rate error, but apply it to the nd
+         * set-point in RARE, DISCRETE steps. The set-point must be
+         * quasi-static: any drift on content timescales moves lambda, and
+         * with it band/PNS/scalefactor state - measured 2x worse than a
+         * fixed target at equal mean rate. Locally this mode IS fixed-target
+         * VBR; rate honesty converges on the minutes scale. */
+        if (n->abr_frame_num == 0 && n->abr_ema <= 0.0f) {
+            /* seed the set-point from the VBR calibration anchor (see
+             * NMR_VBR_ANCHOR for the 81.5 kbps/ch reference); the servo
+             * trims the rest */
+            n->abr_t   = av_clipf(NMR_VBR_ANCHOR - 2.5f * log2f(avctx->bit_rate /
+                                  (81500.0f * s->channels)), NMR_ABR_TMIN, NMR_ABR_TMAX);
+            n->abr_ema = rc_rate_frame;
+        } else if (s->last_frame_pb_count > 0) {
+            /* bootstrap: fast rate measurement for ~2s, then one open-loop
+             * jump over the measured loop gain (~ -0.24 log2 rate per target
+             * unit) corrects the seed's per-content error; the quasi-static
+             * stepper handles drift from there */
+            /* seed on-target: an EMA warming up from zero reads as a fake
+             * deficit and the fill overspends the whole stream head */
+            if (n->abr_ema <= 0.0f)
+                n->abr_ema = rc_rate_frame;
+            n->abr_ema += (n->abr_booted ? NMR_ABR_EMA : 0.02f) *
+                          (s->last_frame_pb_count - n->abr_ema);
+            n->abr_hold++;
+            if (!n->abr_booted) {
+                n->abr_longs += sce->ics.window_sequence[0] != EIGHT_SHORT_SEQUENCE;
+                /* boot only off a REPRESENTATIVE window: an all-transient
+                 * head (castanets roll) reads over-target and would coarsen
+                 * the very content that needs bits. Time out eventually. */
+                if ((n->abr_hold >= 86 && n->abr_longs >= n->abr_hold / 2) ||
+                    n->abr_hold >= 400) {
+                    /* glide the seed correction in, never step it: a
+                     * one-frame noise-floor jump at a fixed stream time is
+                     * audible against revealing content */
+                    n->abr_glide = NMR_ABR_BOOT_GAIN * log2f(n->abr_ema / rc_rate_frame) / 0.24f;
+                    n->abr_booted = 1;
+                    n->abr_boots++;
+                    n->abr_hold   = 0;
+                }
+            } else {
+                /* Re-arm the open-loop correction while the rate is still
+                 * off. One boot leaves a residual whenever the real loop gain
+                 * differs from the nominal 0.24, and the estimator is biased
+                 * toward the ask by construction (the EMA is seeded ON target
+                 * so a cold start cannot read as a deficit), so it understates
+                 * the error it is correcting. The quasi-static stepper cannot
+                 * drain that inside a track - measured, male_speech ended a
+                 * 774-frame file 23% short and still moving. Re-measuring and
+                 * firing again converges regardless of the gain estimate, and
+                 * keeps the set-point quasi-static: corrections stay rare,
+                 * glided, and bounded in number. */
+                if (n->abr_boots < NMR_ABR_BOOTS && n->abr_glide == 0.0f &&
+                    n->abr_hold >= NMR_ABR_SETTLE &&
+                    fabsf(log2f(n->abr_ema / rc_rate_frame)) > NMR_ABR_TOL) {
+                    /* Re-seed the estimator ON target, exactly as the cold
+                     * start does - never to zero. The value is read again
+                     * before anything re-seeds it: by the integrator below
+                     * (log2f(0) is -inf, which pinned the accumulator at its
+                     * clip) and by the bits-fill later in this same frame
+                     * (a zero EMA reads as a 100% deficit and authorises a
+                     * one-frame overspend). Drop the residual integral with
+                     * it: it describes the regime being left, and the boot
+                     * is about to re-measure that same error open-loop. */
+                    n->abr_booted = 0;
+                    n->abr_ema    = rc_rate_frame;
+                    n->abr_acc    = 0.0f;
+                    n->abr_hold   = 0;
+                    n->abr_longs  = 0;
+                } else {
+                    n->abr_acc = av_clipf(n->abr_acc + NMR_ABR_K * log2f(n->abr_ema / rc_rate_frame),
+                                          -4.0f * NMR_ABR_STEP, 4.0f * NMR_ABR_STEP);
+                    /* step in calm stretches (a set-point move during a transient
+                     * section coarsens exactly what needs the bits) - but dense
+                     * content must not deadlock the servo: after 3x the hold the
+                     * step fires regardless. Large errors step at double size;
+                     * the remainder carries over instead of being discarded. */
+                    if (fabsf(n->abr_acc) >= NMR_ABR_STEP && n->abr_hold >= NMR_ABR_HOLD &&
+                        (n->frames_since_short >= 12 || n->abr_hold >= 3 * NMR_ABR_HOLD)) {
+                        float ms   = NMR_ABR_STEP * (fabsf(n->abr_acc) > 3.0f * NMR_ABR_STEP ? 2.0f : 1.0f);
+                        float step = av_clipf(n->abr_acc, -ms, ms);
+                        n->abr_glide += step;
+                        n->abr_acc  -= step;
+                        n->abr_hold  = 0;
+                    }
+                }
+            }
+            if (n->abr_glide != 0.0f) {
+                /* drain pending set-point corrections smoothly (~0.5
+                 * log2-units/s): the decision stays quasi-static and
+                 * calm-gated, only the application glides */
+                float d = av_clipf(n->abr_glide, -0.012f, 0.012f);
+                n->abr_t = av_clipf(n->abr_t + d, NMR_ABR_TMIN, NMR_ABR_TMAX);
+                n->abr_glide -= d;
+                if (fabsf(n->abr_glide) < 1e-4f)
+                    n->abr_glide = 0.0f;
+            }
+        }
+        n->abr_frame_num = avctx->frame_num;
+    }
     if (rc_eligible && !n->rc_fill_seeded) {
         /* the decoder bit reservoir starts FULL: seed it so the head may frontload */
         n->rc_fill = rc_bmax;
@@ -929,13 +1538,21 @@ static void search_for_quantizers_nmr(AVCodecContext *avctx,
                                  -rc_bmax, rc_bmax);
         n->rc_frame_num = avctx->frame_num;
         n->pending = 0;    /* a deferred first channel never crosses a frame */
+        /* consecutive saturated frames, once per frame across all element
+         * groups: any frame without a saturated overage ends the run */
+        n->rc_satrun    = n->rc_sat_frame ? n->rc_satrun + 1 : 0;
+        n->rc_sat_frame = 0;
         /* latch the RC mode per frame: a mid-frame bootstrap must not flip
          * the CPE defer logic between channels */
         n->rc_gl = rc_eligible && n->lam_rc > 0.0f;
-
-        /* Transient burst run state: set at run start and held across the run so
+    }
+    if (avctx->frame_num != n->win_frame_num) {
+        /* Window history, once per frame in every rate-control mode (the
+         * quality-target slew and the ABR servo read it too).
+         * Transient burst run state: set at run start and held across the run so
          * coding stays uniform; repaid from the reservoir's steady stretches. */
         int is_short = sce->ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE;
+        n->win_frame_num = avctx->frame_num;
         if (is_short) {
             if (!n->prev_was_short) {           /* run start */
                 if (n->frames_since_short >= NMR_BURST_GAP) {

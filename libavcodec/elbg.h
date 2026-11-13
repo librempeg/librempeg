@@ -45,13 +45,13 @@ struct ELBGContext;
  * @param flags Currently unused; must be set to 0.
  * @return < 0 in case of error, 0 otherwise
  */
-int avpriv_elbg_do(struct ELBGContext **ctx, int *points, int dim,
-                   int numpoints, int *codebook, int num_cb, int num_steps,
-                   int *closest_cb, AVLFG *rand_state, uintptr_t flags);
+int ff_elbg_do(struct ELBGContext **ctx, int *points, int dim,
+               int numpoints, int *codebook, int num_cb, int num_steps,
+               int *closest_cb, AVLFG *rand_state, uintptr_t flags);
 
 /**
  * Free an ELBGContext and reset the pointer to it.
  */
-void avpriv_elbg_free(struct ELBGContext **ctx);
+void ff_elbg_free(struct ELBGContext **ctx);
 
 #endif /* AVCODEC_ELBG_H */

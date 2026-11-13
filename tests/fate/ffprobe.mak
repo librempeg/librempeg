@@ -20,7 +20,7 @@ fate-ffprobe_xsd: $(FFPROBE_TEST_FILE)
 fate-ffprobe_xsd: CMD = run $(FFPROBE_COMMAND) -noprivate -of xml=q=1:x=1 | \
 	xmllint --schema $(SRC_PATH)/doc/ffprobe.xsd -
 
-FATE_FFPROBE-$(call FILTERDEMDECENCMUX, AEVALSRC TESTSRC ARESAMPLE, FFMETADATA, WRAPPED_AVFRAME, RAWVIDEO, NUT,   \
+FATE_FFPROBE-$(call FILTERDEMDECENCMUX, AEVALSRC TESTSRC ASF2SF, FFMETADATA, WRAPPED_AVFRAME, RAWVIDEO, NUT,   \
                                         FFMPEG LAVFI_INDEV PCM_F64BE_DECODER PCM_F64LE_DECODER PCM_S16LE_ENCODER) \
                                         += $(FFPROBE_TEST_FILE_TESTS-yes)
 

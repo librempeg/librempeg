@@ -24,15 +24,17 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('I','D','V','I'))
         return 0;
 
+    if (p->buf_size < 12)
+        return 0;
     if ((int32_t)AV_RL32(p->buf + 4) <= 0)
         return 0;
-
     if ((int32_t)AV_RL32(p->buf + 8) <= 0)
         return 0;
 
@@ -57,11 +59,10 @@ static int read_header(AVFormatContext *s)
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_DVI;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
-    st->codecpar->profile = 4;
-    st->codecpar->block_align = 0x400 * st->codecpar->ch_layout.nb_channels;
+    st->codecpar->block_align = 0x400 * nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -70,25 +71,12 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_dcidvi_demuxer = {
     .p.name         = "dcidvi",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom Dreamcast IDVI"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .p.extensions   = "idvi",
+    .p.extensions   = "dvi",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

@@ -29,7 +29,6 @@
 #include "config.h"
 
 #include "libavutil/attributes.h"
-#include "libavutil/emms.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
@@ -1222,8 +1221,6 @@ static int dvvideo_encode_frame(AVCodecContext *c, AVPacket *pkt,
     c->execute(c, dv_encode_video_segment, s->work_chunks, NULL,
                dv_work_pool_size(s->sys), sizeof(DVwork_chunk));
 
-    emms_c();
-
     *got_packet = 1;
 
     return 0;
@@ -1254,6 +1251,7 @@ const FFCodec ff_dvvideo_encoder = {
     .init           = dvvideo_encode_init,
     FF_CODEC_ENCODE_CB(dvvideo_encode_frame),
     CODEC_PIXFMTS(AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P),
+    CODEC_CHROMA_LOCS(AVCHROMA_LOC_TOPLEFT),
     .color_ranges   = AVCOL_RANGE_MPEG,
     .p.priv_class   = &dvvideo_encode_class,
 };

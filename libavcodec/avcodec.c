@@ -31,7 +31,6 @@
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
-#include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -66,6 +65,7 @@ const SideDataMap ff_sd_global_map[] = {
     { AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT },
     { AV_PKT_DATA_3D_REFERENCE_DISPLAYS,      AV_FRAME_DATA_3D_REFERENCE_DISPLAYS },
     { AV_PKT_DATA_EXIF,                       AV_FRAME_DATA_EXIF },
+    { AV_PKT_DATA_GAIN_MAP_PARAMS,            AV_FRAME_DATA_GAIN_MAP_PARAMS },
     { AV_PKT_DATA_NB },
 };
 
@@ -80,7 +80,6 @@ int avcodec_default_execute(AVCodecContext *c, int (*func)(AVCodecContext *c2, v
         if (ret)
             ret[i] = r;
     }
-    emms_c();
     return 0;
 }
 
@@ -93,7 +92,6 @@ int avcodec_default_execute2(AVCodecContext *c, int (*func)(AVCodecContext *c2, 
         if (ret)
             ret[i] = r;
     }
-    emms_c();
     return 0;
 }
 
@@ -806,6 +804,10 @@ int ff_default_get_supported_config(const AVCodecContext *avctx,
             *out_configs = NULL;
         *out_num_configs = av_popcount(alpha_modes);
         return 0;
+
+    case AV_CODEC_CONFIG_CHROMA_LOCATION:
+        WRAP_CONFIG(AVMEDIA_TYPE_VIDEO, chroma_locations, loc,
+                    enum AVChromaLocation, loc == AVCHROMA_LOC_UNSPECIFIED);
 
     default:
         return AVERROR(EINVAL);

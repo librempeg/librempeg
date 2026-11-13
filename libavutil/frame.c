@@ -21,6 +21,7 @@
 #include "buffer.h"
 #include "dict.h"
 #include "frame.h"
+#include "frame_internal.h"
 #include "imgutils.h"
 #include "mem.h"
 #include "refstruct.h"
@@ -72,7 +73,9 @@ void av_frame_free(AVFrame **frame)
 
 #define ALIGN (HAVE_SIMD_ALIGN_64 ? 64 : 32)
 
-static int get_video_buffer(AVFrame *frame, int align)
+int ff_frame_get_video_buffer(AVFrame *frame, int align,
+                              AVBufferRef *(*alloc)(void *opaque, size_t size),
+                              void *opaque)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     int ret, padded_height;
@@ -119,7 +122,7 @@ static int get_video_buffer(AVFrame *frame, int align)
         total_size += sizes[i];
     }
 
-    frame->buf[0] = av_buffer_alloc(total_size);
+    frame->buf[0] = alloc ? alloc(opaque, total_size) : av_buffer_alloc(total_size);
     if (!frame->buf[0]) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -209,7 +212,7 @@ int av_frame_get_buffer(AVFrame *frame, int align)
         return AVERROR(EINVAL);
 
     if (frame->width > 0 && frame->height > 0)
-        return get_video_buffer(frame, align);
+        return ff_frame_get_video_buffer(frame, align, NULL, NULL);
     else if (frame->nb_samples > 0 &&
              (av_channel_layout_check(&frame->ch_layout)))
         return get_audio_buffer(frame, align);
@@ -727,7 +730,7 @@ void av_frame_remove_side_data(AVFrame *frame, enum AVFrameSideDataType type)
     av_frame_side_data_remove(&frame->side_data, &frame->nb_side_data, type);
 }
 
-static int calc_cropping_offsets(size_t offsets[4], const AVFrame *frame,
+static int calc_cropping_offsets(ptrdiff_t offsets[4], const AVFrame *frame,
                                  const AVPixFmtDescriptor *desc)
 {
     for (int i = 0; frame->data[i]; i++) {
@@ -750,8 +753,8 @@ static int calc_cropping_offsets(size_t offsets[4], const AVFrame *frame,
         if (!comp)
             return AVERROR_BUG;
 
-        offsets[i] = (frame->crop_top  >> shift_y) * frame->linesize[i] +
-                     (frame->crop_left >> shift_x) * comp->step;
+        offsets[i] = (ptrdiff_t)(frame->crop_top  >> shift_y) * frame->linesize[i] +
+                     (ptrdiff_t)(frame->crop_left >> shift_x) * comp->step;
     }
 
     return 0;
@@ -760,7 +763,7 @@ static int calc_cropping_offsets(size_t offsets[4], const AVFrame *frame,
 int av_frame_apply_cropping(AVFrame *frame, int flags)
 {
     const AVPixFmtDescriptor *desc;
-    size_t offsets[4];
+    ptrdiff_t offsets[4];
     int ret;
 
     if (!(frame->width > 0 && frame->height > 0))
@@ -799,15 +802,12 @@ int av_frame_apply_cropping(AVFrame *frame, int flags)
         int min_log2_align = INT_MAX;
 
         for (int i = 0; frame->data[i]; i++) {
-            int log2_align = offsets[i] ? ff_ctz(offsets[i]) : INT_MAX;
+            int log2_align = offsets[i] ? ff_ctzll(offsets[i]) : INT_MAX;
             min_log2_align = FFMIN(log2_align, min_log2_align);
         }
 
-        /* we assume, and it should always be true, that the data alignment is
-         * related to the cropping alignment by a constant power-of-2 factor */
-        if (log2_crop_align < min_log2_align)
-            return AVERROR_BUG;
-
+        /* The data alignment is the cropping alignment scaled by a power of 2,
+         * up for multi-byte pixels and down for subsampled planes */
         if (min_log2_align < 5 && log2_crop_align != INT_MAX) {
             frame->crop_left &= ~((1 << (5 + log2_crop_align - min_log2_align)) - 1);
             ret = calc_cropping_offsets(offsets, frame, desc);

@@ -59,8 +59,8 @@ gray16be            570c9f15778f767cd5cca8fb7908f119
 gray16le            b497d74284c38464e18cf5692c523a1c
 gray9be             6ef99621245fcc00806e520a0a4419d4
 gray9le             6bbd43b7d385b5c3e299bee18a88f9e2
-grayf32be           823288e1ec497bb1f22c070e502e5272
-grayf32le           6e9ec0e1cac3617f3041e681afd2c575
+grayf32be           6d9f450742f24d969dd935f943e52b74
+grayf32le           e6188ebafd89996fb264d1f6da592f34
 nv12                1965e3826144686748f2f6b516fca5ba
 nv21                292adaf5271c5c8516b71640458c01f4
 nv24                ea9de8b47faed722ee40182f89489beb
@@ -92,6 +92,10 @@ rgb8                c90feb30c3c9391ef5f470209d7b7a15
 rgba                4d76a9542143752a4ac30f82f88f68f1
 rgba64be            a60041217f4c0cd796d19d3940a12a41
 rgba64le            ad47197774858858ae7b0c177dffa459
+rgbaf32be           30255224cbe16c571e04bbcb74f220a6
+rgbaf32le           73f6a194cae097cea6448c1facb2d7cf
+rgbf32be            a89fa50c9e278ad1e2bc44a9435c48fd
+rgbf32le            883cc75a2f3f00090b719d99e4c2b1da
 uyva                cb773ee5a9f8964b9c826d55f9f425a3
 v30xle              55147546a787bc72fcb0ca28b1456344
 vuya                9ece18a345beb17cd19e09e443eca4bf
@@ -104,11 +108,13 @@ xv36be              2261a0e3db5ee607d37f68d19704ae15
 xv36le              9202133de91bf64c76ca27d5cd0c816a
 xv48be              14373b7fe123225689e76fe2ce43fb93
 xv48le              319df9724a067c7b5efa215f9f54d127
-xyz12be             38ce311e8734b535484c2e2ba70626d0
-xyz12le             24a0e779fce6eaed687cb2c416a61eb9
+xyz12be             8ac923c86bd11a04b049d083d857d116
+xyz12le             77912a89e6525f6809d8c31fed87a439
 ya16be              9bb39f9567d807be0fb8631dcfa8d5f8
 ya16le              b13453818b83c8dc2610975095393ac1
 ya8                 d4b7a62f80681fa44c977ff3a64f4ce4
+yaf32be             a117a36318e1bba2b5265d153fb0f045
+yaf32le             ba12f8a6a60b8d367ce73dabaa790164
 yuv410p             4c0143429edd30aa01493447c90132ea
 yuv420p             2fa5b2201c75034206cc20e2c6134aed
 yuv420p10be         0931660f930d9be8aea9d0c76b406055
@@ -152,5 +158,5 @@ yuva444p16be        9fd2f00ea9bef8e488228bc0b47b28cb
 yuva444p16le        ae9fd8d1baea0f8626b963816d667d2d
 yuva444p9be         4ce11ae57780f74c78cdd5c06be4bded
 yuva444p9le         1b9cc85fd6ab0c7e240915a99e98d1c1
-yuvj420p            fb2ebba474f99a55ac838c4e0f950f6a
-yuvj444p            835a79483337d82d718175d8c6dc518c
+yuvj420p            657fc30a5c368c63bd9c76f64bd80d8d
+yuvj444p            56e15ff95296831c83e38e975a4e2927

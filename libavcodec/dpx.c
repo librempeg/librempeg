@@ -763,6 +763,9 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *p,
 
     ff_set_sar(avctx, avctx->sample_aspect_ratio);
 
+    if (avctx->skip_frame >= AVDISCARD_ALL)
+        return buf_size;
+
     if ((ret = ff_get_buffer(avctx, p, 0)) < 0)
         return ret;
 
@@ -770,13 +773,17 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *p,
     buf =  avpkt->data + offset;
     dpx->frame = p;
 
+    av_refstruct_unref(&dpx->hwaccel_picture_private);
+    ret = ff_hwaccel_frame_priv_alloc(avctx, &dpx->hwaccel_picture_private);
+    if (ret < 0)
+        return ret;
+
+    /* Everything the next frame thread needs is known, let it start */
+    ff_thread_finish_setup(avctx);
+
     /* Start */
     if (avctx->hwaccel) {
         const FFHWAccel *hwaccel = ffhwaccel(avctx->hwaccel);
-
-        ret = ff_hwaccel_frame_priv_alloc(avctx, &dpx->hwaccel_picture_private);
-        if (ret < 0)
-            return ret;
 
         ret = hwaccel->start_frame(avctx, avpkt->buf, buf, avpkt->size - offset);
         if (ret < 0)

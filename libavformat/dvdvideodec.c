@@ -252,6 +252,13 @@ static int dvdvideo_ifo_open(AVFormatContext *s)
             return AVERROR_EXTERNAL;
         }
 
+        if ((!c->opt_menu_vts && c->vmg_ifo->vmgi_mat->nr_of_vmgm_audio_streams > 8) ||
+            ( c->opt_menu_vts && c->vts_ifo->vtsi_mat->nr_of_vtsm_audio_streams > 8)) {
+            av_log(s, AV_LOG_ERROR, "Menu has invalid headers (too many audio streams)\n");
+
+            return AVERROR_INVALIDDATA;
+        }
+
         return 0;
     }
 
@@ -371,7 +378,7 @@ static int dvdvideo_menu_open(AVFormatContext *s, DVDVideoPlaybackState *state)
     state->celln_start   = state->pgc->program_map[state->entry_pgn - 1];
     state->celln_end     = state->pgc->nr_of_cells;
     state->celln         = state->celln_start;
-    if (state->celln_start > state->pgc->nr_of_cells) {
+    if (state->celln_start < 1 || state->celln_start > state->pgc->nr_of_cells) {
         av_log(s, AV_LOG_ERROR, "Invalid PGC structure: program map points to unknown cell\n");
 
         return AVERROR_INVALIDDATA;
@@ -416,7 +423,7 @@ static int dvdvideo_menu_next_ps_block(AVFormatContext *s, DVDVideoPlaybackState
     /* we were at the end of a vobu, so now go to the next one or EOF */
     if (!state->vobu_remaining && state->in_pgc) {
         if (state->vobu_next == SRI_END_OF_CELL) {
-            if (state->celln == state->celln_end && state->sector_offset > state->sector_end)
+            if (state->celln >= state->pgc->nr_of_cells)
                 return AVERROR_EOF;
 
             state->celln++;

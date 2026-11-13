@@ -56,8 +56,15 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     AKBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
+    int size;
 
-    return avio_read(pb, buf, buf_size);
+    if (pos + buf_size <= ast->start_offset)
+        return AVERROR(EIO);
+
+    size = FFMIN3(pos + buf_size - ast->start_offset, avio_size(pb) - pos, buf_size);
+
+    return avio_read(pb, buf, size);
 }
 
 static int64_t seek_data(void *opaque, int64_t offset, int whence)
@@ -65,8 +72,33 @@ static int64_t seek_data(void *opaque, int64_t offset, int whence)
     AKBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t ret;
 
-    return avio_seek(pb, offset + ast->start_offset, whence);
+    if (whence == SEEK_CUR) {
+        int64_t pos = avio_tell(pb);
+        int64_t new_offset;
+
+        new_offset = av_clip64(pos + offset, ast->start_offset, avio_size(pb) - 1);
+        ret = avio_seek(pb, new_offset, whence);
+        if (ret < 0)
+            return ret;
+
+        return ret - ast->start_offset;
+    }
+
+    if (whence & AVSEEK_SIZE) {
+        ret = avio_size(pb);
+        if (ret < 0)
+            return ret;
+
+        return ret - ast->start_offset;
+    }
+
+    ret = avio_seek(pb, offset + ast->start_offset, whence);
+    if (ret < 0)
+        return ret;
+
+    return ret - ast->start_offset;
 }
 
 static int read_header(AVFormatContext *s)
@@ -100,6 +132,7 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 1:
         codec = AV_CODEC_ID_PCM_S16LE;
+        align = 2 * channels;
         break;
     case 2:
         codec = AV_CODEC_ID_ADPCM_MS;
@@ -112,12 +145,15 @@ static int read_header(AVFormatContext *s)
     case 5:
         codec = AV_CODEC_ID_VORBIS;
         break;
+    case 6:
+        codec = AV_CODEC_ID_AAC;
+        break;
     default:
         avpriv_request_sample(s, "codec %02x", codec);
         return AVERROR_PATCHWELCOME;
     }
 
-    if (rate <= 0 || channels <= 0 || (align > 0 && channels >= INT_MAX/align))
+    if (rate <= 0 || channels <= 0)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -131,11 +167,12 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->sample_rate = rate;
     if (align > 0)
-        st->codecpar->block_align = align * channels;
+        st->codecpar->block_align = align;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    if (codec == AV_CODEC_ID_VORBIS) {
+    if (codec == AV_CODEC_ID_VORBIS ||
+        codec == AV_CODEC_ID_AAC) {
         AKBStream *ast = st->priv_data;
         int ret;
 
@@ -188,9 +225,9 @@ static int read_header(AVFormatContext *s)
 
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = ffstream(ast->xctx->streams[0])->need_parsing;
+    } else {
+        avio_seek(pb, start, SEEK_SET);
     }
-
-    avio_seek(pb, start, SEEK_SET);
 
     return 0;
 }
@@ -238,7 +275,8 @@ static int read_close(AVFormatContext *s)
         AVStream *st = s->streams[i];
         AKBStream *ast = st->priv_data;
 
-        avformat_close_input(&ast->xctx);
+        if (ast)
+            avformat_close_input(&ast->xctx);
     }
 
     return 0;

@@ -107,11 +107,11 @@ static int query_formats(const AVFilterContext *ctx,
     };
     int ret;
 
-    formats = ff_make_format_list(sample_fmts);
+    formats = ff_make_sample_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(pix_fmts);
+    formats = ff_make_pixel_format_list(pix_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
@@ -238,8 +238,8 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int rlinesize = s->out->linesize[2];
     const int width = s->out->width;
     const int height = s->out->height;
-    const int slice_start = (height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);
     const float fv = s->fade;
 
     if (fv <= 0.f) {

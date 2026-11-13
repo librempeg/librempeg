@@ -49,7 +49,7 @@ typedef struct AudioCenterCutContext {
     AVFrame *windowed_frame;
     AVFrame *windowed_out;
 
-    int (*cc_stereo)(AVFilterContext *ctx, AVFrame *out);
+    int (*cc_stereo)(AVFilterContext *ctx, AVFrame *out, const int offset);
     int (*cc_flush)(AVFilterContext *ctx, AVFrame *out);
 
     AVTXContext *tx_ctx, *itx_ctx;
@@ -159,14 +159,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_copy_props(out, in);
 
     s->in = in;
-    s->cc_stereo(ctx, out);
-
-    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    s->last_pts = out->pts + out->duration;
+    for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
+        s->cc_stereo(ctx, out, offset);
 
     if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
         for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
@@ -182,7 +176,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_inlink_request_frame(inlink);
 
         return 0;
+    } else {
+        out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     }
+
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
 
     s->in = NULL;
     ff_graph_frame_free(ctx, &in);
@@ -225,13 +227,15 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioCenterCutContext *s = ctx->priv;
-    AVFrame *in = NULL;
-    int ret, status;
+    int ret, status, available, wanted;
+    AVFrame *in;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->overlap, s->overlap, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->overlap, (available / s->overlap) * s->overlap);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 

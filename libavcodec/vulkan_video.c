@@ -16,7 +16,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "config.h"
 #include "libavutil/mem.h"
+#include "encode.h"
 #include "vulkan_video.h"
 
 #define ASPECT_2PLANE (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT)
@@ -118,7 +120,7 @@ VkVideoChromaSubsamplingFlagBitsKHR ff_vk_subsampling_from_av_desc(const AVPixFm
         return VK_VIDEO_CHROMA_SUBSAMPLING_MONOCHROME_BIT_KHR;
     else if (!desc->log2_chroma_w && !desc->log2_chroma_h)
         return VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR;
-    else if (!desc->log2_chroma_w && desc->log2_chroma_h == 1)
+    else if (desc->log2_chroma_w == 1 && !desc->log2_chroma_h)
         return VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR;
     else if (desc->log2_chroma_w == 1 && desc->log2_chroma_h == 1)
         return VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR;
@@ -542,4 +544,210 @@ fail:
 
     ff_vk_video_common_uninit(s, common);
     return err;
+}
+
+#if CONFIG_VULKAN_SEG_GATHER
+typedef struct SegGatherPushData {
+    VkDeviceAddress sparse;
+    VkDeviceAddress compacted;
+    VkDeviceAddress offset_addr;
+    uint32_t        slot_size;
+} SegGatherPushData;
+
+extern const unsigned char ff_seg_gather_comp_spv_data[];
+extern const unsigned int ff_seg_gather_comp_spv_len;
+
+int ff_vk_seg_gather_init(FFVulkanContext *s, FFVkExecPool *pool,
+                          FFVulkanShader *shd)
+{
+    int err;
+    FFVulkanDescriptorSetBinding desc_set[] = {
+        {
+            .name   = "sizes_buf",
+            .type   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .stages = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
+    };
+
+    ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
+                      (uint32_t []) { 256, 1, 1 }, 0);
+    ff_vk_shader_add_push_const(shd, 0, sizeof(SegGatherPushData),
+                                VK_SHADER_STAGE_COMPUTE_BIT);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 1, 0);
+
+    RET(ff_vk_shader_link(s, shd, ff_seg_gather_comp_spv_data,
+                          ff_seg_gather_comp_spv_len, "main"));
+    RET(ff_vk_shader_register_exec(s, pool, shd));
+
+fail:
+    return err;
+}
+
+int ff_vk_seg_gather(FFVulkanContext *s, FFVkExecContext *exec, FFVulkanShader *shd,
+                     FFVkBuffer *sizes, size_t sizes_offset, uint32_t nb_segs,
+                     FFVkBuffer *sparse, uint32_t slot_size,
+                     FFVkBuffer *compacted, size_t compacted_offset,
+                     VkDeviceAddress offset_addr)
+{
+    int err;
+    FFVulkanFunctions *vk = &s->vkfn;
+    SegGatherPushData pd = {
+        .sparse      = sparse->address,
+        .compacted   = compacted->address + compacted_offset,
+        .offset_addr = offset_addr,
+        .slot_size   = slot_size,
+    };
+
+    vk->CmdPipelineBarrier2(exec->buf, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pMemoryBarriers = &(VkMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT |
+                             VK_ACCESS_2_SHADER_WRITE_BIT,
+        },
+        .memoryBarrierCount = 1,
+    });
+
+    RET(ff_vk_shader_update_desc_buffer(s, exec, shd, 0, 0, 0,
+                                        sizes, sizes_offset, (nb_segs + 1)*sizeof(uint32_t),
+                                        VK_FORMAT_UNDEFINED));
+    ff_vk_exec_bind_shader(s, exec, shd);
+    ff_vk_shader_update_push_const(s, exec, shd, VK_SHADER_STAGE_COMPUTE_BIT,
+                                   0, sizeof(pd), &pd);
+    vk->CmdDispatch(exec->buf, nb_segs, 1, 1);
+
+    /* For the host to read the output and the packed size */
+    vk->CmdPipelineBarrier2(exec->buf, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pMemoryBarriers = &(VkMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+            .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT,
+        },
+        .memoryBarrierCount = 1,
+    });
+
+fail:
+    return err;
+}
+#endif /* CONFIG_VULKAN_SEG_GATHER */
+
+int ff_vk_encode_loop_init(FFVulkanContext *s, FFVkExecPool *pool, FFVkEncodeLoop *l,
+                           int (*submit_frame)(AVCodecContext *avctx, FFVkExecContext *exec, AVFrame *frame),
+                           int (*get_packet)(AVCodecContext *avctx, FFVkExecContext *exec, AVPacket *pkt))
+{
+    l->s            = s;
+    l->pool         = pool;
+    l->submit_frame = submit_frame;
+    l->get_packet   = get_packet;
+    l->head         = 0;
+    l->in_flight    = 0;
+
+    l->frames = av_calloc(pool->pool_size, sizeof(*l->frames));
+    l->frame  = av_frame_alloc();
+    l->pkt    = av_packet_alloc();
+    if (!l->frames || !l->frame || !l->pkt)
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+
+static int loop_get_packet(AVCodecContext *avctx, FFVkEncodeLoop *l, AVPacket *pkt)
+{
+    int err;
+    int idx = (l->head + l->pool->pool_size - l->in_flight) % l->pool->pool_size;
+
+    l->in_flight--;
+
+    err = l->get_packet(avctx, &l->pool->contexts[idx], pkt);
+    if (err < 0) {
+        av_buffer_unref(&l->frames[idx].opaque_ref);
+        return err;
+    }
+
+    pkt->pts      = l->frames[idx].pts;
+    pkt->dts      = l->frames[idx].pts;
+    pkt->duration = l->frames[idx].duration;
+    if (avctx->flags & AV_CODEC_FLAG_COPY_OPAQUE) {
+        pkt->opaque     = l->frames[idx].opaque;
+        pkt->opaque_ref = l->frames[idx].opaque_ref;
+        l->frames[idx].opaque_ref = NULL;
+    }
+
+    return 0;
+}
+
+static int loop_oldest_done(FFVkEncodeLoop *l)
+{
+    FFVulkanFunctions *vk = &l->s->vkfn;
+    int idx = (l->head + l->pool->pool_size - l->in_flight) % l->pool->pool_size;
+    FFVkExecContext *e = &l->pool->contexts[idx];
+    uint64_t val;
+
+    return vk->GetSemaphoreCounterValue(l->s->hwctx->act_dev, e->sem, &val) == VK_SUCCESS &&
+           val >= e->sem_value;
+}
+
+int ff_vk_encode_loop_receive_packet(AVCodecContext *avctx, FFVkEncodeLoop *l,
+                                     AVPacket *pkt)
+{
+    int err, eof = 0;
+    FFVkExecPool *pool = l->pool;
+
+    err = ff_encode_get_frame(avctx, l->frame);
+    if (err == AVERROR_EOF) {
+        eof = 1;
+    } else if (err >= 0) {
+        l->frames[l->head].pts      = l->frame->pts;
+        l->frames[l->head].duration = l->frame->duration;
+        if (avctx->flags & AV_CODEC_FLAG_COPY_OPAQUE) {
+            l->frames[l->head].opaque     = l->frame->opaque;
+            l->frames[l->head].opaque_ref = l->frame->opaque_ref;
+            l->frame->opaque_ref = NULL;
+        }
+
+        err = l->submit_frame(avctx, &pool->contexts[l->head], l->frame);
+        av_frame_unref(l->frame);
+        if (err < 0) {
+            av_buffer_unref(&l->frames[l->head].opaque_ref);
+            return err;
+        }
+
+        l->head = (l->head + 1) % pool->pool_size;
+        l->in_flight++;
+    } else if (err != AVERROR(EAGAIN)) {
+        return err;
+    }
+
+    if (!l->in_flight)
+        return eof ? AVERROR_EOF : AVERROR(EAGAIN);
+    if (l->in_flight < pool->pool_size && !eof && !loop_oldest_done(l))
+        return AVERROR(EAGAIN);
+
+    return loop_get_packet(avctx, l, pkt);
+}
+
+void ff_vk_encode_loop_flush(AVCodecContext *avctx, FFVkEncodeLoop *l)
+{
+    while (l->in_flight) {
+        if (loop_get_packet(avctx, l, l->pkt) >= 0)
+            av_packet_unref(l->pkt);
+    }
+    l->head = 0;
+}
+
+void ff_vk_encode_loop_uninit(FFVkEncodeLoop *l)
+{
+    if (l->frames) {
+        for (int i = 0; i < l->pool->pool_size; i++)
+            av_buffer_unref(&l->frames[i].opaque_ref);
+        av_freep(&l->frames);
+    }
+    av_frame_free(&l->frame);
+    av_packet_free(&l->pkt);
 }

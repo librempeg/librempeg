@@ -26,7 +26,6 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/emms.h"
 #include "error_resilience.h"
 #include "avcodec.h"
 #include "h264dec.h"
@@ -71,9 +70,6 @@ static void h264_copy_picture_params(H264Picture *dst, const H264Picture *src)
         av_refstruct_replace(&dst->ref_index[i],       src->ref_index[i]);
     }
 
-    av_refstruct_replace(&dst->hwaccel_picture_private,
-                          src->hwaccel_picture_private);
-
     av_refstruct_replace(&dst->decode_error_flags, src->decode_error_flags);
 
     dst->qscale_table = src->qscale_table;
@@ -117,6 +113,8 @@ int ff_h264_ref_picture(H264Picture *dst, const H264Picture *src)
     ret = ff_thread_ref_frame(&dst->tf, &src->tf);
     if (ret < 0)
         goto fail;
+    av_refstruct_replace(&dst->hwaccel_picture_private,
+                          src->hwaccel_picture_private);
 
     if (src->needs_fg) {
         ret = av_frame_ref(dst->f_grain, src->f_grain);
@@ -144,6 +142,8 @@ int ff_h264_replace_picture(H264Picture *dst, const H264Picture *src)
     av_assert0(src->tf.f == src->f);
 
     dst->tf.f = dst->f;
+    av_refstruct_replace(&dst->hwaccel_picture_private,
+                          src->hwaccel_picture_private);
     ret = ff_thread_replace_frame(&dst->tf, &src->tf);
     if (ret < 0)
         goto fail;
@@ -159,6 +159,7 @@ int ff_h264_replace_picture(H264Picture *dst, const H264Picture *src)
 
     return 0;
 fail:
+    av_refstruct_unref(&dst->hwaccel_picture_private);
     ff_h264_unref_picture(dst);
     return ret;
 }
@@ -226,7 +227,6 @@ int ff_h264_field_end(H264Context *h, H264SliceContext *sl, int in_setup)
     if (!in_setup && !h->droppable)
         ff_thread_report_progress(&cur->tf, INT_MAX,
                                   h->picture_structure == PICT_BOTTOM_FIELD);
-    emms_c();
 
     h->current_slice = 0;
 

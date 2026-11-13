@@ -1218,6 +1218,13 @@ static av_cold int cook_decode_init(AVCodecContext *avctx)
             return AVERROR_PATCHWELCOME;
         }
 
+        if (q->subpacket[s].joint_stereo &&
+            q->subpacket[s].js_subband_start > q->subpacket[s].subbands) {
+            av_log(avctx, AV_LOG_ERROR, "js_subband_start %d > subbands %d\n",
+                   q->subpacket[s].js_subband_start, q->subpacket[s].subbands);
+            return AVERROR_INVALIDDATA;
+        }
+
         if ((q->subpacket[s].js_vlc_bits > 6) ||
             (q->subpacket[s].js_vlc_bits < 2 * q->subpacket[s].joint_stereo)) {
             av_log(avctx, AV_LOG_ERROR, "js_vlc_bits = %d, only >= %d and <= 6 allowed!\n",
@@ -1247,6 +1254,12 @@ static av_cold int cook_decode_init(AVCodecContext *avctx)
 
         q->num_subpackets++;
         s++;
+    }
+
+    if (channel_mask && av_popcount(channel_mask) != total_channels) {
+        av_log(avctx, AV_LOG_ERROR, "Channel mask 0x%x does not match %d subpacket channels\n",
+               channel_mask, total_channels);
+        return AVERROR_INVALIDDATA;
     }
 
     /* Try to catch some obviously faulty streams, otherwise it might be exploitable */

@@ -1,13 +1,13 @@
 /*
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -51,10 +51,10 @@ static void test_motion(const char *name, me_cmp_func test_func)
     LOCAL_ALIGNED_16(uint8_t, img1, [WIDTH * HEIGHT]);
     LOCAL_ALIGNED_16(uint8_t, img2, [WIDTH * HEIGHT]);
 
-    declare_func_emms(AV_CPU_FLAG_MMX, int, MPVEncContext *c,
-                      const uint8_t *blk1 /* align width (8 or 16) */,
-                      const uint8_t *blk2 /* align 1 */, ptrdiff_t stride,
-                      int h);
+    declare_func(int, MPVEncContext *c,
+                 const uint8_t *blk1 /* align width (8 or 16) */,
+                 const uint8_t *blk2 /* align 1 */, ptrdiff_t stride,
+                 int h);
 
     if (test_func == NULL) {
         return;

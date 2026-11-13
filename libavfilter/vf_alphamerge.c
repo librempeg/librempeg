@@ -111,7 +111,7 @@ static int query_formats(const AVFilterContext *ctx,
     static const enum AVPixelFormat alpha_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
     int ret;
 
-    ret = ff_formats_ref(ff_make_format_list(alpha_fmts),
+    ret = ff_formats_ref(ff_make_pixel_format_list(alpha_fmts),
                          &cfg_in[1]->formats);
     if (ret < 0)
         return ret;

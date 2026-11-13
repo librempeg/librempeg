@@ -66,7 +66,7 @@
 #include "internal.h"
 #include "isom.h"
 #include "matroska.h"
-#include "oggdec.h"
+#include "libavformat/vorbis/comment.h"
 /* For ff_codec_get_id(). */
 #include "riff.h"
 #include "rmsipr.h"
@@ -2183,7 +2183,7 @@ static int matroska_parse_flac(AVFormatContext *s,
             AVDictionary *dict = NULL;
             AVDictionaryEntry *chmask;
 
-            ff_vorbis_comment(s, &dict, p, block_size, 0);
+            ff_vorbis_comment_read(s, &dict, p, block_size, 0);
             chmask = av_dict_get(dict, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK", NULL, 0);
             if (chmask) {
                 uint64_t mask = strtol(chmask->value, NULL, 0);
@@ -2534,7 +2534,24 @@ static int mkv_parse_block_addition_mappings(AVFormatContext *s, AVStream *st, M
 {
     const EbmlList *mappings_list = &track->block_addition_mappings;
     MatroskaBlockAdditionMapping *mappings = mappings_list->elem;
+    int nb_itutt35 = 0;
     int ret;
+
+    for (int i = 0; i < mappings_list->nb_elem; i++) {
+        MatroskaBlockAdditionMapping *mapping = &mappings[i];
+
+        switch (mapping->type) {
+        case MATROSKA_BLOCK_ADD_ID_TYPE_ITU_T_T35:
+            if (nb_itutt35 && mapping->extradata.size < 4) {
+                av_log(s, AV_LOG_ERROR, "One or more maps for BlockAddIDType 4 lack extradata\n");
+                return AVERROR_INVALIDDATA;
+            }
+            nb_itutt35++;
+            break;
+        default:
+            break;
+        }
+    }
 
     for (int i = 0; i < mappings_list->nb_elem; i++) {
         MatroskaBlockAdditionMapping *mapping = &mappings[i];
@@ -2548,7 +2565,6 @@ static int mkv_parse_block_addition_mappings(AVFormatContext *s, AVStream *st, M
             type = MATROSKA_BLOCK_ADD_ID_TYPE_OPAQUE;
             av_fallthrough;
         case MATROSKA_BLOCK_ADD_ID_TYPE_OPAQUE:
-        case MATROSKA_BLOCK_ADD_ID_TYPE_ITU_T_T35:
             if (mapping->value != type) {
                 int strict = s->strict_std_compliance >= FF_COMPLIANCE_STRICT;
                 av_log(s, strict ? AV_LOG_ERROR : AV_LOG_WARNING,
@@ -2896,8 +2912,7 @@ static int mka_parse_audio(MatroskaTrack *track, AVStream *st,
     if (track->codec_delay > 0) {
         par->initial_padding = av_rescale_q(track->codec_delay,
                                             (AVRational){1, 1000000000},
-                                            (AVRational){1, par->codec_id == AV_CODEC_ID_OPUS ?
-                                                            48000 : par->sample_rate});
+                                            (AVRational){1, par->sample_rate});
         sti->skip_samples = par->initial_padding;
     }
     if (track->seek_preroll > 0) {
@@ -3410,7 +3425,7 @@ static int matroska_parse_dovi_streams(AVFormatContext *s)
     if (err < 0)
         return err;
 
-    stg->params.layered_video->el_index = stg->nb_streams - 1;
+    stg->params.layered_video->el_index = stg->nb_entries - 1;
     stg->params.layered_video->width = bl_st->codecpar->width;
     stg->params.layered_video->height = bl_st->codecpar->height;
 
@@ -3490,7 +3505,8 @@ static int matroska_read_header(AVFormatContext *s)
 
     if (!matroska->time_scale)
         matroska->time_scale = 1000000;
-    if (isnan(matroska->duration))
+    if (isnan(matroska->duration) || matroska->duration < 0 ||
+        matroska->duration >= (double)INT64_MAX / matroska->time_scale)
         matroska->duration = 0;
     if (matroska->duration)
         matroska->ctx->duration = matroska->duration * matroska->time_scale *

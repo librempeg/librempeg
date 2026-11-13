@@ -16,6 +16,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/avassert.h"
+#include "libavfilter/vf_limiter_init.h"
 #include "libavutil/attributes.h"
 #include "libavutil/common.h"
 #include "libavutil/imgutils.h"
@@ -33,10 +35,11 @@ typedef struct ThreadData {
 
 typedef struct LimiterContext {
     const AVClass *class;
-    int min;
-    int max;
+    int min, max; /* user-facing option */
     int planes;
     int nb_planes;
+    int plane_min[4]; /* resolved per-plane limits */
+    int plane_max[4];
     int linesize[4];
     int width[4];
     int height[4];
@@ -48,22 +51,14 @@ typedef struct LimiterContext {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption limiter_options[] = {
-    { "min",    "set min value", OFFSET(min),    AV_OPT_TYPE_INT, {.i64=0},     0, 65535, .flags = FLAGS },
-    { "max",    "set max value", OFFSET(max),    AV_OPT_TYPE_INT, {.i64=65535}, 0, 65535, .flags = FLAGS },
+    { "min",    "set min value", OFFSET(min),    AV_OPT_TYPE_INT, {.i64=0},     -1, 65535, .flags = FLAGS, .unit = "value" },
+    { "max",    "set max value", OFFSET(max),    AV_OPT_TYPE_INT, {.i64=65535}, -1, 65535, .flags = FLAGS, .unit = "value" },
+        { "auto", "automatically use tagged signal range", 0, AV_OPT_TYPE_CONST, {.i64=-1}, .flags = FLAGS, .unit = "value" },
     { "planes", "set planes",    OFFSET(planes), AV_OPT_TYPE_INT, {.i64=15},    0,    15, .flags = FLAGS },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(limiter);
-
-static av_cold int init(AVFilterContext *ctx)
-{
-    LimiterContext *s = ctx->priv;
-
-    if (s->min > s->max)
-        return AVERROR(EINVAL);
-    return 0;
-}
 
 static const enum AVPixelFormat pix_fmts[] = {
     AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV440P,
@@ -87,30 +82,6 @@ static const enum AVPixelFormat pix_fmts[] = {
     AV_PIX_FMT_NONE
 };
 
-#define LIMITER(n, type)                                        \
-static void limiter##n(const uint8_t *ssrc, uint8_t *ddst,      \
-                       ptrdiff_t slinesize, ptrdiff_t dlinesize,\
-                       int w, int h, int min, int max)          \
-{                                                               \
-    const type *src = (const type *)ssrc;                       \
-    type *dst = (type *)ddst;                                   \
-                                                                \
-    dlinesize /= sizeof(type);                                  \
-    slinesize /= sizeof(type);                                  \
-                                                                \
-    for (int y = 0; y < h; y++) {                               \
-        for (int x = 0; x < w; x++) {                           \
-            dst[x] = av_clip(src[x], min, max);                 \
-        }                                                       \
-                                                                \
-        dst += dlinesize;                                       \
-        src += slinesize;                                       \
-    }                                                           \
-}
-
-LIMITER(8,  uint8_t)
-LIMITER(16, uint16_t)
-
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -131,18 +102,7 @@ static int config_input(AVFilterLink *inlink)
     s->width[1]  = s->width[2]  = AV_CEIL_RSHIFT(inlink->w, hsub);
     s->width[0]  = s->width[3]  = inlink->w;
 
-    s->max = FFMIN(s->max, (1 << depth) - 1);
-    s->min = FFMIN(s->min, (1 << depth) - 1);
-
-    if (depth == 8) {
-        s->dsp.limiter = limiter8;
-    } else {
-        s->dsp.limiter = limiter16;
-    }
-
-#if ARCH_X86
-    ff_limiter_init_x86(&s->dsp, desc->comp[0].depth);
-#endif
+    ff_limiter_init(&s->dsp, depth);
 
     return 0;
 }
@@ -155,12 +115,17 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *out = td->out;
     int p;
 
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(in->format);
+    const int depth = desc->comp[0].depth;
+    const int full_range = (1 << depth) - 1;
+
     for (p = 0; p < s->nb_planes; p++) {
         const int h = s->height[p];
         const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
         const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
-
-        if (!((1 << p) & s->planes)) {
+        const int min = s->plane_min[p];
+        const int max = s->plane_max[p];
+        if (!((1 << p) & s->planes) || (min == 0 && max == full_range)) {
             if (out != in)
                 av_image_copy_plane(out->data[p] + slice_start * out->linesize[p],
                                     out->linesize[p],
@@ -170,11 +135,12 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             continue;
         }
 
+        av_assert1(max >= min);
         s->dsp.limiter(in->data[p] + slice_start * in->linesize[p],
                        out->data[p] + slice_start * out->linesize[p],
                        in->linesize[p], out->linesize[p],
                        s->width[p], slice_end - slice_start,
-                       s->min, s->max);
+                       min, max);
     }
 
     return 0;
@@ -187,7 +153,33 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     ThreadData td;
     AVFrame *out;
-    int ret;
+
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(in->format);
+    const int is_mpeg = in->color_range == AVCOL_RANGE_MPEG &&
+                        !(desc->flags & AV_PIX_FMT_FLAG_RGB);
+
+    const int depth = desc->comp[0].depth;
+    const int full_range = (1 << depth) - 1;
+    const int max = FFMIN(s->max, full_range);
+    const int min = FFMIN(s->min, full_range);
+
+    for (int p = 0; p < s->nb_planes; p++) {
+        const int mpeg_min = 16 << (depth - 8);
+        const int mpeg_max = (p ? 240 : 235) << (depth - 8);
+        s->plane_min[p] = min;
+        s->plane_max[p] = max;
+        if (min < 0)
+            s->plane_min[p] = (is_mpeg && p != 3) ? mpeg_min : 0;
+        if (max < 0)
+            s->plane_max[p] = (is_mpeg && p != 3) ? mpeg_max : full_range;
+
+        if (((1 << p) & s->planes) && s->plane_max[p] < s->plane_min[p]) {
+            av_log(ctx, AV_LOG_ERROR, "Invalid min/max values for plane %d: "
+                   "min=%d > max=%d\n", p, s->plane_min[p], s->plane_max[p]);
+            av_frame_free(&in);
+            return AVERROR(EINVAL);
+        }
+    }
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -198,7 +190,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             return AVERROR(ENOMEM);
         }
 
-        ret = ff_filter_get_buffer(ctx, out);
+        int ret = ff_filter_get_buffer(ctx, out);
         if (ret < 0) {
             av_frame_free(&in);
             av_frame_free(&out);
@@ -264,7 +256,6 @@ const FFFilter ff_vf_limiter = {
                      AVFILTER_FLAG_FRAME_THREADS |
                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LimiterContext),
-    .init          = init,
 #if CONFIG_AVFILTER_THREAD_FRAME
     .transfer_state = transfer_state,
 #endif

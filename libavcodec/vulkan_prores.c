@@ -194,10 +194,18 @@ static int vk_prores_end_frame(AVCodecContext *avctx)
         .bottom_field     = pr->first_field ^ (pr->frame_type == 1),
     };
 
-    memcpy(metadata->mapped_mem + pp->qmat_off,
-           pr->qmat_luma,   sizeof(pr->qmat_luma));
-    memcpy(metadata->mapped_mem + pp->qmat_off + sizeof(pr->qmat_luma),
-           pr->qmat_chroma, sizeof(pr->qmat_chroma));
+    /* The decoder permutes the quantization matrices to match the layout
+     * expected by its IDCT (transposed on x86), undo it here. */
+    {
+        uint8_t *qmat_luma   = metadata->mapped_mem + pp->qmat_off;
+        uint8_t *qmat_chroma = qmat_luma + sizeof(pr->qmat_luma);
+        const uint8_t *perm  = pr->prodsp.idct_permutation;
+
+        for (i = 0; i < 64; i++) {
+            qmat_luma  [perm[i]] = pr->qmat_luma  [i];
+            qmat_chroma[perm[i]] = pr->qmat_chroma[i];
+        }
+    }
 
     FFVkExecContext *exec = ff_vk_exec_get(&ctx->s, &ctx->exec_pool);
     err = ff_vk_exec_start(&ctx->s, exec);
@@ -366,8 +374,19 @@ static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,
     AVHWFramesContext *dec_frames_ctx;
     dec_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
 
-    SPEC_LIST_CREATE(sl, 1, 1*sizeof(uint32_t))
+    /* Discrete GPUs read host-mapped packets over the bus; prefetch more
+     * to hide the latency. 32 lines (32 KB for the 8x8 workgroup) measured
+     * best; integrated GPUs get slower with every extra line. Clamp to the
+     * shared memory limit, leaving 1 KB for the tables. */
+    int smem_lines = 4;
+    if (s->props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+        (s->extensions & FF_VK_EXT_EXTERNAL_HOST_MEMORY)) {
+        uint32_t max_smem = s->props.properties.limits.maxComputeSharedMemorySize;
+        smem_lines = FFMIN(32, (max_smem - 1024) / (8*8*16));
+    }
+    SPEC_LIST_CREATE(sl, 2, 2*sizeof(uint32_t))
     SPEC_LIST_ADD(sl, 0, 32, interlaced);
+    SPEC_LIST_ADD(sl, 1, 32, smem_lines);
 
     ff_vk_shader_load(shd,
                       VK_SHADER_STAGE_COMPUTE_BIT, sl,
@@ -411,7 +430,7 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
     AVHWFramesContext *dec_frames_ctx;
     dec_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
 
-    SPEC_LIST_CREATE(sl, 2 + 64, (2 + 64)*sizeof(uint32_t))
+    SPEC_LIST_CREATE(sl, 2 + 8, (2 + 8)*sizeof(uint32_t))
     SPEC_LIST_ADD(sl,  0, 32, interlaced);
     SPEC_LIST_ADD(sl, 16, 32, 4*2); /* nb_blocks */
 
@@ -421,9 +440,8 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
         cos(4.0*M_PI/16.0) / 2.0, cos(5.0*M_PI/16.0) / 2.0,
         cos(6.0*M_PI/16.0) / 2.0, cos(7.0*M_PI/16.0) / 2.0,
     };
-    for (int i = 0; i < 64; i++)
-        SPEC_LIST_ADD(sl, 18 + i, 32,
-                      av_float2int(idct_8_scales[i >> 3]*idct_8_scales[i & 7]));
+    for (int i = 0; i < 8; i++)
+        SPEC_LIST_ADD(sl, 18 + i, 32, av_float2int(idct_8_scales[i]));
 
     ff_vk_shader_load(shd,
                       VK_SHADER_STAGE_COMPUTE_BIT, sl,

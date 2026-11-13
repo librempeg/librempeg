@@ -178,6 +178,9 @@ edge padding bug (autodetected per fourcc/version)
 Workaround various bugs in microsoft broken decoders.
 @item trunc
 trancated frames
+@item h264_dp_nnz
+H.264 nC derivation for partitioned slices, as done by JM rather than by
+9.2.1 (autodetected)
 @end table
 
 @item strict @var{integer} (@emph{decoding/encoding,audio,video})
@@ -1030,6 +1033,8 @@ Note: The required alignment depends on if @code{AV_CODEC_FLAG_UNALIGNED} is set
 CPU. @code{AV_CODEC_FLAG_UNALIGNED} cannot be changed from the command line. Also hardware
 decoders will not apply left/top Cropping.
 
+@item lcevc-dec-params @var{string} (@emph{decoding,video})
+A :-separated list of key=value parameters passed to liblcevc-dec to initialize it.
 
 @end table
 

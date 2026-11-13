@@ -167,6 +167,10 @@ static int asfrtp_parse_sdp_line(AVFormatContext *s, int stream_index,
 
             for (i = 0; i < rt->asf_ctx->nb_streams; i++) {
                 if (s->streams[stream_index]->id == rt->asf_ctx->streams[i]->id) {
+                    int ret = av_dict_copy(&s->streams[stream_index]->metadata,
+                                           rt->asf_ctx->streams[i]->metadata, 0);
+                    if (ret < 0)
+                        return ret;
                     avcodec_parameters_copy(s->streams[stream_index]->codecpar,
                                             rt->asf_ctx->streams[i]->codecpar);
                     ffstream(s->streams[stream_index])->need_parsing =
@@ -248,6 +252,7 @@ static int asfrtp_parse_packet(AVFormatContext *s, PayloadContext *asf,
                 avio_skip(pb, len - off);
                 if (!(flags & RTP_FLAG_MARKER))
                     return -1;
+                av_freep(&asf->buf);
                 out_len     = avio_close_dyn_buf(asf->pktbuf, &asf->buf);
                 asf->pktbuf = NULL;
             } else {
@@ -262,12 +267,11 @@ static int asfrtp_parse_packet(AVFormatContext *s, PayloadContext *asf,
                 int cur_len = start_off + len_off - off;
                 int prev_len = out_len;
                 out_len += cur_len;
-                if (FFMIN(cur_len, len - off) < 0)
+                if (cur_len < 0 || cur_len > len - off)
                     return -1;
                 if ((res = av_reallocp(&asf->buf, out_len)) < 0)
                     return res;
-                memcpy(asf->buf + prev_len, buf + off,
-                       FFMIN(cur_len, len - off));
+                memcpy(asf->buf + prev_len, buf + off, cur_len);
                 avio_skip(pb, cur_len);
             }
         }

@@ -2,14 +2,14 @@
  * Copyright (c) 2023 Institute of Software Chinese Academy of Sciences (ISCAS).
  * Copyright (c) 2024 Geoff Hill <geoff@geoffhill.org>
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -22,9 +22,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 
+#include "libavcodec/ac3defs.h"
 #include "libavcodec/ac3dsp.h"
 
 #include "checkasm.h"
@@ -95,7 +95,7 @@ static void check_ac3_extract_exponents(AC3DSPContext *c) {
     LOCAL_ALIGNED_16(uint8_t, v2, [MAX_EXPS]);
     int n;
 
-    declare_func(void, uint8_t *, int32_t *, int);
+    declare_func(void, uint8_t *, const int32_t *, int);
 
     for (n = 512; n <= MAX_EXPS; n += 256) {
         if (check_func(c->extract_exponents, "ac3_extract_exponents_n%d", n)) {
@@ -129,7 +129,7 @@ static void check_float_to_fixed24(AC3DSPContext *c) {
         call_ref(dst, src, BUF_SIZE);
         call_new(dst2, src, BUF_SIZE);
 
-        if (memcmp(dst, dst2, BUF_SIZE) != 0)
+        if (memcmp(dst, dst2, BUF_SIZE * sizeof(*dst)) != 0)
             fail();
 
         bench_new(dst, src, BUF_SIZE);
@@ -137,6 +137,29 @@ static void check_float_to_fixed24(AC3DSPContext *c) {
 
 
     report("float_to_fixed24");
+}
+
+static void check_compute_mantissa_size(AC3DSPContext *const c)
+{
+    declare_func(int, const uint16_t mant_cnt[6][16]);
+
+    if (!check_func(c->compute_mantissa_size, "compute_mantissa_size"))
+        return;
+
+    DECLARE_ALIGNED_16(uint16_t, mant_cnt)[AC3_MAX_BLOCKS][16];
+
+    // The maximum of a single value is 3*60 (max_bandwith_code) + 73 + 2
+    checkasm_randomize_mask16((uint16_t*)mant_cnt, AC3_MAX_BLOCKS*16, 0xFF);
+
+    int size_ref = call_ref(mant_cnt);
+    int size_new = call_new(mant_cnt);
+
+    if (size_ref != size_new)
+        fail();
+
+    bench_new(mant_cnt);
+
+    report("compute_mantissa_size");
 }
 
 static void check_ac3_sum_square_butterfly_int32(AC3DSPContext *c) {
@@ -198,6 +221,7 @@ void checkasm_check_ac3dsp(void)
     check_ac3_exponent_min(&c);
     check_ac3_extract_exponents(&c);
     check_float_to_fixed24(&c);
+    check_compute_mantissa_size(&c);
     check_ac3_sum_square_butterfly_int32(&c);
     check_ac3_sum_square_butterfly_float(&c);
 }

@@ -1,4 +1,4 @@
-5febd4af0b197d8d0756fcaa99c066a2 *tests/data/fate/matroska-encoding-delay.matroska
+45adc7a7d034c77b00dba937b79a3c53 *tests/data/fate/matroska-encoding-delay.matroska
 961258 tests/data/fate/matroska-encoding-delay.matroska
 #extradata 0:       22, 0x32ea0490
 #tb 0: 1/1000
@@ -11,17 +11,17 @@
 #codec_id 1: mp2
 #sample_rate 1: 48000
 #channel_layout_name 1: stereo
-1,        -10,        -10,       24,     1152, 0x724077b8, S=1,       10
+1,        -10,        -10,       24,     1152, 0x12876351, S=1,       10
 0,          0,          0,       40,   237628, 0xeff25579
-1,         14,         14,       24,     1152, 0x80625572
-1,         38,         38,       24,     1152, 0x7d7f4dce
+1,         14,         14,       24,     1152, 0x403b66d3
+1,         38,         38,       24,     1152, 0x3da75439
 0,         40,         40,       40,   238066, 0xb2265f41
-1,         62,         62,       24,     1152, 0xa6725739
+1,         62,         62,       24,     1152, 0x8bb971fb
 0,         80,         80,       40,   237723, 0x00d7cd24
-1,         86,         86,       24,     1152, 0xc9e85398
-1,        110,        110,       24,     1152, 0xda1287d3
+1,         86,         86,       24,     1152, 0x7f9c665b
+1,        110,        110,       24,     1152, 0x2a534a0b
 0,        120,        120,       40,   238290, 0xbe18b18f
-1,        134,        134,       16,     1152, 0x1c9a6102, S=1,       10
+1,        134,        134,       16,     1152, 0xd2d15b93, S=1,       10
 [PACKET]
 codec_type=audio
 stream_index=1

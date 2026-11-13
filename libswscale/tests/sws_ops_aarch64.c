@@ -197,20 +197,31 @@ static int collect_ops_compile(SwsContext *ctx, const SwsOpList *ops,
     struct AVTreeNode **root = (struct AVTreeNode **) ctx->opaque;
     int ret;
 
-    /* Use at most two full vregs during the widest precision section */
-    int block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
+    SwsUOpList *uops = ff_sws_uop_list_alloc();
+    if (!uops)
+        return AVERROR(ENOMEM);
 
-    for (int i = 0; i < ops->num_ops; i++) {
+    SwsUOpFlags flags = SWS_UOP_FLAG_PUNNING | SWS_UOP_FLAG_ADD;
+    if (!(ctx->flags & SWS_BITEXACT))
+        flags |= SWS_UOP_FLAG_FMA;
+    ret = ff_sws_ops_translate(ctx, ops, flags, uops);
+    if (ret == AVERROR(ENOTSUP)) {
+        ret = 0;
+        goto end;
+    }
+    if (ret < 0)
+        goto end;
+
+    /* Use at most two full vregs during the widest precision section */
+    int block_size = (uops->pixel_size_max == 4) ? 8 : 16;
+
+    for (int i = 0; i < uops->num_ops; i++) {
         SwsAArch64OpImplParams params = { 0 };
-        ret = convert_to_aarch64_impl(ctx, ops, i, block_size, &params);
-        if (ret == AVERROR(ENOTSUP))
-            continue;
-        if (ret < 0)
-            goto end;
+        convert_to_aarch64_impl(&uops->ops[i], block_size, &params);
         ret = aarch64_collect_op(&params, root);
         if (ret < 0)
             goto end;
-        if (params.uop == SWS_UOP_LINEAR_FMA) {
+        if (params.uop == SWS_UOP_LINEAR_FMA && params.type == SWS_PIXEL_F32) {
             /**
              * Generate both sets of linear op functions that do use
              * and do not use fmla (selected by SWS_BITEXACT).
@@ -226,6 +237,7 @@ static int collect_ops_compile(SwsContext *ctx, const SwsOpList *ops,
     ret = 0;
 
 end:
+    ff_sws_uop_list_free(&uops);
     return ret;
 }
 
@@ -286,6 +298,7 @@ static const char op_type_names[SWS_UOP_TYPE_NB][16] = {
     [SWS_UOP_TO_F32        ] = "to_f32",
     [SWS_UOP_EXPAND_PAIR   ] = "expand_pair",
     [SWS_UOP_EXPAND_QUAD   ] = "expand_quad",
+    [SWS_UOP_ADD           ] = "add",
     [SWS_UOP_MIN           ] = "min",
     [SWS_UOP_MAX           ] = "max",
     [SWS_UOP_SCALE         ] = "scale",
@@ -324,6 +337,7 @@ static const char uop_types[SWS_UOP_TYPE_NB][32] = {
     [SWS_UOP_TO_F32        ] = "SWS_UOP_TO_F32",
     [SWS_UOP_EXPAND_PAIR   ] = "SWS_UOP_EXPAND_PAIR",
     [SWS_UOP_EXPAND_QUAD   ] = "SWS_UOP_EXPAND_QUAD",
+    [SWS_UOP_ADD           ] = "SWS_UOP_ADD",
     [SWS_UOP_MIN           ] = "SWS_UOP_MIN",
     [SWS_UOP_MAX           ] = "SWS_UOP_MAX",
     [SWS_UOP_SCALE         ] = "SWS_UOP_SCALE",
@@ -460,8 +474,19 @@ int main(int argc, char *argv[])
     graph->ctx = ctx;
     ctx->opaque = &root;
 
-    ret = ff_sws_enum_op_lists(ctx, graph, NULL, AV_PIX_FMT_NONE, AV_PIX_FMT_NONE,
-                               register_op);
+    static const SwsFlags flags_list[] = {
+        0,
+        SWS_ACCURATE_RND,   /* may insert extra 1x1 dither ops (for accurate rounding) */
+        SWS_BITEXACT,       /* prevents some FMA optimizations */
+        SWS_ACCURATE_RND | SWS_BITEXACT,
+    };
+    for (int i = 0; i < FF_ARRAY_ELEMS(flags_list); i++) {
+        ctx->flags = flags_list[i];
+        ret = ff_sws_enum_op_lists(ctx, graph, NULL, AV_PIX_FMT_NONE,
+                                   AV_PIX_FMT_NONE, register_op);
+        if (ret < 0)
+            break;
+    }
 
     /**
      * Generate a C file with all the unique function parameter entries

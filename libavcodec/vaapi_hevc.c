@@ -32,6 +32,8 @@
 #include "hevc/hevcdec.h"
 
 typedef struct VAAPIDecodePictureHEVC {
+    VAAPIDecodePicture pic;
+
 #if VA_CHECK_VERSION(1, 2, 0)
     VAPictureParameterBufferHEVCExtension pic_param;
     VASliceParameterBufferHEVCExtension last_slice_param;
@@ -41,8 +43,6 @@ typedef struct VAAPIDecodePictureHEVC {
 #endif
     const uint8_t *last_buffer;
     size_t         last_size;
-
-    VAAPIDecodePicture pic;
 } VAAPIDecodePictureHEVC;
 
 static void init_vaapi_pic(VAPictureHEVC *va_pic)
@@ -214,13 +214,18 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
     fill_vaapi_reference_frames(h, l, pic_param);
 
     if (pps->tiles_enabled_flag) {
+        if (pps->num_tile_columns > FF_ARRAY_ELEMS(pic_param->column_width_minus1) + 1 ||
+            pps->num_tile_rows    > FF_ARRAY_ELEMS(pic_param->row_height_minus1) + 1) {
+            av_log(avctx, AV_LOG_ERROR, "Too many tiles\n");
+            return AVERROR(ENOSYS);
+        }
         pic_param->num_tile_columns_minus1 = pps->num_tile_columns - 1;
         pic_param->num_tile_rows_minus1    = pps->num_tile_rows - 1;
 
-        for (i = 0; i < pps->num_tile_columns; i++)
+        for (i = 0; i < FFMIN(pps->num_tile_columns, FF_ARRAY_ELEMS(pic_param->column_width_minus1)); i++)
             pic_param->column_width_minus1[i] = pps->column_width[i] - 1;
 
-        for (i = 0; i < pps->num_tile_rows; i++)
+        for (i = 0; i < FFMIN(pps->num_tile_rows, FF_ARRAY_ELEMS(pic_param->row_height_minus1)); i++)
             pic_param->row_height_minus1[i] = pps->row_height[i] - 1;
     }
 
@@ -665,6 +670,7 @@ const FFHWAccel ff_hevc_vaapi_hwaccel = {
     .end_frame            = vaapi_hevc_end_frame,
     .decode_slice         = vaapi_hevc_decode_slice,
     .frame_priv_data_size = sizeof(VAAPIDecodePictureHEVC),
+    .free_frame_priv      = ff_vaapi_decode_free_frame_priv,
     .init                 = ff_vaapi_decode_init,
     .uninit               = ff_vaapi_decode_uninit,
     .frame_params         = ff_vaapi_common_frame_params,

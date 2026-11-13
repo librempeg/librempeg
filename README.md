@@ -11,7 +11,6 @@ such as audio, video, subtitles and related metadata.
 * `libavutil` includes hashers, decompressors and miscellaneous utility functions.
 * `libavfilter` provides means to alter decoded audio and video through a directed graph of connected filters.
 * `libavdevice` provides an abstraction to access capture and playback devices.
-* `libswresample` implements audio mixing and resampling routines.
 * `libswscale` implements color conversion and scaling routines.
 
 ## Tools

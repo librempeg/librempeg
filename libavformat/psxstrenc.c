@@ -119,7 +119,7 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
 
 const FFOutputFormat ff_str_muxer = {
     .p.name           = "psxstr",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("Sony Playstation STR"),
+    .p.long_name      = NULL_IF_CONFIG_SMALL("Sony PlayStation STR"),
     .priv_data_size   = sizeof(PSXSTRMuxContext),
     .p.audio_codec    = AV_CODEC_ID_ADPCM_XA,
     .p.video_codec    = AV_CODEC_ID_NONE,

@@ -46,6 +46,7 @@
 #define F AV_OPT_FLAG_FILTERING_PARAM
 #define V AV_OPT_FLAG_VIDEO_PARAM
 #define A AV_OPT_FLAG_AUDIO_PARAM
+FF_DISABLE_DEPRECATION_WARNINGS
 static const AVOption filtergraph_options[] = {
     { "thread_type", "Allowed thread types", OFFSET(thread_type), AV_OPT_TYPE_FLAGS,
         { .i64 = AVFILTER_THREAD_SLICE | AVFILTER_THREAD_FRAME_FILTER }, 0, INT_MAX, F|V|A, .unit = "thread_type" },
@@ -56,12 +57,13 @@ static const AVOption filtergraph_options[] = {
         {"auto", "autodetect a suitable number of threads to use", 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, .flags = F|V|A, .unit = "threads"},
     {"scale_sws_opts"       , "default scale filter options"        , OFFSET(scale_sws_opts)        ,
         AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, F|V },
-    {"aresample_swr_opts"   , "default aresample filter options"    , OFFSET(aresample_swr_opts)    ,
-        AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, F|A },
+#if FF_API_MAX_BUFFERED_FRAMES
     {"max_buffered_frames"  , "maximum number of buffered frames allowed", OFFSET(max_buffered_frames),
-        AV_OPT_TYPE_UINT,   {.i64 = 0}, 0, UINT_MAX, F|V|A },
+        AV_OPT_TYPE_UINT,   {.i64 = 0}, 0, UINT_MAX, F|V|A|AV_OPT_FLAG_DEPRECATED },
+#endif
     { NULL },
 };
+FF_ENABLE_DEPRECATION_WARNINGS
 
 static const AVClass filtergraph_class = {
     .class_name = "AVFilterGraph",
@@ -119,7 +121,8 @@ AVFilterGraph *avfilter_graph_alloc(void)
     ret = &graph->p;
     ret->av_class = &filtergraph_class;
     av_opt_set_defaults(ret);
-    ff_framequeue_global_init(&graph->frame_queues);
+    for (int i = 0; i < FF_ARRAY_ELEMS(graph->frame_queues); i++)
+        ff_framequeue_global_init(&graph->frame_queues[i]);
 
     return ret;
 }
@@ -206,6 +209,23 @@ fail:
 void avfilter_graph_set_auto_convert(AVFilterGraph *graph, unsigned flags)
 {
     fffiltergraph(graph)->disable_auto_convert = flags;
+}
+
+int avfilter_graph_set_max_buffered_frames(AVFilterGraph *graph,
+                                           enum AVMediaType type,
+                                           unsigned frames)
+{
+    FFFilterGraph *graphi = fffiltergraph(graph);
+    if (type < 0 || type >= FF_ARRAY_ELEMS(graphi->frame_queues))
+        return AVERROR(EINVAL);
+
+    FFFrameQueueGlobal *fqg = &graphi->frame_queues[type];
+    size_t max_queued = frames ? frames : SIZE_MAX;
+    if (fqg->queued > max_queued)
+        return AVERROR(EINVAL);
+    fqg->max_queued = max_queued;
+    graphi->max_queued_set[type] = 1;
+    return 0;
 }
 
 AVFilterContext *avfilter_graph_alloc_filter(AVFilterGraph *graph,
@@ -360,7 +380,8 @@ static int filter_link_check_formats(void *log, AVFilterLink *link, AVFilterForm
         if ((ret = ff_formats_check_pixel_formats(log, cfg->formats)) < 0 ||
             (ret = ff_formats_check_color_spaces(log, cfg->color_spaces)) < 0 ||
             (ret = ff_formats_check_color_ranges(log, cfg->color_ranges)) < 0 ||
-            (ret = ff_formats_check_alpha_modes(log, cfg->alpha_modes)) < 0)
+            (ret = ff_formats_check_alpha_modes(log, cfg->alpha_modes)) < 0 ||
+            (ret = ff_formats_check_chroma_locations(log, cfg->chroma_locations)) < 0)
             return ret;
         break;
 
@@ -475,7 +496,8 @@ static int formats_declared(AVFilterContext *f)
         if (f->inputs[i]->type == AVMEDIA_TYPE_VIDEO &&
             !(f->inputs[i]->outcfg.color_ranges &&
               f->inputs[i]->outcfg.color_spaces &&
-              f->inputs[i]->outcfg.alpha_modes))
+              f->inputs[i]->outcfg.alpha_modes &&
+              f->inputs[i]->outcfg.chroma_locations))
             return 0;
         if (f->inputs[i]->type == AVMEDIA_TYPE_AUDIO &&
             !(f->inputs[i]->outcfg.samplerates &&
@@ -488,7 +510,8 @@ static int formats_declared(AVFilterContext *f)
         if (f->outputs[i]->type == AVMEDIA_TYPE_VIDEO &&
             !(f->outputs[i]->incfg.color_ranges &&
               f->outputs[i]->incfg.color_spaces &&
-              f->outputs[i]->incfg.alpha_modes))
+              f->outputs[i]->incfg.alpha_modes &&
+              f->outputs[i]->incfg.chroma_locations))
             return 0;
         if (f->outputs[i]->type == AVMEDIA_TYPE_AUDIO &&
             !(f->outputs[i]->incfg.samplerates &&
@@ -596,7 +619,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
             return ret;
         /* note: EAGAIN could indicate a partial success, not counted yet */
         if (ret >= 0) {
-            print_filter_formats(log_ctx, AV_LOG_DEBUG, f);
+            print_filter_formats(log_ctx, AV_LOG_TRACE, f);
             count_queried++;
         }
     }
@@ -721,6 +744,10 @@ retry:
                     av_assert0( inlink->outcfg.alpha_modes->refcount > 0);
                     av_assert0(outlink-> incfg.alpha_modes->refcount > 0);
                     av_assert0(outlink->outcfg.alpha_modes->refcount > 0);
+                    av_assert0( inlink-> incfg.chroma_locations->refcount > 0);
+                    av_assert0( inlink->outcfg.chroma_locations->refcount > 0);
+                    av_assert0(outlink-> incfg.chroma_locations->refcount > 0);
+                    av_assert0(outlink->outcfg.chroma_locations->refcount > 0);
                 } else if (outlink->type == AVMEDIA_TYPE_AUDIO) {
                     av_assert0( inlink-> incfg.samplerates->refcount > 0);
                     av_assert0( inlink->outcfg.samplerates->refcount > 0);
@@ -1050,6 +1077,20 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         } else {
             link->alpha_mode = AVALPHA_MODE_UNSPECIFIED;
         }
+
+        if (desc->log2_chroma_w || desc->log2_chroma_h) {
+            if (!link->incfg.chroma_locations->nb_formats) {
+                av_log(link->src, AV_LOG_ERROR, "Cannot select chroma location"
+                       " for the link between filters %s and %s.\n", link->src->name,
+                       link->dst->name);
+                return AVERROR(EINVAL);
+            }
+            link->incfg.chroma_locations->nb_formats = 1;
+            link->chroma_location = link->incfg.chroma_locations->formats[0];
+        } else {
+            /* Chroma location is meaningless without subsampled chroma. */
+            link->chroma_location = AVCHROMA_LOC_UNSPECIFIED;
+        }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
         int ret;
 
@@ -1079,6 +1120,8 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
     ff_formats_unref(&link->outcfg.color_ranges);
     ff_formats_unref(&link->incfg.alpha_modes);
     ff_formats_unref(&link->outcfg.alpha_modes);
+    ff_formats_unref(&link->incfg.chroma_locations);
+    ff_formats_unref(&link->outcfg.chroma_locations);
 
     return 0;
 }
@@ -1136,6 +1179,8 @@ static int reduce_formats_on_filter(AVFilterContext *filter)
     REDUCE_FORMATS(int,      AVFilterFormats,        color_ranges,    formats,
                    nb_formats, ff_add_format);
     REDUCE_FORMATS(int,      AVFilterFormats,        alpha_modes,     formats,
+                   nb_formats, ff_add_format);
+    REDUCE_FORMATS(int,      AVFilterFormats,        chroma_locations, formats,
                    nb_formats, ff_add_format);
 
     /* reduce channel layouts */
@@ -1307,15 +1352,14 @@ static void swap_channel_layouts_on_filter(AVFilterContext *filter)
             continue;
 
         for (j = 0; j < outlink->incfg.channel_layouts->nb_channel_layouts; j++) {
-            AVChannelLayout in_chlayout = { 0 }, out_chlayout = { 0 };
+            AVChannelLayout  in_chlayout = link->outcfg.channel_layouts->channel_layouts[0];
+            AVChannelLayout out_chlayout = outlink->incfg.channel_layouts->channel_layouts[j];
             int  in_channels;
             int out_channels;
             int count_diff;
             int matched_channels, extra_channels;
             int score = 100000;
 
-            av_channel_layout_copy(&in_chlayout, &link->outcfg.channel_layouts->channel_layouts[0]);
-            av_channel_layout_copy(&out_chlayout, &outlink->incfg.channel_layouts->channel_layouts[j]);
             in_channels            = in_chlayout.nb_channels;
             out_channels           = out_chlayout.nb_channels;
             count_diff             = out_channels - in_channels;
@@ -1330,8 +1374,8 @@ static void swap_channel_layouts_on_filter(AVFilterContext *filter)
                     out_channels = FF_LAYOUT2COUNT(&out_chlayout);
                 score -= 10000 + FFABS(out_channels - in_channels) +
                          (in_channels > out_channels ? 10000 : 0);
-                av_channel_layout_uninit(&in_chlayout);
-                av_channel_layout_uninit(&out_chlayout);
+                in_chlayout  = (AVChannelLayout){ 0 };
+                out_chlayout = (AVChannelLayout){ 0 };
                 /* Let the remaining computation run, even if the score
                    value is not altered */
             }
@@ -1598,10 +1642,23 @@ static int graph_config_pointers(AVFilterGraph *graph, void *log_ctx)
 
 int avfilter_graph_config(AVFilterGraph *graphctx, void *log_ctx)
 {
+    FFFilterGraph *graphi = fffiltergraph(graphctx);
     int ret;
 
+    size_t max_queued = SIZE_MAX;
+#if FF_API_MAX_BUFFERED_FRAMES
+FF_DISABLE_DEPRECATION_WARNINGS
     if (graphctx->max_buffered_frames)
-        fffiltergraph(graphctx)->frame_queues.max_queued = graphctx->max_buffered_frames;
+        max_queued = graphctx->max_buffered_frames;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(graphi->frame_queues); i++) {
+        /* only infer the value from graphctx->max_buffered_frames if it was
+         * not already set by avfilter_graph_set_max_buffered_frames() */
+        if (!graphi->max_queued_set[i])
+            graphi->frame_queues[i].max_queued = max_queued;
+    }
     if ((ret = graph_check_validity(graphctx, log_ctx)))
         return ret;
     if ((ret = graph_config_formats(graphctx, log_ctx)))
@@ -1738,7 +1795,7 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
     while (graphi->sink_links_count) {
         oldesti = graphi->sink_links[0];
         oldest  = &oldesti->l.pub;
-        if (fffilter(oldest->dst->filter)->activate && strstr(oldest->dst->filter->name, "buffersink")) {
+        if (fffilter(oldest->dst->filter)->activate) {
             r = av_buffersink_get_frame_flags(oldest->dst, NULL,
                                               AV_BUFFERSINK_FLAG_PEEK);
             if (r != AVERROR_EOF)

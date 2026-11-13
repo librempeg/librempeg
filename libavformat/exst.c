@@ -28,7 +28,7 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "EXST", 4))
+    if (AV_RB32(p->buf) != MKBETAG('E','X','S','T'))
         return 0;
 
     if (p->buf_size < 12)

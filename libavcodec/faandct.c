@@ -25,10 +25,11 @@
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
+#include <math.h>
+
 #include "faandct.h"
-#include "libavutil/emms.h"
 #include "libavutil/internal.h"
-#include "libavutil/libm.h"
+#include "libavutil/mathematics.h"
 
 typedef float FLOAT;
 
@@ -120,8 +121,6 @@ void ff_faandct(int16_t *data)
     FLOAT temp[64];
     int i;
 
-    emms_c();
-
     row_fdct(temp, data);
 
     for (i=0; i<8; i++) {
@@ -172,8 +171,6 @@ void ff_faandct248(int16_t *data)
     FLOAT tmp10, tmp11, tmp12, tmp13;
     FLOAT temp[64];
     int i;
-
-    emms_c();
 
     row_fdct(temp, data);
 

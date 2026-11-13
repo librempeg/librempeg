@@ -159,8 +159,8 @@ static int filter##ddepth(AVFilterContext *ctx,      \
         const ptrdiff_t linesize = out->linesize[plane] / sizeof(type); \
         const int height = s->planeheight[plane];              \
         const int width = s->planewidth[plane];                \
-        const int slice_start = (height * jobnr) / nb_jobs;    \
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;  \
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);  \
+        const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);  \
         const ptrdiff_t i_linesize = s->i_linesize[plane];     \
         const int sizeh = s->sizeh[FFMIN(s->nb_sizeh-1, plane)]; \
         const int sizew = s->sizew[FFMIN(s->nb_sizew-1, plane)]; \

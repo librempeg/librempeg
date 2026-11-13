@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2016 Martin Storsjo
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -120,7 +120,7 @@ static void check_idct(VP8DSPContext *d, bool is_vp7)
     LOCAL_ALIGNED_16(int16_t, subcoef0, [4 * 4]);
     LOCAL_ALIGNED_16(int16_t, subcoef1, [4 * 4]);
     int dc;
-    declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *dst, int16_t *block, ptrdiff_t stride);
+    declare_func(void, uint8_t *dst, int16_t *block, ptrdiff_t stride);
 
     randomize_buffers(src, dst, 4, coef);
 
@@ -262,7 +262,7 @@ static void check_mc(VP8DSPContext *d)
     BUF_RECT(uint8_t, dst0, 16, 16);
     BUF_RECT(uint8_t, dst1, 16, 16);
     int type, k, dx, dy;
-    declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, ptrdiff_t,
+    declare_func(void, uint8_t *, ptrdiff_t,
                       const uint8_t *, ptrdiff_t, int, int, int);
 
     for (type = 0; type < 2; type++) {
@@ -309,7 +309,7 @@ static void check_mc(VP8DSPContext *d)
                         CLEAR_BUF_RECT(dst1);
                         call_ref(dst0, dst0_stride, src, SRC_BUF_STRIDE, height, mx, my);
                         call_new(dst1, dst1_stride, src, SRC_BUF_STRIDE, height, mx, my);
-                        checkasm_check_padded(uint8_t, dst0, dst0_stride, dst1, dst1_stride, size, height, "dst");
+                        checkasm_check_rect_padded(dst0, dst0_stride, dst1, dst1_stride, size, height, "dst");
                         bench_new(dst1, size, src, SRC_BUF_STRIDE, height, mx, my);
                     }
                 }

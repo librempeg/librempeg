@@ -190,9 +190,9 @@ static int query_formats(const AVFilterContext *ctx,
     int ret;
 
     if ((s->x == 1 && s->y == 2) || (s->x == 2 && s->y == 1))
-        formats = ff_make_format_list(in2_pix_fmts);
+        formats = ff_make_pixel_format_list(in2_pix_fmts);
     else
-        formats = ff_make_format_list(in1_pix_fmts);
+        formats = ff_make_pixel_format_list(in1_pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
 
@@ -200,7 +200,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(in1_pix_fmts);
+    formats = ff_make_pixel_format_list(in1_pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
 

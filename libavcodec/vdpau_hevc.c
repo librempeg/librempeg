@@ -150,6 +150,11 @@ static int vdpau_hevc_start_frame(AVCodecContext *avctx,
     info->tiles_enabled_flag = pps->tiles_enabled_flag;
     info->entropy_coding_sync_enabled_flag = pps->entropy_coding_sync_enabled_flag;
     if (info->tiles_enabled_flag) {
+        if (pps->num_tile_columns > FF_ARRAY_ELEMS(info->column_width_minus1) ||
+            pps->num_tile_rows    > FF_ARRAY_ELEMS(info->row_height_minus1)) {
+            av_log(avctx, AV_LOG_ERROR, "Too many tiles\n");
+            return AVERROR(ENOSYS);
+        }
         /* Only valid if tiles_enabled_flag is set. Ignored otherwise. */
         info->num_tile_columns_minus1 = pps->num_tile_columns - 1;
         /* Only valid if tiles_enabled_flag is set. Ignored otherwise. */
@@ -551,6 +556,7 @@ const FFHWAccel ff_hevc_vdpau_hwaccel = {
     .end_frame      = vdpau_hevc_end_frame,
     .decode_slice   = vdpau_hevc_decode_slice,
     .frame_priv_data_size = sizeof(struct vdpau_picture_context),
+    .free_frame_priv = ff_vdpau_free_frame_priv,
     .init           = vdpau_hevc_init,
     .uninit         = ff_vdpau_common_uninit,
     .frame_params   = ff_vdpau_common_frame_params,

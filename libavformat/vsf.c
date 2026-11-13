@@ -43,13 +43,14 @@ static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int64_t start_offset;
-    int pitch, flags;
+    int rate, flags;
     AVStream *st;
 
     avio_skip(pb, 28);
     flags = avio_rl32(pb);
-    pitch = avio_rl32(pb);
-    if (pitch <= 0)
+    rate = avio_rl32(pb);
+    rate = 2 + (48000LL * rate + 2048) / 4096;
+    if (rate <= 0)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -60,7 +61,7 @@ static int read_header(AVFormatContext *s)
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->sample_rate = 2 + (48000 * pitch + 2048) / 4096;
+    st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = (flags & 1) ? 2 : 1;
     st->codecpar->block_align = 0x400 * st->codecpar->ch_layout.nb_channels;
     st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *

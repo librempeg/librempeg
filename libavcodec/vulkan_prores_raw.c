@@ -226,7 +226,7 @@ static int vk_prores_raw_end_frame(AVCodecContext *avctx)
     DecodePushData pd_decode = (DecodePushData) {
         .pkt_data = slices_buf->address,
     };
-    memcpy(pd_decode.qmat, prr->qmat, 64);
+    memcpy(pd_decode.qmat, prr->qmat, sizeof(pd_decode.qmat));
     memcpy(pd_decode.lin_curve, prr->lin_curve, sizeof(pd_decode.lin_curve));
     ff_vk_shader_update_push_const(&ctx->s, exec, decode_shader,
                                    VK_SHADER_STAGE_COMPUTE_BIT,
@@ -303,9 +303,17 @@ static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,
 {
     int err;
 
+    /* Discrete GPUs read host-mapped packets over the bus; prefetch more
+     * to hide the latency. Integrated GPUs would only lose shared memory. */
+    int deep_prefetch = s->props.properties.deviceType ==
+                        VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+                        (s->extensions & FF_VK_EXT_EXTERNAL_HOST_MEMORY);
+    SPEC_LIST_CREATE(sl, 1, sizeof(uint32_t))
+    SPEC_LIST_ADD(sl, 0, 32, deep_prefetch ? 64 : 4);
+
     ff_vk_shader_add_push_const(shd, 0, offsetof(DecodePushData, qmat),
                                 VK_SHADER_STAGE_COMPUTE_BIT);
-    ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
+    ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, sl,
                       (uint32_t []) { 1, 4, 1 }, 0);
 
     add_desc(avctx, s, shd);
@@ -325,7 +333,7 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
                             int version)
 {
     int err;
-    SPEC_LIST_CREATE(sl, 2 + 64, (2 + 64)*sizeof(uint32_t))
+    SPEC_LIST_CREATE(sl, 2 + 8, (2 + 8)*sizeof(uint32_t))
 
     int nb_blocks = version == 0 ? 8 : 16;
     SPEC_LIST_ADD(sl, 16, 32, nb_blocks);
@@ -337,9 +345,8 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
         cos(4.0*M_PI/16.0) / 2.0, cos(5.0*M_PI/16.0) / 2.0,
         cos(6.0*M_PI/16.0) / 2.0, cos(7.0*M_PI/16.0) / 2.0,
     };
-    for (int i = 0; i < 64; i++)
-        SPEC_LIST_ADD(sl, 18 + i, 32,
-                      av_float2int(8*idct_8_scales[i >> 3]*idct_8_scales[i & 7]));
+    for (int i = 0; i < 8; i++)
+        SPEC_LIST_ADD(sl, 18 + i, 32, av_float2int(idct_8_scales[i]));
 
     ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, sl,
                       (uint32_t []) { 8, nb_blocks, 4 }, 0);

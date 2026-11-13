@@ -51,6 +51,7 @@ void ff_vvc_unref_frame(VVCFrameContext *fc, VVCFrame *frame, int flags)
     if (!(frame->flags & ~VVC_FRAME_FLAG_CORRUPT))
         frame->flags = 0;
     if (!frame->flags) {
+        av_refstruct_unref(&frame->hwaccel_picture_private);
         av_frame_unref(frame->frame);
 
         if (frame->needs_fg) {
@@ -69,7 +70,6 @@ void ff_vvc_unref_frame(VVCFrameContext *fc, VVCFrame *frame, int flags)
         av_refstruct_unref(&frame->rpl_tab);
 
         frame->collocated_ref = NULL;
-        av_refstruct_unref(&frame->hwaccel_picture_private);
     }
 }
 
@@ -130,9 +130,6 @@ static VVCFrame *alloc_frame(VVCContext *s, VVCFrameContext *fc)
         if (frame->frame->buf[0])
             continue;
 
-        frame->sps = av_refstruct_ref_c(fc->ps.sps);
-        frame->pps = av_refstruct_ref_c(fc->ps.pps);
-
         // Add LCEVC SEI metadata here, as it's needed in get_buffer()
         if (fc->sei.common.itut_t35.lcevc) {
             ret = ff_frame_new_side_data_from_buf(s->avctx, frame->frame,
@@ -145,7 +142,13 @@ static VVCFrame *alloc_frame(VVCContext *s, VVCFrameContext *fc)
         if (ret < 0)
             return NULL;
 
-        frame->rpl = av_refstruct_allocz(s->current_frame.nb_units * sizeof(RefPicListTab));
+        frame->sps = av_refstruct_ref_c(fc->ps.sps);
+        frame->pps = av_refstruct_ref_c(fc->ps.pps);
+
+        size_t rpl_size;
+        if (av_size_mult(s->current_frame.nb_units, sizeof(RefPicListTab), &rpl_size) < 0)
+            goto fail;
+        frame->rpl = av_refstruct_allocz(rpl_size);
         if (!frame->rpl)
             goto fail;
         frame->nb_rpl_elems = s->current_frame.nb_units;
@@ -380,6 +383,12 @@ static VVCFrame *find_ref_idx(VVCContext *s, VVCFrameContext *fc, int poc, uint8
 
     for (int i = 0; i < FF_ARRAY_ELEMS(fc->DPB); i++) {
         VVCFrame *ref = &fc->DPB[i];
+
+        // In the specification, the current frame is not considered part of
+        // the DPB at this stage, therefore we treat it as if it's not there.
+        if (ref == fc->ref)
+            continue;
+
         if (ref->frame->buf[0] && ref->sequence == s->seq_decode) {
             if ((ref->poc & mask) == poc)
                 return ref;
@@ -450,11 +459,13 @@ static int check_candidate_ref(const VVCFrame *frame, const VVCRefPic *refp)
 static int add_candidate_ref(VVCContext *s, VVCFrameContext *fc, RefPicList *list,
                              int poc, int ref_flag, uint8_t use_msb)
 {
-    VVCFrame *ref   = find_ref_idx(s, fc, poc, use_msb);
     VVCRefPic *refp = &list->refs[list->nb_refs];
+    VVCFrame *ref;
 
-    if (ref == fc->ref || list->nb_refs >= VVC_MAX_REF_ENTRIES)
+    if (use_msb && poc == fc->ref->poc || list->nb_refs >= VVC_MAX_REF_ENTRIES)
         return AVERROR_INVALIDDATA;
+
+    ref = find_ref_idx(s, fc, poc, use_msb);
 
     if (!IS_CVSS(s)) {
         const bool ref_corrupt = !ref || (ref->flags & VVC_FRAME_FLAG_CORRUPT);
@@ -586,6 +597,8 @@ int ff_vvc_slice_rpl(VVCContext *s, VVCFrameContext *fc, SliceContext *sc)
                 return ret;
             }
         }
+        if (rsh->num_ref_idx_active[lx] > rpl->nb_refs)
+            return AVERROR_INVALIDDATA;
         if (ph->r->ph_temporal_mvp_enabled_flag &&
             (!rsh->sh_collocated_from_l0_flag) == lx &&
             rsh->sh_collocated_ref_idx < rpl->nb_refs) {

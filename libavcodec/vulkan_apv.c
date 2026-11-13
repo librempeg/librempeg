@@ -213,34 +213,10 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
     vkf->layout[0] = VK_IMAGE_LAYOUT_UNDEFINED;
     vkf->access[0] = VK_ACCESS_2_NONE;
 
-    ff_vk_frame_barrier(&ctx->s, exec, apv->output_frame,
-                        img_bar, &nb_img_bar,
-                        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                        VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                        VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        VK_IMAGE_LAYOUT_GENERAL,
-                        VK_QUEUE_FAMILY_IGNORED);
-    vk->CmdPipelineBarrier2(exec->buf, &(VkDependencyInfo) {
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pImageMemoryBarriers = img_bar,
-        .imageMemoryBarrierCount = nb_img_bar,
-    });
-    nb_img_bar = 0;
-
-    /* Zero frame */
-    for (int i = 0; i < ff_vk_count_images(vkf); i++)
-        vk->CmdClearColorImage(exec->buf, vkf->img[i],
-                               VK_IMAGE_LAYOUT_GENERAL,
-                               &((VkClearColorValue) { 0 }),
-                               1, &((VkImageSubresourceRange) {
-                                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                   .levelCount = 1,
-                                   .layerCount = 1,
-                               }));
-
-    /* Wait for the frame to get zeroed out before continuing */
+    /* The IDCT shader writes every sample of the coded area, so the frame
+     * does not need to be cleared first. */
     ff_vk_frame_barrier(&ctx->s, exec, apv->output_frame, img_bar, &nb_img_bar,
-                        VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                         VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                         VK_IMAGE_LAYOUT_GENERAL,
@@ -430,20 +406,7 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
     AVHWFramesContext *dec_frames_ctx;
     dec_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
 
-    SPEC_LIST_CREATE(sl, 1 + 64, (1 + 64)*sizeof(uint32_t))
-    SPEC_LIST_ADD(sl, 16, 32, 8); /* nb_blocks per workgroup */
-
-    const double idct_8_scales[8] = {
-        cos(4.0*M_PI/16.0) / 2.0, cos(1.0*M_PI/16.0) / 2.0,
-        cos(2.0*M_PI/16.0) / 2.0, cos(3.0*M_PI/16.0) / 2.0,
-        cos(4.0*M_PI/16.0) / 2.0, cos(5.0*M_PI/16.0) / 2.0,
-        cos(6.0*M_PI/16.0) / 2.0, cos(7.0*M_PI/16.0) / 2.0,
-    };
-    for (int i = 0; i < 64; i++)
-        SPEC_LIST_ADD(sl, 18 + i, 32,
-                      av_float2int(idct_8_scales[i >> 3]*idct_8_scales[i & 7]));
-
-    ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, sl,
+    ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
                       (uint32_t []) { 32, 2, 1 }, 0);
     ff_vk_shader_add_push_const(shd, 0, sizeof(DecodePushData),
                                 VK_SHADER_STAGE_COMPUTE_BIT);

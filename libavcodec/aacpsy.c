@@ -78,6 +78,30 @@
 #define PSY_3GPP_CLIP_HI_L      0.95f
 #define PSY_3GPP_CLIP_HI_S      0.75f
 
+/* Floor on how close a coded band's mask may come to the band's own energy.
+ * The two rate-control families want different shapes, and measurably so:
+ * in VBR/ABR the mask IS the rate authority, so a mask that has risen to meet
+ * its band's energy tells the solver the band is free to destroy and it buys
+ * no bits for it - a broadband floor is right there. In CBR the budget is
+ * fixed and the mask only ranks bands against each other, so the same
+ * broadband floor just moves bits around and costs ~2% Zim on random content;
+ * restricted to the top end, where the mask degenerates to within 2 dB of band
+ * energy on every sample measured, it is a clear win. */
+#define PSY_THRFL_QUALITY       10.0f   /* VBR/ABR depth, dB, all bands */
+#define PSY_THRFL_CBR            6.0f   /* CBR depth, dB */
+#define PSY_THRFL_CBR_KNEE    8000.0f   /* CBR: only above this frequency */
+
+/* Strength of the 3GPP bit-demand curve: its deviation from unity is
+ * amplified, since the trellis coder wants far stronger per-frame budget
+ * modulation than the reference encoder's gentle curve provides.
+ * The amplified factor goes negative in high-PE frames on a starved
+ * reservoir (15-30% of CBR frames). The desired PE is then <= 0 and the
+ * reduction raises every threshold as far as the min-SNR and hole rules
+ * allow, so those frames are shaped for constant SNR instead of by the
+ * mask. That regime is load-bearing: flooring the demand at frame_bits/8
+ * costs 3-5% Zimtohrli at 64 kbps stereo. */
+#define PSY_3GPP_DEMAND_SCALE    2.5f
+
 #define PSY_3GPP_AH_THR_LONG    0.5f
 #define PSY_3GPP_AH_THR_SHORT   0.63f
 
@@ -112,6 +136,24 @@ enum {
 #define PSY_LAME_HIST      32       ///< HP sub-block peak history depth
 #define PSY_LAME_NOV_BACK  30       ///< novelty look-back in sub-blocks
 
+/* HF-novelty veto: an attack candidate stays long when its first-difference
+ * envelope is both relatively and absolutely unremarkable, and pre-echo is
+ * masked by what precedes it. */
+#define PSY_LAME_HFN_REL    4.0f    ///< max derivative rise over the recent envelope
+#define PSY_LAME_HFN_ABS 2000.0f    ///< max absolute derivative peak
+#define PSY_LAME_HFN_PRE    8.0f    ///< max candidate rise over the ~5ms pre-attack minimum
+
+/* Gap-onset detection against a decaying program-level peak-hold */
+#define PSY_LAME_GAP_DEPTH  6.0f    ///< a gap is this far below the peak-hold
+#define PSY_LAME_GAP_BACK   24      ///< gap look-back in sub-blocks (<= PSY_LAME_HIST)
+#define PSY_LAME_GAP_LEVEL  0.4f    ///< candidate must reach this fraction of the peak-hold
+#define PSY_LAME_GAP_FLOOR 4000.0f  ///< and this absolute peak
+#define PSY_LAME_GAP_TOWER  4.0f    ///< HP tower: rise over the whole look-back
+
+/* Level-homogeneous short-window grouping */
+#define PSY_LAME_GRP_RATIO  2.5f    ///< max adjacent-window level ratio inside a group
+#define PSY_LAME_GRP_MAX    4       ///< max windows per group
+
 /**
  * @}
  */
@@ -145,7 +187,12 @@ typedef struct AacPsyChannel{
     /* LAME psy model specific members */
     float attack_threshold;              ///< attack threshold for this channel
     float prev_energy_subshort[AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
+    float next_win_level[AAC_NUM_BLOCKS_SHORT]; ///< lookahead short-window peak levels (grouping homogeneity)
+    float dif_env_hist[PSY_LAME_HIST];   ///< rolling first-difference sub-block peak envelope (HF novelty)
     float hp_env_hist[PSY_LAME_HIST];    ///< rolling HP sub-block peak envelope
+    float raw_env_hist[PSY_LAME_HIST];   ///< rolling broadband sub-block peak envelope
+    float gap_wall;                      ///< decaying broadband peak-hold (gap-onset reference)
+    float gap_wall_hp;                   ///< decaying HP peak-hold (gap-onset reference)
     int   prev_attack;                   ///< attack value for the last short block in the previous sequence
     int   next_attack0_zero;          ///< whether attack[0] of the next frame is zero
     int   frames_since_short;            ///< consecutive long frames (pre-echo-aware isolated-onset gate)
@@ -285,14 +332,16 @@ static float lame_calc_attack_threshold(int bitrate)
 /**
  * LAME psy model specific initialization
  */
-static av_cold void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx)
+static av_cold void lame_window_init(FFPsyContext *fctx, AacPsyContext *ctx, AVCodecContext *avctx)
 {
     int i, j;
 
     for (i = 0; i < avctx->ch_layout.nb_channels; i++) {
         AacPsyChannel *pch = &ctx->ch[i];
 
-        if (avctx->flags & AV_CODEC_FLAG_QSCALE)
+        if ((avctx->flags & AV_CODEC_FLAG_QSCALE) || fctx->unbounded_pe)
+            /* quality-target coders (VBR and ABR) switch windows for quality,
+             * not rate: use the quality attack map regardless of bit_rate */
             pch->attack_threshold = psy_vbr_map[av_clip(avctx->global_quality / FF_QP2LAMBDA, 0, 10)].st_lrm;
         else
             pch->attack_threshold = lame_calc_attack_threshold(avctx->bit_rate / avctx->ch_layout.nb_channels / 1000);
@@ -300,7 +349,8 @@ static av_cold void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx)
         for (j = 0; j < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; j++)
             pch->prev_energy_subshort[j] = 10.0f;
         for (j = 0; j < PSY_LAME_HIST; j++)
-            pch->hp_env_hist[j] = 10.0f;
+            pch->hp_env_hist[j] = pch->raw_env_hist[j] = pch->dif_env_hist[j] = 10.0f;
+        pch->gap_wall = pch->gap_wall_hp = 0.0f;
     }
 }
 
@@ -408,7 +458,7 @@ static av_cold int psy_3gpp_init(FFPsyContext *ctx) {
     for (i = 0; i < ctx->avctx->ch_layout.nb_channels; i++)
         pctx->ch[i].rc_frame_num = -1;
 
-    lame_window_init(pctx, ctx->avctx);
+    lame_window_init(ctx, pctx, ctx->avctx);
 
     return 0;
 }
@@ -527,7 +577,7 @@ static int calc_bit_demand(AacPsyContext *ctx, float pe, int bits, int size,
                            int short_window)
 {
     const float bitsave_slope  = short_window ? PSY_3GPP_SAVE_SLOPE_S  : PSY_3GPP_SAVE_SLOPE_L;
-    const float bitsave_add    = short_window ? PSY_3GPP_SAVE_ADD_S    : PSY_3GPP_SAVE_ADD_L;
+    const float bitsave_add   = short_window ? PSY_3GPP_SAVE_ADD_S    : PSY_3GPP_SAVE_ADD_L;
     const float bitspend_slope = short_window ? PSY_3GPP_SPEND_SLOPE_S : PSY_3GPP_SPEND_SLOPE_L;
     const float bitspend_add   = short_window ? PSY_3GPP_SPEND_ADD_S   : PSY_3GPP_SPEND_ADD_L;
     const float clip_low       = short_window ? PSY_3GPP_CLIP_LO_S     : PSY_3GPP_CLIP_LO_L;
@@ -549,6 +599,7 @@ static int calc_bit_demand(AacPsyContext *ctx, float pe, int bits, int size,
      * Hopefully below is correct.
      */
     bit_factor = 1.0f - bit_save + ((bit_spend - bit_save) / (ctx->pe.max - ctx->pe.min)) * (clipped_pe - ctx->pe.min);
+    bit_factor = 1.0f + (bit_factor - 1.0f) * PSY_3GPP_DEMAND_SCALE;
     /* NOTE: The reference encoder attempts to center pe max/min around the current pe.
      * Here we do that by slowly forgetting pe.min when pe stays in a range that makes
      * it unlikely (ie: above the mean)
@@ -718,7 +769,7 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
         AacPsyBand *bands = &pch->band[w];
 
         /* 5.4.2.3 "Spreading" & 5.4.3 "Spread Energy Calculation" */
-        spread_en[0] = bands[0].energy;
+        spread_en[w] = bands[0].energy;
         for (g = 1; g < num_bands; g++) {
             bands[g].thr   = FFMAX(bands[g].thr,    bands[g-1].thr * coeffs[g].spread_hi[0]);
             spread_en[w+g] = FFMAX(bands[g].energy, spread_en[w+g-1] * coeffs[g].spread_hi[1]);
@@ -758,7 +809,17 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
 
     /* 5.6.1.3.2 "Calculation of the desired perceptual entropy" */
     ctx->ch[channel].entropy = pe;
-    if (ctx->avctx->flags & AV_CODEC_FLAG_QSCALE) {
+    if (ctx->unbounded_pe) {
+        /* quality-target coder: run the PE reduction at a FIXED reference
+         * quality so thresholds keep their perceptual shaping but stay
+         * independent of the user's -q:a (the coder's own noise-to-mask
+         * target is the sole quality authority) */
+        desired_pe = pe * 120.0f / (2 * 2.5f * 120.0f);
+        desired_bits = FFMIN(2560, PSY_3GPP_PE_TO_BITS(desired_pe));
+        desired_pe = PSY_3GPP_BITS_TO_PE(desired_bits);
+        pctx->pe.max = FFMAX(pe, pctx->pe.max);
+        pctx->pe.min = FFMIN(pe, pctx->pe.min);
+    } else if (ctx->avctx->flags & AV_CODEC_FLAG_QSCALE) {
         /* (2.5 * 120) achieves almost transparent rate, and we want to give
          * ample room downwards, so we make that equivalent to QSCALE=2.4
          */
@@ -782,9 +843,13 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
          *       little effect on the final bitrate. Probably a good idea to come
          *       back and do more testing later.
          */
-        if (ctx->bitres.bits > 0)
+        if (ctx->bitres.bits > 0) {
+            /* symmetric in the log domain: a negative previous demand (see
+             * PSY_3GPP_DEMAND_SCALE) sits on the lower bound, and the
+             * asymmetric 0.85 there costs ~2% Zimtohrli at 64 kbps */
             desired_pe *= av_clipf(pctx->pe.previous / PSY_3GPP_BITS_TO_PE(ctx->bitres.bits),
-                                   0.85f, 1.15f);
+                                   1.0f / 1.15f, 1.15f);
+        }
     }
     pctx->pe.previous = PSY_3GPP_BITS_TO_PE(desired_bits);
     ctx->bitres.alloc = desired_bits;
@@ -872,12 +937,43 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
                     AacPsyBand *band = &pch->band[w+g];
                     if (band->avoid_holes != PSY_3GPP_AH_NONE && coeffs[g].min_snr < PSY_SNR_1DB) {
                         coeffs[g].min_snr = PSY_SNR_1DB;
-                        band->thr = band->energy * PSY_SNR_1DB;
+                        /* a reduction step: never lower a threshold, or a
+                         * band below its threshold in quiet becomes codeable */
+                        band->thr = FFMAX(band->thr, band->energy * PSY_SNR_1DB);
                         pe += band->active_lines * 1.5f - band->pe;
                     }
                 }
             }
             /* TODO: allow more holes (unused without mid/side) */
+        }
+    }
+
+    /* Signal-relative mask ceiling. 5.6.1.3.3 exempts bands that are quiet
+     * relative to the spread energy from the min-SNR floor ("holes allowed
+     * here"), so on spectrally lopsided programme their mask is free to rise
+     * until it meets their own energy - the model then calls a band that
+     * carries real texture inaudible, and every consumer of the mask agrees:
+     * the allocator buys it nothing and the quality-target solver sees a mask
+     * it cannot fail. A band we still choose to code must never be allowed
+     * noise within PSY_THRFL_* dB of its own energy, whatever the hole logic said. */
+    {
+        int qmode = ctx->unbounded_pe || (ctx->avctx->flags & AV_CODEC_FLAG_QSCALE);
+        float lim  = qmode ? PSY_THRFL_QUALITY : PSY_THRFL_CBR;
+        float knee = qmode ? 0.0f : PSY_THRFL_CBR_KNEE;
+        float lo   = ff_exp10f(-lim / 10.0f);
+        float l2f  = ctx->avctx->sample_rate / 2.0f /
+                     (wi->num_windows == 1 ? 1024.0f : 128.0f);
+        for (w = 0; w < wi->num_windows*16; w += 16) {
+            int start = 0;
+            for (g = 0; g < num_bands; g++) {
+                AacPsyBand *band = &pch->band[w+g];
+                /* never below the threshold in quiet: an inaudible band
+                 * must stay uncoded */
+                if (start * l2f >= knee)
+                    band->thr = FFMIN(band->thr, FFMAX(coeffs[g].ath,
+                                                       band->energy * lo));
+                start += band_sizes[g];
+            }
         }
     }
 
@@ -1008,13 +1104,30 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
 
             attack_intensity[i + PSY_LAME_NUM_SUBBLOCKS] = p;
         }
+        for (i = 0; i < AAC_NUM_BLOCKS_SHORT; i++)
+            pch->next_win_level[i] = energy_short[1 + i];
 
         {   /* pre-echo-aware threshold relaxation + periodicity/novelty check
              * (a pulse train repeats its peak; a real onset towers) */
             float frame_peak = 1.0f;
             float env[PSY_LAME_HIST + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
+            float denv[PSY_LAME_HIST + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
             const float nov_gate = 1.25f;
-            memcpy(env, pch->hp_env_hist, sizeof(pch->hp_env_hist));
+            /* first-difference peak per sub-block: an attack that shorts can
+             * help has HF novelty; a bass pluck under a long window does not */
+            memcpy(denv, pch->dif_env_hist, sizeof(pch->dif_env_hist));
+            {
+                const int sub = AAC_BLOCK_SIZE_LONG / (AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS);
+                for (i = 0; i < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; i++) {
+                    float p = 0.0f;
+                    for (int j2 = i*sub + 1; j2 < (i+1)*sub; j2++)
+                        p = FFMAX(p, fabsf(la[j2] - la[j2-1]));
+                    denv[PSY_LAME_HIST + i] = FFMAX(p * 32768.0f, 1.0f);
+                }
+            }
+            memcpy(pch->dif_env_hist, denv + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS,
+                   sizeof(pch->dif_env_hist));
+            memcpy(env,pch->hp_env_hist, sizeof(pch->hp_env_hist));
             memcpy(env + PSY_LAME_HIST, energy_subshort + PSY_LAME_NUM_SUBBLOCKS,
                    AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS * sizeof(*env));
             for (i = PSY_LAME_NUM_SUBBLOCKS; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
@@ -1044,6 +1157,33 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
                                  pch->frames_since_short >= PSY_LAME_PE_GAP))
                                 continue;    /* periodic, not an onset */
                         }
+                        if (i >= PSY_LAME_NUM_SUBBLOCKS) {
+                            /* no HF novelty: pre-echo is masked by the
+                             * sustained LF itself, and the short excursion
+                             * (HF mute, then the stop frame's noisy HF
+                             * hand-back) is the audible event. Both bars
+                             * must agree: absolutely small AND relatively
+                             * unremarkable - a quiet transient rising out
+                             * of silence has a tiny derivative but maximal
+                             * novelty, and its pre-echo lands on silence */
+                            const int pos = PSY_LAME_HIST + i - PSY_LAME_NUM_SUBBLOCKS;
+                            float dmax = 1.0f, premin = 1e30f;
+                            for (int k = 1; k <= PSY_LAME_NOV_BACK; k++)
+                                dmax = FFMAX(dmax, denv[pos - k]);
+                            /* pre-echo audibility: the veto is only safe
+                             * when the surroundings mask the smear - a deep
+                             * dip right before a LOUD attack (stop-gap
+                             * slams) means the long window's pre-echo lands
+                             * on quiet. Quiet candidates keep the veto:
+                             * their smear is at the noise floor, and shorts
+                             * would only fragment the passage */
+                            for (int k = 1; k <= 4; k++)
+                                premin = FFMIN(premin, env[pos - k]);
+                            if (denv[pos] < PSY_LAME_HFN_REL * dmax &&
+                                denv[pos] < PSY_LAME_HFN_ABS &&
+                                premin * PSY_LAME_HFN_PRE > energy_subshort[i])
+                                continue;
+                        }
                         attacks[i / PSY_LAME_NUM_SUBBLOCKS] = (i % PSY_LAME_NUM_SUBBLOCKS) + 1;
                     }
                 }
@@ -1065,6 +1205,74 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
                 }
             }
             att_sum += attacks[i];
+        }
+
+        {   /* Gap-onset detection on the broadband envelope: a slam that ends
+             * a quiet gap (stop-start riffing, kick after a break) can be
+             * invisible to the HP path - no content above fs/4, or a rise too
+             * gradual for the 2-sub-block ratio - yet pre-echo into the gap
+             * is maximally audible (no forward masking there). Fire when the
+             * candidate towers over a recent dip. Pulse trains cannot fire:
+             * their inter-pulse floor never dips far enough below the pulse. */
+            float renv[PSY_LAME_HIST + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
+            /* scan both envelopes: broadband (kick+chug slams with LF
+             * dominance) and HP (events whose gap only exists above the
+             * sustained bass) */
+            float henv[PSY_LAME_HIST + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
+            float *walls[2] = { &pch->gap_wall, &pch->gap_wall_hp };
+            const float *envs[2] = { renv, henv };
+            memcpy(renv, pch->raw_env_hist, sizeof(pch->raw_env_hist));
+            for (i = 0; i < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; i++) {
+                float p = 0.0f;
+                for (int j2 = 0; j2 < 64; j2++)
+                    p = FFMAX(p, fabsf(la[i*64 + j2]));
+                renv[PSY_LAME_HIST + i] = FFMAX(p * 32768.0f, 1.0f);
+            }
+            memcpy(henv, pch->hp_env_hist, sizeof(pch->hp_env_hist));
+            memcpy(henv + PSY_LAME_HIST, energy_subshort + PSY_LAME_NUM_SUBBLOCKS,
+                   AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS * sizeof(*henv));
+            for (int e = 0; e < 2; e++) {
+                const float *ev = envs[e];
+                float wall = *walls[e];
+                for (i = 0; i < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; i++) {
+                    const int b = (i + PSY_LAME_NUM_SUBBLOCKS) / PSY_LAME_NUM_SUBBLOCKS;
+                    const int pos = PSY_LAME_HIST + i;
+                    const float cand  = ev[pos];
+                    const float quiet = wall / PSY_LAME_GAP_DEPTH;
+                    int run = 0, k0 = 0;
+                    /* the gap must end adjacent to the candidate (<= 5
+                     * rising sub-blocks) and hold >= 4 sub-blocks (~6ms).
+                     * A pulse train's inter-pulse floor never drops this
+                     * far below its own running peak, so it cannot fire. */
+                    for (int k = 3; k <= 8; k++)
+                        if (ev[pos - k] < quiet) {
+                            k0 = k;
+                            break;
+                        }
+                    if (k0)
+                        for (int k = k0; k <= PSY_LAME_GAP_BACK && ev[pos - k] < quiet; k++)
+                            run++;
+                    if (e == 1 && !(run >= 4)) {
+                        /* HP tower: an onset rising far above everything
+                         * in the look-back, even without a silent gap
+                         * (cymbal-less slams leave the bass sustaining) */
+                        float dmax = 1.0f;
+                        for (int k = 3; k <= PSY_LAME_GAP_BACK; k++)
+                            dmax = FFMAX(dmax, ev[pos - k]);
+                        if (cand > PSY_LAME_GAP_TOWER * dmax)
+                            run = 4;    /* qualify via the same fire path */
+                    }
+                    if (!attacks[b] && run >= 4 && cand > PSY_LAME_GAP_LEVEL * wall &&
+                        cand > PSY_LAME_GAP_FLOOR) {
+                        attacks[b] = (i + PSY_LAME_NUM_SUBBLOCKS) % PSY_LAME_NUM_SUBBLOCKS + 1;
+                        att_sum += attacks[b];
+                    }
+                    wall = FFMAX(wall * 0.996f, cand);
+                }
+                *walls[e] = wall;
+            }
+            memcpy(pch->raw_env_hist, renv + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS,
+                   sizeof(pch->raw_env_hist));
         }
 
         /* roll the HP sub-block peak history */
@@ -1154,6 +1362,24 @@ static FFPsyWindowInfo psy_lame_apply(AacPsyContext *pctx, AacPsyChannel *pch,
     }
     pch->next_grouping = window_grouping[grouping];
 
+    {
+        /* energy-homogeneous grouping: fixed attack-position patterns force
+         * disparate windows to share scalefactors; regroup on level jumps */
+        uint8_t bits = 0;
+        int glen = 1;
+        for (i = 1; i < AAC_NUM_BLOCKS_SHORT; i++) {
+            float a = pch->next_win_level[i], b = pch->next_win_level[i-1];
+            float hi = FFMAX(a, b), lo = FFMAX(FFMIN(a, b), 1.0f);
+            if (hi <= lo * PSY_LAME_GRP_RATIO && glen < PSY_LAME_GRP_MAX) {
+                bits |= 1 << i;
+                glen++;
+            } else {
+                glen = 1;
+            }
+        }
+        pch->next_grouping = bits;
+    }
+
     pch->prev_attack = attacks[AAC_NUM_BLOCKS_SHORT - 1];
 
     return wi;
@@ -1203,6 +1429,11 @@ static void psy_lame_window_pair(FFPsyContext *ctx,
      * should isolate the first attack heard in EITHER channel. */
     for (int i = 0; i < AAC_NUM_BLOCKS_SHORT + 1; i++)
         merged[i] = att0[i] ? att0[i] : att1[i];
+
+    /* grouping must also match across the pair: merge the level maps */
+    for (int i = 0; i < AAC_NUM_BLOCKS_SHORT; i++)
+        pch0->next_win_level[i] = pch1->next_win_level[i] =
+            FFMAX(pch0->next_win_level[i], pch1->next_win_level[i]);
 
     wi[0] = psy_lame_apply(pctx, pch0, u, merged, prev_type0, !!la0);
     wi[1] = psy_lame_apply(pctx, pch1, u, merged, prev_type1, !!la1);

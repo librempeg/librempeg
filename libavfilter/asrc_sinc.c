@@ -37,7 +37,7 @@ typedef struct SincContext {
 
     int sample_rate, nb_samples;
     float phase, Fc0, Fc1, tbw0, tbw1;
-    double att, beta;
+    double att, beta, gain;
     int num_taps[2];
     int round;
 
@@ -154,6 +154,7 @@ static const AVOption sinc_options[] = {
     { "n",           "set the number of samples per requested frame", OFFSET(nb_samples),  AV_OPT_TYPE_INT,   {.i64=1024},   1, INT_MAX, AF },
     { "hp",          "set high-pass filter frequency",                OFFSET(Fc0),         AV_OPT_TYPE_FLOAT, {.dbl=0},      0, INT_MAX, AF },
     { "lp",          "set low-pass filter frequency",                 OFFSET(Fc1),         AV_OPT_TYPE_FLOAT, {.dbl=0},      0, INT_MAX, AF },
+    { "gain",        "set boost/cut gain",                            OFFSET(gain),        AV_OPT_TYPE_DOUBLE,{.dbl=0},      0,      32, AF },
     { "phase",       "set filter phase response",                     OFFSET(phase),       AV_OPT_TYPE_FLOAT, {.dbl=50},     0,     100, AF },
     { "beta",        "set kaiser window beta",                        OFFSET(beta),        AV_OPT_TYPE_DOUBLE,{.dbl=-1},    -1,     256, AF },
     { "att",         "set stop-band attenuation",                     OFFSET(att),         AV_OPT_TYPE_DOUBLE,{.dbl=120},   40,     300, AF },
@@ -169,7 +170,7 @@ AVFILTER_DEFINE_CLASS(sinc);
 
 const FFFilter ff_asrc_sinc = {
     .p.name        = "sinc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, or band-reject FIR coefficients."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a sinc kaiser-windowed low-pass, high-pass, band-pass, band-stop, low-shelf, high-shelf or peaking Finite Impulse Response coefficients."),
     .p.priv_class  = &sinc_class,
     .priv_size     = sizeof(SincContext),
     .uninit        = uninit,

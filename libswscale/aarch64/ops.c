@@ -37,8 +37,9 @@ static_assert(offsetof_exec_in       == offsetof(SwsOpExec, in),       "SwsOpExe
 static_assert(offsetof_exec_out      == offsetof(SwsOpExec, out),      "SwsOpExec layout mismatch");
 static_assert(offsetof_exec_in_bump  == offsetof(SwsOpExec, in_bump),  "SwsOpExec layout mismatch");
 static_assert(offsetof_exec_out_bump == offsetof(SwsOpExec, out_bump), "SwsOpExec layout mismatch");
-static_assert(offsetof_impl_cont     == offsetof(SwsOpImpl, cont),     "SwsOpImpl layout mismatch");
+static_assert(offsetof_impl_func     == offsetof(SwsOpImpl, func),     "SwsOpImpl layout mismatch");
 static_assert(offsetof_impl_priv     == offsetof(SwsOpImpl, priv),     "SwsOpImpl layout mismatch");
+static_assert(alignof_impl           == alignof(SwsOpImpl),            "SwsOpImpl layout mismatch");
 
 /*********************************************************************/
 /* Forward-declare exported functions. */
@@ -66,7 +67,7 @@ static SwsFuncPtr aarch64_lookup(const SwsAArch64OpImplParams *p)
 
 /*********************************************************************/
 static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
-                                const SwsOp *op, SwsImplResult *res)
+                                const SwsUOp *uop, SwsImplResult *res)
 {
     /**
      * Compute number of full vector registers needed to pack all non-zero
@@ -74,127 +75,93 @@ static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
      */
     const int num_vregs = linear_num_vregs(p);
     av_assert0(num_vregs <= 4);
-    float *coeffs = av_malloc(num_vregs * 4 * sizeof(float));
-    if (!coeffs)
-        return AVERROR(ENOMEM);
+    union {
+        uint8_t  u8[4 * 16];
+        uint16_t u16[4 * 8];
+        uint32_t u32[4 * 4];
+        float    f32[4 * 4];
+    } coeffs = { 0 };
 
     /**
      * Copy non-zero coefficients, packed in sequential order, offset first.
      * The same order must be followed in asmgen_op_linear().
      */
     int i_coeff = 0;
-    for (int i = 0; i < 4; i++) {
+    LOOP_MASK(p, i) {
         for (int j = 0; j < 5; j++) {
             const int jj = (j == 0) ? 4 : (j - 1);
-            if (!(p->par.lin.zero & SWS_MASK(i, jj)))
-                coeffs[i_coeff++] = (float) op->lin.m[i][jj].num / op->lin.m[i][jj].den;
+            if (!(p->par.lin.zero & SWS_MASK(i, jj))) {
+                const SwsPixel px = uop->data.mat4x5[i][jj];
+                switch (p->type) {
+                case SWS_PIXEL_U8:  coeffs.u8[i_coeff++]  = px.u8;  break;
+                case SWS_PIXEL_U16: coeffs.u16[i_coeff++] = px.u16; break;
+                case SWS_PIXEL_U32: coeffs.u32[i_coeff++] = px.u32; break;
+                case SWS_PIXEL_F32: coeffs.f32[i_coeff++] = px.f32; break;
+                }
+            }
         }
     }
 
-    res->priv.ptr = coeffs;
-    res->free = ff_op_priv_free;
-
+    ff_sws_op_priv_pack(res, &coeffs, num_vregs * 16);
     return 0;
 }
 
 /*********************************************************************/
-static int aarch64_setup_dither(const SwsAArch64OpImplParams *p,
-                                const SwsOp *op, SwsImplResult *res)
+static int aarch64_setup_dither(const SwsUOp *uop, SwsImplResult *res)
 {
-    /**
-     * The input dither matrix is (1 << size_log2)² pixels large. It is
-     * periodic, so the x and y offsets should be masked to fit inside
-     * (1 << size_log2).
-     * The width of the matrix is assumed to be at least 8, which matches
-     * the maximum block_size for aarch64 asmgen when f32 operations
-     * (i.e., dithering) are used. This guarantees that the x offset is
-     * aligned and that reading block_size elements does not extend past
-     * the end of the row. The x offset doesn't change between components,
-     * so it is only required to be masked once.
-     * The y offset, on the other hand, may change per component, and
-     * would therefore need to be masked for every y_offset value. To
-     * simplify the execution, we over-allocate the number of rows of
-     * the output dither matrix by the largest y_offset value. This way,
-     * we only need to mask y offset once, and can safely increment the
-     * dither matrix pointer by fixed offsets for every y_offset change.
-     */
-
-    /* Find the largest y_offset value. */
-    const int size = 1 << op->dither.size_log2;
-    const int8_t *off = op->dither.y_offset;
-    int max_offset = 0;
-    for (int i = 0; i < 4; i++) {
-        if (off[i] >= 0)
-            max_offset = FFMAX(max_offset, off[i] & (size - 1));
-    }
-
-    /* Allocate (size + max_offset) rows to allow over-reading the matrix. */
-    const int stride = size * sizeof(float);
-    const int num_rows = size + max_offset;
-    float *matrix = av_malloc(num_rows * stride);
-    if (!matrix)
-        return AVERROR(ENOMEM);
-
-    for (int i = 0; i < size * size; i++)
-        matrix[i] = (float) op->dither.matrix[i].num / op->dither.matrix[i].den;
-
-    memcpy(&matrix[size * size], matrix, max_offset * stride);
-
-    res->priv.ptr = matrix;
-    res->free = ff_op_priv_free;
-
+    ff_sws_op_priv_pack_refptr(res, av_refstruct_ref(uop->data.ptr));
     return 0;
 }
 
 /*********************************************************************/
-static int aarch64_setup(const SwsOpList *ops, int block_size, int n,
-                         const SwsAArch64OpImplParams *p, SwsImplResult *out)
+static int aarch64_setup(const SwsUOp *uop, const SwsAArch64OpImplParams *p,
+                         SwsImplResult *out)
 {
-    const SwsOp *op = &ops->ops[n];
-    switch (op->op) {
-    case SWS_OP_READ:
+    switch (uop->uop) {
+    case SWS_UOP_READ_BIT: {
         /* Negative shift values to perform right shift using ushl. */
-        if (op->rw.frac == 3) {
-            out->priv = (SwsOpPriv) {
-                .u8 = {
-                    -7, -6, -5, -4, -3, -2, -1, 0,
-                    -7, -6, -5, -4, -3, -2, -1, 0,
-                }
-            };
-        }
+        static const int8_t shift[16] = {
+            -7, -6, -5, -4, -3, -2, -1, 0,
+            -7, -6, -5, -4, -3, -2, -1, 0,
+        };
+        SWS_OP_PRIV_PACK(out, shift);
         break;
-    case SWS_OP_WRITE:
+    }
+    case SWS_UOP_WRITE_BIT: {
         /* Shift values for ushl. */
-        if (op->rw.frac == 3) {
-            out->priv = (SwsOpPriv) {
-                .u8 = {
-                    7, 6, 5, 4, 3, 2, 1, 0,
-                    7, 6, 5, 4, 3, 2, 1, 0,
-                }
-            };
-        }
+        static const uint8_t shift[16] = {
+            7, 6, 5, 4, 3, 2, 1, 0,
+            7, 6, 5, 4, 3, 2, 1, 0,
+        };
+        SWS_OP_PRIV_PACK(out, shift);
         break;
-    case SWS_OP_CLEAR:
-        ff_sws_setup_clear(&(const SwsImplParams) { .op = op }, out);
-        break;
-    case SWS_OP_MIN:
-    case SWS_OP_MAX:
-        ff_sws_setup_clamp(&(const SwsImplParams) { .op = op }, out);
-        break;
-    case SWS_OP_SCALE:
-        ff_sws_setup_scale(&(const SwsImplParams) { .op = op }, out);
-        break;
-    case SWS_OP_LINEAR:
-        return aarch64_setup_linear(p, op, out);
-    case SWS_OP_DITHER:
-        return aarch64_setup_dither(p, op, out);
+    }
+    case SWS_UOP_CLEAR:
+    case SWS_UOP_ADD:
+    case SWS_UOP_MIN:
+    case SWS_UOP_MAX: {
+        int ret = ff_sws_setup_vec4(&(const SwsImplParams) { .uop = uop }, out);
+        if (ret < 0)
+            return ret;
+        /* Pad to the full vector register loaded by the kernel */
+        static const uint8_t zero[16];
+        ff_sws_op_priv_pack(out, zero, sizeof(zero) - out->priv_size);
+        return 0;
+    }
+    case SWS_UOP_SCALE:
+        return ff_sws_setup_scalar(&(const SwsImplParams) { .uop = uop }, out);
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
+        return aarch64_setup_linear(p, uop, out);
+    case SWS_UOP_DITHER:
+        return aarch64_setup_dither(uop, out);
     }
     return 0;
 }
 
 /*********************************************************************/
-static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
-                           SwsCompiledOp *out)
+static int compile_uops_aarch64(SwsContext *ctx, const SwsUOpList *uops,
+                                SwsCompiledOp *out)
 {
     int ret;
 
@@ -203,7 +170,7 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
         return AVERROR(ENOTSUP);
 
     /* Use at most two full vregs during the widest precision section */
-    int block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
+    int block_size = (uops->pixel_size_max == 4) ? 8 : 16;
 
     SwsOpChain *chain = ff_sws_op_chain_alloc();
     if (!chain)
@@ -211,28 +178,26 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
     chain->cpu_flags = AV_CPU_FLAG_NEON;
 
     *out = (SwsCompiledOp) {
-        .priv        = chain,
-        .slice_align = 1,
-        .free        = ff_sws_op_chain_free_cb,
         .block_size  = block_size,
+        .slice_align = 1,
     };
 
     /* Look up kernel functions. */
-    for (int i = 0; i < ops->num_ops; i++) {
+    for (int i = 0; i < uops->num_ops; i++) {
         SwsAArch64OpImplParams params = { 0 };
-        ret = convert_to_aarch64_impl(ctx, ops, i, block_size, &params);
-        if (ret < 0)
-            goto error;
+        convert_to_aarch64_impl(&uops->ops[i], block_size, &params);
         SwsFuncPtr func = aarch64_lookup(&params);
         if (!func) {
             ret = AVERROR(ENOTSUP);
             goto error;
         }
         SwsImplResult res = { 0 };
-        ret = aarch64_setup(ops, block_size, i, &params, &res);
+        ret = aarch64_setup(&uops->ops[i], &params, &res);
         if (ret < 0)
             goto error;
-        ret = ff_sws_op_chain_append(chain, func, res.free, &res.priv);
+        av_assert1(res.priv_size == aarch64_priv_size(&params));
+        ret = ff_sws_op_chain_append(chain, func, res.ref, res.priv, res.priv_size);
+        av_refstruct_unref(&res.ref);
         if (ret < 0)
             goto error;
     }
@@ -243,31 +208,51 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
     void ff_sws_process_0111_neon(void);
     void ff_sws_process_1111_neon(void);
 
-    const SwsOp *read  = ff_sws_op_list_input(ops);
-    const SwsOp *write = ff_sws_op_list_output(ops);
-    const int read_planes  = read ? ff_sws_rw_op_planes(read) : 0;
-    const int write_planes = ff_sws_rw_op_planes(write);
     SwsOpFunc process_func = NULL;
-    switch (FFMAX(read_planes, write_planes)) {
+    switch (av_popcount(uops->planes_in | uops->planes_out)) {
     case 1: process_func = (SwsOpFunc) ff_sws_process_0001_neon; break;
     case 2: process_func = (SwsOpFunc) ff_sws_process_0011_neon; break;
     case 3: process_func = (SwsOpFunc) ff_sws_process_0111_neon; break;
     case 4: process_func = (SwsOpFunc) ff_sws_process_1111_neon; break;
     }
 
-    out->func      = process_func;
-    out->cpu_flags = chain->cpu_flags;
+    out->func = process_func;
+    ff_sws_op_chain_attach(chain, out);
+
+    return 0;
 
 error:
+    ff_sws_op_chain_free(chain);
+    return ret;
+}
+
+/*********************************************************************/
+static int compile_ops_aarch64(SwsContext *ctx, const SwsOpList *ops,
+                               SwsCompiledOp *out)
+{
+    SwsUOpList *uops = ff_sws_uop_list_alloc();
+    if (!uops)
+        return AVERROR(ENOMEM);
+
+    SwsUOpFlags flags = SWS_UOP_FLAG_PUNNING | SWS_UOP_FLAG_ADD;
+    if (!(ctx->flags & SWS_BITEXACT))
+        flags |= SWS_UOP_FLAG_FMA;
+    int ret = ff_sws_ops_translate(ctx, ops, flags, uops);
     if (ret < 0)
-        ff_sws_op_chain_free(chain);
+        goto error;
+
+    ret = compile_uops_aarch64(ctx, uops, out);
+
+error:
+    ff_sws_uop_list_free(&uops);
     return ret;
 }
 
 /*********************************************************************/
 const SwsOpBackend backend_aarch64 = {
-    .name      = "aarch64",
-    .flags     = SWS_BACKEND_AARCH64,
-    .compile   = aarch64_compile,
-    .hw_format = AV_PIX_FMT_NONE,
+    .name         = "aarch64",
+    .flags        = SWS_BACKEND_AARCH64,
+    .compile      = compile_ops_aarch64,
+    .compile_uops = compile_uops_aarch64,
+    .hw_format    = AV_PIX_FMT_NONE,
 };

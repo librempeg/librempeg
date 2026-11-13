@@ -254,7 +254,7 @@ static int extract_header(AVCodecContext *const avctx,
             s->mask_buf = av_malloc((s->planesize * 32) + AV_INPUT_BUFFER_PADDING_SIZE);
             if (!s->mask_buf)
                 return AVERROR(ENOMEM);
-            s->mask_palbuf = av_malloc((2 << s->bpp) * sizeof(uint32_t) + AV_INPUT_BUFFER_PADDING_SIZE);
+            s->mask_palbuf = av_mallocz((2 << s->bpp) * sizeof(uint32_t) + AV_INPUT_BUFFER_PADDING_SIZE);
             if (!s->mask_palbuf)
                 return AVERROR(ENOMEM);
         }
@@ -284,7 +284,7 @@ static int extract_header(AVCodecContext *const avctx,
             return AVERROR(ENOMEM);
 
         ham_count = 8 * (1 << s->ham);
-        s->ham_palbuf = av_malloc(extra_space * (ham_count << !!(s->masking == MASK_HAS_MASK)) * sizeof (uint32_t) + AV_INPUT_BUFFER_PADDING_SIZE);
+        s->ham_palbuf = av_mallocz(extra_space * (ham_count << !!(s->masking == MASK_HAS_MASK)) * sizeof (uint32_t) + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!s->ham_palbuf)
             return AVERROR(ENOMEM);
 
@@ -371,7 +371,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if ((err = av_image_check_size(avctx->width, avctx->height, 0, avctx)))
         return err;
     s->planesize = FFALIGN(avctx->width, 16) >> 3; // Align plane size in bits to word-boundary
-    s->planebuf  = av_malloc(s->planesize * avctx->height + AV_INPUT_BUFFER_PADDING_SIZE);
+    s->planebuf  = av_mallocz(s->planesize * avctx->height + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!s->planebuf)
         return AVERROR(ENOMEM);
 

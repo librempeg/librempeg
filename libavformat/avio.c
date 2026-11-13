@@ -34,6 +34,7 @@
 #include "url.h"
 
 #define IO_BUFFER_SIZE 32768
+#define NETWORK_IO_BUFFER_SIZE 262144
 
 /** @name Logging context. */
 /*@{*/
@@ -147,6 +148,7 @@ static int url_alloc_for_protocol(URLContext **puc, const URLProtocol *up,
     uc->prot            = up;
     uc->flags           = flags;
     uc->is_streamed     = 0; /* default = not streamed */
+    uc->uses_network    = !!(up->flags & URL_PROTOCOL_FLAG_NETWORK);
     uc->max_packet_size = 0; /* default: stream file */
     if (up->priv_data_size) {
         uc->priv_data = av_mallocz(up->priv_data_size);
@@ -412,8 +414,11 @@ static int url_open_whitelist(URLContext **puc, const char *filename, int flags,
 
     ret = ffurl_connect(*puc, options);
 
-    if (!ret)
+    if (!ret) {
+        if (parent)
+            parent->uses_network |= (*puc)->uses_network;
         return 0;
+    }
 fail:
     ffurl_closep(puc);
     return ret;
@@ -437,6 +442,8 @@ int ffio_fdopen(AVIOContext **sp, URLContext *h)
     max_packet_size = h->max_packet_size;
     if (max_packet_size) {
         buffer_size = max_packet_size; /* no need to bufferize more than one packet */
+    } else if (h->uses_network && !(h->flags & AVIO_FLAG_WRITE)) {
+        buffer_size = NETWORK_IO_BUFFER_SIZE;
     } else {
         buffer_size = IO_BUFFER_SIZE;
     }

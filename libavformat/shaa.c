@@ -42,18 +42,17 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    uint32_t start_offset, coefs_offset, loop_start, loop_end, title_length;
+    uint32_t start_offset, coefs_offset, loop_start, loop_end, title_length, align;
     char title[1024] = { 0 };
     AVIOContext *pb = s->pb;
     int ret, rate, codec;
     int64_t duration;
-    uint8_t format;
     AVStream *st;
 
     avio_skip(pb, 8);
     start_offset = avio_rl32(pb);
     avio_skip(pb, 4);
-    format = avio_r8(pb);
+    codec = avio_r8(pb);
     avio_skip(pb, 3);
     rate = avio_rl32(pb);
     if (rate <= 0)
@@ -71,17 +70,20 @@ static int read_header(AVFormatContext *s)
             return ret;
     }
 
-    switch (format) {
+    switch (codec) {
     case 1:
-        codec  = AV_CODEC_ID_PCM_S16LE;
+        codec = AV_CODEC_ID_PCM_S16LE;
+        align = 2;
         break;
     case 2:
         codec = AV_CODEC_ID_ADPCM_NDSP_LE;
+        align = 8;
         break;
     default:
-        avpriv_request_sample(s, "format 0x%X", format);
+        avpriv_request_sample(s, "codec 0x%X", codec);
         return AVERROR_PATCHWELCOME;
     }
+
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
@@ -91,7 +93,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = codec;
     st->codecpar->ch_layout.nb_channels = 1;
-    st->codecpar->block_align = 512;
+    st->codecpar->block_align = align;
     st->codecpar->sample_rate = rate;
 
     if (loop_end > 0) {

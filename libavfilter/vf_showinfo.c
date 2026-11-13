@@ -32,6 +32,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/film_grain_params.h"
+#include "libavutil/gain_map.h"
 #include "libavutil/hdr_dynamic_metadata.h"
 #include "libavutil/hdr_dynamic_vivid_metadata.h"
 #include "libavutil/opt.h"
@@ -43,7 +44,6 @@
 #include "libavutil/timecode.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/video_enc_params.h"
-#include "libavutil/detection_bbox.h"
 #include "libavutil/ambient_viewing_environment.h"
 #include "libavutil/uuid.h"
 
@@ -158,30 +158,6 @@ static void dump_tdrdi(AVFilterContext *ctx, const AVFrameSideData *sd)
 
 
     av_log(ctx, AV_LOG_INFO, "number of reference displays: %u", tdrdi->num_ref_displays);
-}
-
-static void dump_detection_bbox(AVFilterContext *ctx, const AVFrameSideData *sd)
-{
-    int nb_bboxes;
-    const AVDetectionBBoxHeader *header;
-    const AVDetectionBBox *bbox;
-
-    header = (const AVDetectionBBoxHeader *)sd->data;
-    nb_bboxes = header->nb_bboxes;
-    av_log(ctx, AV_LOG_INFO, "source: %s\n", header->source);
-
-    for (int i = 0; i < nb_bboxes; i++) {
-        bbox = av_get_detection_bbox(header, i);
-        av_log(ctx, AV_LOG_INFO, "index: %d,\tregion: (%d, %d) -> (%d, %d), label: %s, confidence: %d/%d.\n",
-                                 i, bbox->x, bbox->y, bbox->x + bbox->w, bbox->y + bbox->h,
-                                 bbox->detect_label, bbox->detect_confidence.num, bbox->detect_confidence.den);
-        if (bbox->classify_count > 0) {
-            for (int j = 0; j < bbox->classify_count; j++) {
-                av_log(ctx, AV_LOG_INFO, "\t\tclassify:  label: %s, confidence: %d/%d.\n",
-                       bbox->classify_labels[j], bbox->classify_confidences[j].num, bbox->classify_confidences[j].den);
-            }
-        }
-    }
 }
 
 static void dump_mastering_display(AVFilterContext *ctx, const AVFrameSideData *sd)
@@ -655,6 +631,32 @@ static void dump_dovi_metadata(AVFilterContext *ctx, const AVFrameSideData *sd)
     av_log(ctx, AV_LOG_INFO, "source_diagonal=%"PRIu16"; ", color->source_diagonal);
 }
 
+static void dump_gain_map_params(AVFilterContext *ctx, const AVFrameSideData *sd)
+{
+    const AVGainMapParams *p = (const AVGainMapParams *) sd->data;
+    av_log(ctx, AV_LOG_INFO, "version=%d, nb_channels=%d, use_base_color_space=%d, "
+           "base_hdr_headroom=%f, alternate_hdr_headroom=%f, channels={ ",
+           p->version, p->nb_channels, p->use_base_color_space,
+           av_q2d(p->base_hdr_headroom), av_q2d(p->alternate_hdr_headroom));
+
+    if (!(p->nb_channels == 1 || p->nb_channels == 3)) {
+        av_log(ctx, AV_LOG_ERROR, "invalid data }");
+        return;
+    }
+
+    for (int c = 0; c < p->nb_channels; c++) {
+        const struct AVGainMapChannel *ch = &p->channels[c];
+        av_log(ctx, AV_LOG_INFO,
+               "{ gain_map_min=%f, gain_map_max=%f, gamma=%f, "
+               "base_offset=%f, alternate_offset=%f } ",
+               av_q2d(ch->gain_map_min), av_q2d(ch->gain_map_max),
+               av_q2d(ch->gamma), av_q2d(ch->base_offset),
+               av_q2d(ch->alternate_offset));
+    }
+
+    av_log(ctx, AV_LOG_INFO, "}");
+}
+
 static void dump_ambient_viewing_environment(AVFilterContext *ctx, const AVFrameSideData *sd)
 {
     const AVAmbientViewingEnvironment *ambient_viewing_environment =
@@ -738,22 +740,25 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     FilterLink *inl = ff_filter_link(inlink);
     AVFilterContext *ctx = inlink->dst;
     ShowInfoContext *s = ctx->priv;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     uint32_t plane_checksum[4] = {0}, checksum = 0;
     int64_t sum[4] = {0}, sum2[4] = {0};
     int32_t pixelcount[4] = {0};
     int bitdepth = desc->comp[0].depth;
     int be = desc->flags & AV_PIX_FMT_FLAG_BE;
     int i, plane, vsub = desc->log2_chroma_h;
+    int calculate_checksums = s->calculate_checksums && !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL);
 
-    for (plane = 0; plane < 4 && s->calculate_checksums && frame->data[plane] && frame->linesize[plane]; plane++) {
+    for (plane = 0; plane < 4 && calculate_checksums && frame->data[plane] && frame->linesize[plane]; plane++) {
         uint8_t *data = frame->data[plane];
-        int h = plane == 1 || plane == 2 ? AV_CEIL_RSHIFT(inlink->h, vsub) : inlink->h;
+        int h = plane == 1 || plane == 2 ? AV_CEIL_RSHIFT(frame->height, vsub) : frame->height;
         int linesize = av_image_get_linesize(frame->format, frame->width, plane);
         int width = linesize >> (bitdepth > 8);
 
-        if (linesize < 0)
+        if (linesize < 0) {
+            av_frame_free(&frame);
             return linesize;
+        }
 
         for (i = 0; i < h; i++) {
             plane_checksum[plane] = av_adler32_update(plane_checksum[plane], data, linesize);
@@ -780,7 +785,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
            !!(frame->flags & AV_FRAME_FLAG_KEY),
            av_get_picture_type_char(frame->pict_type));
 
-    if (s->calculate_checksums) {
+    if (calculate_checksums) {
         av_log(ctx, AV_LOG_INFO,
                "checksum:%08"PRIX32" plane_checksum:[%08"PRIX32,
                checksum, plane_checksum[0]);
@@ -830,7 +835,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             dump_roi(ctx, sd);
             break;
         case AV_FRAME_DATA_DETECTION_BBOXES:
-            dump_detection_bbox(ctx, sd);
             break;
         case AV_FRAME_DATA_MASTERING_DISPLAY_METADATA:
             dump_mastering_display(ctx, sd);
@@ -864,6 +868,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             break;
         case AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT:
             dump_ambient_viewing_environment(ctx, sd);
+            break;
+        case AV_FRAME_DATA_GAIN_MAP_PARAMS:
+            dump_gain_map_params(ctx, sd);
             break;
         case AV_FRAME_DATA_VIEW_ID:
             av_log(ctx, AV_LOG_INFO, "view id: %d\n", *(int*)sd->data);
@@ -945,5 +952,6 @@ const FFFilter ff_vf_showinfo = {
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(showinfo_inputs),
     FILTER_OUTPUTS(showinfo_outputs),
-    .priv_size   = sizeof(ShowInfoContext),
+    .priv_size     = sizeof(ShowInfoContext),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };

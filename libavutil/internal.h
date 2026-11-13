@@ -34,21 +34,26 @@
 //#define CHECKED
 
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
 #include <stdio.h>
 #include "config.h"
 #include "attributes.h"
-#include "libm.h"
+#include "mathematics.h"
 #include "macros.h"
 
 #ifndef attribute_align_arg
-#if ARCH_X86_32 && AV_GCC_VERSION_AT_LEAST(4,2)
+#if ARCH_X86_32 && defined(__GNUC__)
 #    define attribute_align_arg __attribute__((force_align_arg_pointer))
 #else
 #    define attribute_align_arg
 #endif
+#endif
+
+#if HAVE_MIPSFPU && HAVE_INLINE_ASM
+#   include "mips/libm_mips.h"
 #endif
 
 #if HAVE_PRAGMA_DEPRECATED
@@ -67,6 +72,10 @@
 #    define FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
+
+#ifdef __ANDROID__
+#   include "compat/android/math.h"
+#endif
 
 #define FF_ALLOC_TYPED_ARRAY(p, nelem)  (p = av_malloc_array(nelem, sizeof(*p)))
 #define FF_ALLOCZ_TYPED_ARRAY(p, nelem) (p = av_calloc(nelem, sizeof(*p)))

@@ -174,10 +174,10 @@ fate-matroska-spherical-mono-remux: CMD = transcode matroska $(TARGET_SAMPLES)/m
 # Both input audio tracks are completely zero, so the noise bsf is used
 # to make this test interesting.
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, FFV1 PRORES, MATROSKA, MXF_DEMUXER \
-                                               PCM_S24LE_DECODER ARESAMPLE_FILTER \
+                                               PCM_S24LE_DECODER ASF2SF_FILTER \
                                                PCM_S16BE_ENCODER NOISE_BSF)       \
                                += fate-matroska-mastering-display-metadata
-fate-matroska-mastering-display-metadata: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Meridian-Apple_ProResProxy-HDR10.mxf matroska "-map 0 -map 0:0 -c:v:0 copy -c:v:1 ffv1 -c:a:0 copy -bsf:a:0 noise=amount=3 -filter:a:1 aresample -c:a:1 pcm_s16be -bsf:a:1 noise=amount=-1:drop=-4" "-map 0 -c copy" "-show_entries stream_side_data_list:stream=index,codec_name"
+fate-matroska-mastering-display-metadata: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Meridian-Apple_ProResProxy-HDR10.mxf matroska "-map 0 -map 0:0 -c:v:0 copy -c:v:1 ffv1 -c:a:0 copy -bsf:a:0 noise=amount=3 -filter:a:1 asf2sf -c:a:1 pcm_s16be -bsf:a:1 noise=amount=-1:drop=-4" "-map 0 -c copy" "-show_entries stream_side_data_list:stream=index,codec_name"
 
 # This test tests remuxing annex B H.264 into Matroska. It also tests writing
 # the correct interlaced flags and overriding the sample aspect ratio, leading
@@ -190,10 +190,10 @@ FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, PCM_S32LE MP2, MATROSKA,      \
                                                H264_DECODER MPEGAUDIO_PARSER \
                                                EXTRACT_EXTRADATA_BSF         \
                                                H264_METADATA_BSF             \
-                                               ARESAMPLE_FILTER              \
+                                               ASF2SF_FILTER                 \
                                                PCM_S32BE_ENCODER)            \
                                += fate-matroska-h264-remux
-fate-matroska-h264-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts matroska "-map 0:0 -map 0 -c:v copy -sar:0 3:4 -bsf:v:1 h264_metadata=aud=remove:delete_filler=1 -disposition:v +hearing_impaired -af aresample -c:a:0 pcm_s32le -c:a:1 pcm_s32be -disposition:a:0 original -metadata:s:a:0 title=swedish_silence -metadata:s:a:1 title=norwegian_silence -disposition:a:1 dub" "-map 0:v" "-show_entries stream=index,codec_name:stream_tags=title,language"
+fate-matroska-h264-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts matroska "-map 0:0 -map 0 -c:v copy -sar:0 3:4 -bsf:v:1 h264_metadata=aud=remove:delete_filler=1 -disposition:v +hearing_impaired -af asf2sf -c:a:0 pcm_s32le -c:a:1 pcm_s32be -disposition:a:0 original -metadata:s:a:0 title=swedish_silence -metadata:s:a:1 title=norwegian_silence -disposition:a:1 dub" "-map 0:v" "-show_entries stream=index,codec_name:stream_tags=title,language"
 
 # Tests writing BlockAdditional and BlockGroups with ReferenceBlock elements;
 # it also tests setting a track as suitable for hearing impaired.
@@ -222,11 +222,11 @@ fate-matroska-ogg-opus-remux: CMD = transcode ogg $(TARGET_SAMPLES)/ogg/intro-pa
 # This tests reencoding with an audio encoder that adds initial padding.
 # The initial padding is currently not maintained.
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call REMUX, MATROSKA, MXF_DEMUXER PCM_S16LE_DECODER \
-                                           MP2FIXED_ENCODER ARESAMPLE_FILTER       \
+                                           MP2FIXED_ENCODER ASF2SF_FILTER          \
                                            MPEG2VIDEO_DECODER MPEGVIDEO_PARSER     \
                                            MPEGAUDIO_PARSER                        \
                                            EXTRACT_EXTRADATA_BSF) += fate-matroska-encoding-delay
-fate-matroska-encoding-delay: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Sony-00001.mxf matroska "-c:v copy -af aresample -c:a mp2fixed" "-c copy" "-show_packets -show_entries stream=codec_name,initial_padding -read_intervals %0.05"
+fate-matroska-encoding-delay: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Sony-00001.mxf matroska "-c:v copy -af asf2sf,acl2cl -c:a mp2fixed" "-c copy" "-show_packets -show_entries stream=codec_name,initial_padding -read_intervals %0.05"
 
 FATE_MATROSKA-$(call REMUX, MATROSKA, SUP_DEMUXER) += fate-matroska-pgs-remux
 fate-matroska-pgs-remux: CMD = transcode sup $(TARGET_SAMPLES)/sub/pgs_sub.sup matroska "-copyts -c:s copy" "-copyts -c:s copy"
@@ -339,8 +339,63 @@ fate-matroska-reenc-delete-metadata-filter-output: CMD = transcode matroska $(TA
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-chapter-nofilter
 fate-matroska-reenc-chapter-nofilter: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -metadata:c:0 NUMBER_OF_FRAMES=test" "-c copy -t 0.1" "-show_entries chapter_tags" "" "" "" null
 
+FATE_MATROSKA-$(call DEMMUX, MATROSKA, MATROSKA, AV1_PARSER) += fate-matroska-lcevc-av1-itut-t35
+fate-matroska-lcevc-av1-itut-t35: CMD = stream_demux matroska $(TARGET_SAMPLES)/lcevc/L_AV1_854x480p_8bit8bit_2D_dd.mkv "" "-c:v copy"
+
+FATE_MATROSKA-$(call REMUX, WEBM MATROSKA, AV1_PARSER) += fate-matroska-lcevc-av1-itut-t35-copy
+fate-matroska-lcevc-av1-itut-t35-copy: CMD = stream_remux matroska $(TARGET_SAMPLES)/lcevc/L_AV1_854x480p_8bit8bit_2D_dd.mkv "" webm "" "" "-c:v copy"
+
+# The following tests only use the generated vsynth input, so unlike the
+# rest of this file they are runnable without the external samples.
+FATE_MATROSKA_STEREO3D-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL FRAMECRC_MUXER \
+                                                       RAWVIDEO_DEMUXER RAWVIDEO_DECODER \
+                                                       MPEG4_ENCODER MATROSKA_MUXER MATROSKA_DEMUXER) \
+                       += fate-matroska-stereo3d-sbs
+fate-matroska-stereo3d-sbs: tests/data/vsynth1.yuv
+fate-matroska-stereo3d-sbs: CMD = transcode rawvideo $(TARGET_PATH)/tests/data/vsynth1.yuv matroska \
+  "-c:v mpeg4 -qscale:v 10 -stereo3d:v sbsl -frames:v 2" \
+  "-c:v copy" "-show_entries stream_side_data_list" "" "" "-s 352x288 -pix_fmt yuv420p"
+
+MATROSKA_STEREO3D_PROBE = probe -v error -count_packets \
+  -show_entries stream=index:stream_tags=stereo_mode:stream_side_data_list -of default=nw=1 pipe:
+
+# The global stereo_mode fallback must keep applying to output streams that
+# do not have -stereo3d.
+FATE_MATROSKA_STEREO3D-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL RAWVIDEO_DEMUXER RAWVIDEO_DECODER \
+                                                       MPEG4_ENCODER MATROSKA_MUXER MATROSKA_DEMUXER) \
+                       += fate-matroska-stereo3d-override
+fate-matroska-stereo3d-override: tests/data/vsynth1.yuv
+fate-matroska-stereo3d-override: CMD = \
+  ffmpeg -bitexact -s 352x288 -pix_fmt yuv420p -f rawvideo -i $(TARGET_PATH)/tests/data/vsynth1.yuv -frames:v 2 \
+   -map 0:v -map 0:v -c:v mpeg4 -metadata:g stereo_mode=top_bottom -stereo3d:v:0 sbsl -f matroska - | \
+  $(MATROSKA_STEREO3D_PROBE)
+
+MATROSKA_STEREO3D_TAGGED = ffmpeg -bitexact -s 352x288 -pix_fmt yuv420p -f rawvideo \
+  -i $(TARGET_PATH)/tests/data/vsynth1.yuv -frames:v 2 -c:v mpeg4 \
+  -metadata:s:v:0 stereo_mode=top_bottom -f matroska -
+
+# A stereo_mode tag inherited from the input must not win over -stereo3d,
+# while an explicitly requested tag still describes the layout.
+FATE_MATROSKA_STEREO3D-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL RAWVIDEO_DEMUXER RAWVIDEO_DECODER \
+                                                       MPEG4_ENCODER MATROSKA_MUXER MATROSKA_DEMUXER) \
+                       += fate-matroska-stereo3d-metadata
+fate-matroska-stereo3d-metadata: tests/data/vsynth1.yuv
+fate-matroska-stereo3d-metadata: CMP = diff
+fate-matroska-stereo3d-metadata: REF = $(SRC_PATH)/tests/ref/fate/matroska-stereo3d-metadata
+fate-matroska-stereo3d-metadata: CMD = \
+  echo "option over inherited tag:" && \
+  $(MATROSKA_STEREO3D_TAGGED) | ffmpeg -i pipe: -c copy -stereo3d:v:0 sbsl -f matroska - | \
+  $(MATROSKA_STEREO3D_PROBE) && \
+  echo "explicit tag:" && \
+  $(MATROSKA_STEREO3D_TAGGED) | ffmpeg -i pipe: -c copy -metadata:s:v:0 stereo_mode=right_left -f matroska - | \
+  $(MATROSKA_STEREO3D_PROBE) && \
+  echo "empty tag:" && \
+  $(MATROSKA_STEREO3D_TAGGED) | ffmpeg -i pipe: -c copy -stereo3d:v:0 tb -metadata:s:v:0 stereo_mode= -f matroska - | \
+  $(MATROSKA_STEREO3D_PROBE)
+
 FATE_SAMPLES_AVCONV += $(FATE_MATROSKA-yes)
 FATE_SAMPLES_FFPROBE += $(FATE_MATROSKA_FFPROBE-yes)
 FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_MATROSKA_FFMPEG_FFPROBE-yes)
+FATE_FFMPEG_FFPROBE += $(FATE_MATROSKA_STEREO3D-yes)
 
-fate-matroska: $(FATE_MATROSKA-yes) $(FATE_MATROSKA_FFPROBE-yes) $(FATE_MATROSKA_FFMPEG_FFPROBE-yes)
+fate-matroska: $(FATE_MATROSKA-yes) $(FATE_MATROSKA_FFPROBE-yes) $(FATE_MATROSKA_FFMPEG_FFPROBE-yes) $(FATE_MATROSKA_STEREO3D-yes)

@@ -28,25 +28,14 @@
 
 #define Q(N) ((AVRational64) { N, 1 })
 
-static inline AVRational64 ff_sws_pixel_expand(SwsPixelType from, SwsPixelType to)
-{
-    const int src = ff_sws_pixel_type_size(from);
-    const int dst = ff_sws_pixel_type_size(to);
-    if (src > dst)
-        return Q(0);
-    int scale = 1;
-    for (int i = 1; i < dst / src; i++)
-        scale = (scale << (src * 8)) | 1;
-    return Q(scale);
-}
-
-static inline void ff_sws_pack_op_decode(const SwsOp *op, uint64_t mask[4], int shift[4])
+static inline void ff_sws_pack_decode(const uint8_t pattern[4],
+                                      uint64_t mask[4], int shift[4])
 {
     int size = 0;
     for (int i = 0; i < 4; i++)
-        size += op->pack.pattern[i];
+        size += pattern[i];
     for (int i = 0; i < 4; i++) {
-        const int bits = op->pack.pattern[i];
+        const int bits = pattern[i];
         mask[i] = (UINT64_C(1) << bits) - 1;
         shift[i] = (i ? shift[i - 1] : size) - bits;
     }

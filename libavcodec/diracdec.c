@@ -958,13 +958,15 @@ static int decode_lowdelay(DiracContext *s)
 
     if (s->threads_num_buf != avctx->thread_count ||
         s->thread_buf_size != coef_buf_size) {
-        s->threads_num_buf  = avctx->thread_count;
-        s->thread_buf_size  = coef_buf_size;
-        s->thread_buf       = av_realloc_f(s->thread_buf, avctx->thread_count, s->thread_buf_size);
-        if (!s->thread_buf) {
+        uint8_t *thread_buf = av_realloc_array(s->thread_buf, avctx->thread_count,
+                                               coef_buf_size);
+        if (!thread_buf) {
             av_log(s->avctx, AV_LOG_ERROR, "thread buffer allocation failure\n");
             return AVERROR(ENOMEM);
         }
+        s->thread_buf = thread_buf;
+        s->threads_num_buf = avctx->thread_count;
+        s->thread_buf_size = coef_buf_size;
     }
 
     align_get_bits(&s->gb);
@@ -2133,7 +2135,9 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
 
     parse_code = buf[4];
 
-    init_get_bits(&s->gb, &buf[13], 8*(size - DATA_UNIT_HEADER_SIZE));
+    ret = init_get_bits8(&s->gb, &buf[13], size - DATA_UNIT_HEADER_SIZE);
+    if (ret < 0)
+        return ret;
 
     if (parse_code == DIRAC_PCODE_SEQ_HEADER) {
         if (s->seen_sequence_header)

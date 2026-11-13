@@ -212,6 +212,22 @@ static void fill_picture_rgb(AVFilterContext *ctx, AVFrame *picref)
     }
 }
 
+static int alloc_grid(AVFilterContext *ctx)
+{
+    LifeContext *life = ctx->priv;
+    if (life->w <= 0 || life->h <= 0 || life->w > INT_MAX / life->h) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid grid size %dx%d\n", life->w, life->h);
+        return AVERROR(EINVAL);
+    }
+    if (!(life->buf[0] = av_calloc(life->h * life->w, sizeof(*life->buf[0]))) ||
+        !(life->buf[1] = av_calloc(life->h * life->w, sizeof(*life->buf[1])))) {
+        av_freep(&life->buf[0]);
+        av_freep(&life->buf[1]);
+        return AVERROR(ENOMEM);
+    }
+    return 0;
+}
+
 static int init_pattern_from_file(AVFilterContext *ctx)
 {
     LifeContext *life = ctx->priv;
@@ -222,6 +238,10 @@ static int init_pattern_from_file(AVFilterContext *ctx)
                            0, ctx)) < 0)
         return ret;
     av_freep(&life->filename);
+    if (life->file_bufsize > INT_MAX) {
+        av_log(ctx, AV_LOG_ERROR, "Pattern file too large\n");
+        return AVERROR(EINVAL);
+    }
 
     /* prescan file to get the number of lines and the maximum width */
     w = 0;
@@ -247,12 +267,8 @@ static int init_pattern_from_file(AVFilterContext *ctx)
         life->h = h;
     }
 
-    if (!(life->buf[0] = av_calloc(life->h * life->w, sizeof(*life->buf[0]))) ||
-        !(life->buf[1] = av_calloc(life->h * life->w, sizeof(*life->buf[1])))) {
-        av_freep(&life->buf[0]);
-        av_freep(&life->buf[1]);
-        return AVERROR(ENOMEM);
-    }
+    if ((ret = alloc_grid(ctx)) < 0)
+        return ret;
 
     /* fill buf[0] */
     p = life->file_buf;
@@ -289,12 +305,8 @@ static av_cold int init(AVFilterContext *ctx)
         /* fill the grid randomly */
         int i;
 
-        if (!(life->buf[0] = av_calloc(life->h * life->w, sizeof(*life->buf[0]))) ||
-            !(life->buf[1] = av_calloc(life->h * life->w, sizeof(*life->buf[1])))) {
-            av_freep(&life->buf[0]);
-            av_freep(&life->buf[1]);
-            return AVERROR(ENOMEM);
-        }
+        if ((ret = alloc_grid(ctx)) < 0)
+            return ret;
         if (life->random_seed == -1)
             life->random_seed = av_get_random_seed();
 

@@ -110,22 +110,25 @@ static av_cold int init_vulkan(AVFilterContext *avctx)
     SPEC_LIST_ADD(sl, 1, 32, planes);
 
     ff_vk_shader_load(&s->shd, VK_SHADER_STAGE_COMPUTE_BIT,
-                      NULL, (int []) { 32, 32, 1 }, 0);
+                      sl, (int []) { 32, 32, 1 }, 0);
 
     const FFVulkanDescriptorSetBinding desc[] = {
+        { /* output_images */
+            .type       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
+            .elems      = planes,
+        },
         { /* a_images */
             .type       = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
             .samplers   = DUP_SAMPLER(s->sampler),
+            .elems      = planes,
         },
         { /* b_images */
             .type       = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
             .samplers   = DUP_SAMPLER(s->sampler),
-        },
-        { /* output_images */
-            .type       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
+            .elems      = planes,
         },
     };
     ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0);
@@ -221,8 +224,9 @@ static int config_props_output(AVFilterLink *outlink)
     ol->frame_rate = il->frame_rate;
     outlink->sample_aspect_ratio = inlink_a->sample_aspect_ratio;
 
-    if (s->duration)
-        s->duration_pts = av_rescale_q(s->duration, AV_TIME_BASE_Q, inlink_a->time_base);
+    s->duration_pts = av_rescale_q(s->duration, AV_TIME_BASE_Q, inlink_a->time_base);
+    if (!s->duration_pts)
+        s->duration_pts = 1;
     RET(ff_vk_filter_config_output(outlink));
 
 fail:

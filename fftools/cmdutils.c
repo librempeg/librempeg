@@ -30,16 +30,13 @@
    references to libraries that are not being built. */
 
 #include "config.h"
-#include "compat/va_copy.h"
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
-#include "libswresample/swresample.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
 #include "libavutil/display.h"
 #include "libavutil/getenv_utf8.h"
-#include "libavutil/libm.h"
 #include "libavutil/mem.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/eval.h"
@@ -606,9 +603,6 @@ int opt_default(void *optctx, const char *opt, const char *arg)
 #if CONFIG_SWSCALE
     const AVClass *sc = sws_get_class();
 #endif
-#if CONFIG_SWRESAMPLE
-    const AVClass *swr_class = swr_get_class();
-#endif
 
     if (!strcmp(opt, "debug") || !strcmp(opt, "fdebug"))
         av_log_set_level(AV_LOG_DEBUG);
@@ -647,13 +641,6 @@ int opt_default(void *optctx, const char *opt, const char *arg)
 #else
     if (!consumed && !strcmp(opt, "sws_flags")) {
         av_log(NULL, AV_LOG_WARNING, "Ignoring %s %s, due to disabled swscale\n", opt, arg);
-        consumed = 1;
-    }
-#endif
-#if CONFIG_SWRESAMPLE
-    if (!consumed && (o=opt_find(&swr_class, opt, NULL, 0,
-                                    AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
-        av_dict_set(&swr_opts, opt, arg, FLAGS);
         consumed = 1;
     }
 #endif
@@ -1280,13 +1267,16 @@ unsigned stream_specifier_match(const StreamSpecifier *ss,
                    ss->list_id);
             return 0;
         }
-        nb_streams = g->nb_streams;
+        nb_streams = g->nb_entries;
         break;
     default: av_assert0(0);
     }
 
     for (int i = start_stream; i < nb_streams; i++) {
-        const AVStream *candidate = s->streams[g ? g->streams[i]->index :
+        if (g && g->entries[i]->type != AV_STREAM_GROUP_ENTRY_STREAM)
+            continue;
+
+        const AVStream *candidate = s->streams[g ? g->entries[i]->stream->index :
                                                p ? p->stream_index[i]   : i];
 
         if (ss->media_type != AVMEDIA_TYPE_UNKNOWN &&
@@ -1398,7 +1388,7 @@ unsigned stream_group_specifier_match(const StreamSpecifier *ss,
             case AV_STREAM_GROUP_PARAMS_TILE_GRID: {
                 const AVStreamGroupTileGrid *tg = candidate->params.tile_grid;
                 if (!tg->coded_width || !tg->coded_height || !tg->nb_tiles ||
-                    !tg->width       || !tg->height       || !tg->nb_tiles)
+                    !tg->width       || !tg->height       || !tg->offsets)
                     continue;
                 break;
             }

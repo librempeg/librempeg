@@ -24,16 +24,19 @@
 #extension GL_GOOGLE_include_directive : require
 
 #define DECODE
+#ifndef GOLOMB
+#define RC_SUBGROUP
+#endif
 #include "common.glsl"
 #include "ffv1_common.glsl"
 
-layout (set = 1, binding = 1, scalar) readonly buffer slice_offsets_buf {
-    u32vec2 slice_offsets[];
+layout (set = 1, binding = 1, scalar) readonly buffer slice_order_buf {
+    uint32_t slice_order[];
 };
 layout (set = 1, binding = 2, scalar) writeonly buffer slice_status_buf {
     uint32_t slice_status[];
 };
-layout (set = 1, binding = 4) uniform uimage2D dec[];
+layout (set = 1, binding = 4) coherent uniform uimage2D dec[];
 
 #ifdef FLOAT
 layout(set = 1, binding = 6) readonly buffer fltmap_buf {
@@ -47,59 +50,10 @@ layout (set = 1, binding = 3, scalar) buffer slice_state_buf {
     uint8_t slice_rc_state[];
 };
 
-#define READ(idx) get_rac_state(idx)
-shared int sym_e;
-shared bool rc_dec[CONTEXT_SIZE];
-int get_isymbol(void)
-{
-    sym_e = 0;
-    rc_dec[0] = true;
-    if (READ(0))
-        return 0;
-
-    int e = 1;
-    for (; e < 11; e++) {
-        rc_dec[e] = true;
-        if (!READ(e))
-            break;
-    }
-
-    int a = 1;
-    sym_e = e + 10;
-    rc_dec[sym_e] = true;
-
-    if (c_bits > 10 && e == 11) {
-        do {
-            rc_state[10] = zero_one_state[rc_state[10] + 256];
-            e++;
-        } while (READ(10));
-
-        a = READ(31) ? 0x3 : 0x2;
-        for (e -= 2; e >= 11; e--) {
-            rc_state[31] = zero_one_state[rc_state[31] +
-                                          (rc_data[31] ? 256 : 0)];
-            a <<= 1;
-            a |= int(READ(31));
-        }
-
-        rc_dec[31] = true;
-    }
-
-    e += 20;
-    for (; e >= 22; e--) {
-        a <<= 1;
-        a |= int(READ(e));
-        rc_dec[e] = true;
-    }
-
-    return READ(sym_e) ? -a : a;
-}
+layout (constant_id = 20) const bool quant_ballot = false;
 
 void decode_line_pcm(ivec2 sp, int w, int y, int p)
 {
-    if (gl_LocalInvocationID.x > 0)
-        return;
-
 #ifndef RGB
     if (p > 0 && p < 3) {
         w = ceil_rshift(w, chroma_shift.x);
@@ -113,13 +67,16 @@ void decode_line_pcm(ivec2 sp, int w, int y, int p)
         for (uint i = (rct_offset >> 1); i > 0; i >>= 1)
             v |= get_rac_equi() ? i : 0;
 
-        imageStore(dec[p], sp + LADDR(ivec2(x, y)), uvec4(v));
+        if (gl_LocalInvocationID.x == 0)
+            imageStore(dec[p], sp + LADDR(ivec2(x, y)), uvec4(v));
     }
 }
 
+shared int16_t quant_top[2][3][MAX_QUANT_TABLE_SIZE];
+
 void decode_line(ivec2 sp, int w,
                  int y, int p, int bits, uint state_off,
-                 uint8_t quant_table_idx, int run_index)
+                 uint8_t quant_table_idx, int run_index, bool ext)
 {
 #ifndef RGB
     if (p > 0 && p < 3) {
@@ -130,33 +87,112 @@ void decode_line(ivec2 sp, int w,
 
     linecache_load(dec[p], sp, y, 0);
 
-    for (int x = 0; x < w; x++) {
-        ivec2 pr = get_pred(dec[p], sp, ivec2(x, y), 0, w,
-                            quant_table_idx, extend_lookup[quant_table_idx]);
-
-        uint rc_off = state_off + CONTEXT_SIZE*abs(pr[0]) + gl_LocalInvocationID.x;
-
-        rc_dec[gl_LocalInvocationID.x] = false;
-        rc_state[gl_LocalInvocationID.x] = slice_rc_state[rc_off];
-        barrier();
-
-        if (gl_LocalInvocationID.x == 0) {
-            int diff = get_isymbol();
-            if (pr[0] < 0)
-                diff = -diff;
-
-            uint v = zero_extend(pr[1] + diff, bits);
-            imageStore(dec[p], sp + LADDR(ivec2(x, y)), uvec4(v));
-            linecache_next(TYPE(v));
-        }
-
-        /* Image write now visible to other invocs */
-        barrier();
-        if (rc_dec[gl_LocalInvocationID.x])
-            slice_rc_state[rc_off] =
-                zero_one_state[rc_state[gl_LocalInvocationID.x] +
-                               (rc_data[gl_LocalInvocationID.x] ? 256 : 0)];
+    ivec3 top = subgroupBroadcast(get_pred_top(dec[p], sp, ivec2(0, y), 0, w,
+                                               quant_table_idx, ext), 0u);
+    ivec2 pr = get_pred_left(top, quant_table_idx, ext);
+    int c = pr[0];
+    int pred = pr[1];
+    int sgn = c < 0 ? -1 : 1;
+    int tl = top.y;
+    int l = linecache[1];
+    uint ctx = abs(c);
+    uint sbase = state_off + gl_LocalInvocationID.x;
+    uint soff = sbase + CONTEXT_SIZE*ctx;
+    uint ld[RC_K];
+    uint8_t adapted[RC_K];
+    [[unroll]] for (uint k = 0; k < RC_K; k++) {
+        ld[k] = slice_rc_state[soff + k*RC_LANES];
+        adapted[k] = uint8_t(0);
     }
+    bool same = false;
+    uint row = 0;
+    ivec2 qthr = quant_ballot ? quant_thresh[quant_table_idx][gl_LocalInvocationID.x] : ivec2(0);
+    ivec2 qso = quant_ballot ? quant_scale_off[quant_table_idx] : ivec2(0);
+
+#ifdef BAYER
+    int slot = p == 0 ? 0 : p > 1 ? 1 : -1;
+#else
+    int slot = p == 0 ? 0 : p < 3 ? 1 : -1;
+#endif
+
+    ivec4 tr = get_top(dec[p], sp, ivec2(min(1 + int(gl_LocalInvocationID.x), w - 1), y),
+                       0, w, ext);
+    for (int x = 0; x < w; x += int(RC_LANES)) {
+        ivec3 tn;
+        if (slot >= 0) {
+            int tb = quant_top[slot][0][(tr[0] - tr[1]) & MAX_QUANT_TABLE_MASK] +
+                     quant_top[slot][1][(tr[1] - tr[2]) & MAX_QUANT_TABLE_MASK];
+            if (ext)
+                tb += quant_top[slot][2][(tr[3] - tr[1]) & MAX_QUANT_TABLE_MASK];
+            tn = ivec3(tr[0], tr[1], tb);
+        } else {
+            tn = get_pred_top_quant(tr, quant_table_idx, ext);
+        }
+        tn.z += qso.y;
+        tr = get_top(dec[p], sp,
+                     ivec2(min(x + int(RC_LANES) + 1 + int(gl_LocalInvocationID.x), w - 1), y),
+                     0, w, ext);
+        int gmin = min(tn.y - tn.x, 0);
+        int gmax = max(tn.y - tn.x, 0);
+        int n = min(w - x, int(RC_LANES));
+
+        int j = 0;
+        do {
+            RCStates st;
+            [[unroll]] for (uint k = 0; k < RC_K; k++)
+                st.v[k] = same ? uint(adapted[k]) : ld[k];
+            int base = subgroupBroadcast(tn.z, j);
+            int t = subgroupBroadcast(tn.y, j);
+
+            uint used, used_bits;
+            int v = get_isymbol(st, pred, sgn, used, used_bits);
+            uint vz = zero_extend(v, bits);
+#ifdef FLOAT
+            v = int(vz);
+#endif
+
+            if (quant_ballot) {
+                uvec4 q0 = subgroupBallot(int(int8_t(v - tl)) >= qthr.x);
+                uvec4 q3 = subgroupBallot(ext && int(int8_t(l - v)) >= qthr.y);
+                c = base + int(subgroupBallotBitCount(q0)) + qso.x*int(subgroupBallotBitCount(q3));
+            } else {
+                c = base + quant_table[quant_table_idx][0][(v - tl) & MAX_QUANT_TABLE_MASK];
+                if (ext)
+                    c += quant_table[quant_table_idx][3][(l - v) & MAX_QUANT_TABLE_MASK];
+            }
+            uint ctx_prev = ctx;
+            uint soff_prev = soff;
+            ctx = abs(c);
+            soff = sbase + CONTEXT_SIZE*ctx;
+            same = ctx == ctx_prev;
+            if (!same)
+                [[unroll]] for (uint k = 0; k < RC_K; k++)
+                    ld[k] = slice_rc_state[soff + k*RC_LANES];
+            rac_renorm();
+            [[unroll]] for (uint k = 0; k < RC_K; k++) {
+                bool one = subgroupInverseBallot(uvec4(used_bits >> (k*RC_LANES), 0, 0, 0));
+                uint nst = zero_one_state[st.v[k] + (one ? 256 : 0)];
+                bool read = subgroupInverseBallot(uvec4(used >> (k*RC_LANES), 0, 0, 0));
+                adapted[k] = uint8_t(read ? nst : st.v[k]);
+                slice_rc_state[soff_prev + k*RC_LANES] = adapted[k];
+            }
+            sgn = c < 0 ? -1 : 1;
+
+            int vm = int(TYPE(vz));
+            pred = subgroupBroadcast(clamp(tn.y, vm + gmin, vm + gmax), j);
+            row = gl_LocalInvocationID.x == j ? vz : row;
+            rac_check_window();
+
+            l = v;
+            tl = t;
+        } while (++j < n);
+
+        if (gl_LocalInvocationID.x < n)
+            imageStore(dec[p], sp + LADDR(ivec2(x + int(gl_LocalInvocationID.x), y)), uvec4(row));
+    }
+
+    memoryBarrierImage();
+    barrier();
 }
 
 #else /* GOLOMB */
@@ -179,7 +215,7 @@ void golomb_init(void)
 
 void decode_line(ivec2 sp, int w,
                  int y, int p, int bits, uint state_off,
-                 uint8_t quant_table_idx, inout int run_index)
+                 uint8_t quant_table_idx, inout int run_index, bool ext)
 {
 #ifndef RGB
     if (p > 0 && p < 3) {
@@ -197,7 +233,7 @@ void decode_line(ivec2 sp, int w,
         ivec2 pos = sp + ivec2(x, y);
         int diff;
         ivec2 pr = get_pred(dec[p], sp, ivec2(x, y), 0, w,
-                            quant_table_idx, extend_lookup[quant_table_idx]);
+                            quant_table_idx, ext);
 
         uint vlc_off = state_off + abs(pr[0]);
 
@@ -246,6 +282,15 @@ void decode_line(ivec2 sp, int w,
     }
 }
 #endif
+
+void decode_plane_line(ivec2 sp, int w, int y, int p, int bits, uint state_off,
+                       uint8_t quant_table_idx, inout int run_index)
+{
+    if (has_extend_lookup && extend_lookup[quant_table_idx])
+        decode_line(sp, w, y, p, bits, state_off, quant_table_idx, run_index, true);
+    else
+        decode_line(sp, w, y, p, bits, state_off, quant_table_idx, run_index, false);
+}
 
 #ifdef BAYER
 void writeout_bayer(uint slice_idx, in SliceContext sc, ivec2 sp, int w, int y)
@@ -361,7 +406,7 @@ void decode_slice(in SliceContext sc, uint slice_idx)
     w >>= 1;
     int bayer_h = sc.slice_dim.y >> 1;
     sp.x >>= 1;
-    sp.y = int(gl_WorkGroupID.y)*rgb_linecache;
+    sp.y = int(slice_idx / gl_NumWorkGroups.x)*rgb_linecache;
     /* c_bits = bps + 1 (the +1 is for is_rgb). For PCM mode, all planes use
      * raw bps. For non-PCM, gm uses bps (bps+1 before 4.8, which coded an
      * extra bit); gd/b-gm/r-gm use bps+1. */
@@ -372,7 +417,7 @@ void decode_slice(in SliceContext sc, uint slice_idx)
     } else
         bits = u16vec4(c_bits - 1, c_bits - 1, c_bits - 1, c_bits - 1);
 #elif defined(RGB)
-    sp.y = int(gl_WorkGroupID.y)*rgb_linecache;
+    sp.y = int(slice_idx / gl_NumWorkGroups.x)*rgb_linecache;
 #endif
 
 #ifndef GOLOMB
@@ -418,14 +463,22 @@ void decode_slice(in SliceContext sc, uint slice_idx)
 #ifdef GOLOMB
     slice_state_off >>= 3; // division by VLC_STATE_SIZE
     golomb_init();
+#else
+    for (uint i = gl_LocalInvocationID.x; i < 2*3*MAX_QUANT_TABLE_SIZE; i += gl_WorkGroupSize.x) {
+        uint t = i / (3*MAX_QUANT_TABLE_SIZE);
+        uint k = (i / MAX_QUANT_TABLE_SIZE) % 3;
+        uint e = i % MAX_QUANT_TABLE_SIZE;
+        quant_top[t][k][e] = int16_t(quant_table[sc.quant_table_idx[t]][k == 2 ? 4 : k + 1][e]);
+    }
+    barrier();
 #endif
 
 #ifdef BAYER
     int run_index = 0;
     for (int y = 0; y < bayer_h; y++) {
         for (int p = 0; p < 4; p++)
-            decode_line(sp, w, y, p, bits[p],
-                        slice_state_off[p], quant_table_idx[p], run_index);
+            decode_plane_line(sp, w, y, p, bits[p], slice_state_off[p],
+                              quant_table_idx[p], run_index);
 
         writeout_bayer(slice_idx, sc, sp, w, y);
     }
@@ -433,8 +486,8 @@ void decode_slice(in SliceContext sc, uint slice_idx)
     int run_index = 0;
     for (int y = 0; y < sc.slice_dim.y; y++) {
         for (int p = 0; p < color_planes; p++)
-            decode_line(sp, w, y, p, bits[p],
-                        slice_state_off[p], quant_table_idx[p], run_index);
+            decode_plane_line(sp, w, y, p, bits[p], slice_state_off[p],
+                              quant_table_idx[p], run_index);
 
         writeout_rgb(slice_idx, sc, sp, w, y, true);
     }
@@ -446,23 +499,28 @@ void decode_slice(in SliceContext sc, uint slice_idx)
 
         int run_index = 0;
         for (int y = 0; y < h; y++)
-            decode_line(sp, w, y, p, bits[p],
-                        slice_state_off[p], quant_table_idx[p], run_index);
+            decode_plane_line(sp, w, y, p, bits[p], slice_state_off[p],
+                              quant_table_idx[p], run_index);
     }
 #endif
 }
 
 void main(void)
 {
-    uint slice_idx = gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    uint slice_idx = slice_order[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x];
 
-    if (gl_LocalInvocationID.x == 0)
-        rc = slice_ctx[slice_idx].c;
-    barrier();
+#ifdef GOLOMB
+    rc = slice_ctx[slice_idx].c;
+#else
+    rac_init_dec(slice_ctx[slice_idx].c);
+#endif
 
     decode_slice(slice_ctx[slice_idx], slice_idx);
 
     if (gl_LocalInvocationID.x == 0) {
+#ifndef GOLOMB
+        rc.bs_off += rc_pos;
+#endif
         uint overread = 0;
         if (rc.bs_off >= (rc.bs_end + MAX_OVERREAD))
             overread = rc.bs_off - rc.bs_end;

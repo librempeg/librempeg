@@ -29,6 +29,9 @@ static int read_probe(const AVProbeData *p)
 {
     const int is_strm = AV_RB32(p->buf) == MKBETAG('S','T','R','M');
 
+    if (p->buf_size < 0x1000)
+        return 0;
+
     for (int pos = 0; pos + 8 < p->buf_size; pos += 0x800) {
         if (AV_RB32(p->buf+pos) != MKBETAG('S','T','R','L') &&
             AV_RB32(p->buf+pos) != MKBETAG('S','T','R','R') &&

@@ -13,7 +13,7 @@
 #sample_rate 1: 44100
 #channel_layout_name 1: mono
 #stream#, dts,        pts, duration,     size, hash
-1,       -256,       -256,     1536,      416, 2a5e3f43413b15340832d7cab285531f
+1,       -256,       -256,     1536,      416, 2a5e3f43413b15340832d7cab285531f, S=1,       10, 4bce5775f7be5f45922731da9a33b4f3
 0,          0,          0,     2048,     8719, bbea2a7487d61d39a0b2f2fe62a4df4a
 1,       1280,       1280,     1536,      418, a4c286296881f427197dc17bfd5c4eb8
 0,       2048,       2048,     2048,      975, 94f30e410595452ee981d96224516504

@@ -18,8 +18,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
+#include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 #include "audio.h"
 #include "formats.h"
@@ -34,6 +37,7 @@ typedef struct AASRCContext {
     int pass;
     int sample_rate;
     int coeffs;
+    int max_reset;
     int channels;
     double t_inc;
 
@@ -53,6 +57,7 @@ typedef struct AASRCContext {
 
 static const AVOption aasrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
+    { "max_reset", "set the max_reset", OFFSET(max_reset), AV_OPT_TYPE_INT, {.i64=32}, 1, 1024, FLAGS },
     {NULL}
 };
 
@@ -62,23 +67,19 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
+    static const enum AVSampleFormat formats[] = {
+        AV_SAMPLE_FMT_U8P,
+        AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_FLTP,
+        AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_LDBLP,
+        AV_SAMPLE_FMT_NONE
+    };
     const AASRCContext *s = ctx->priv;
-    AVFilterFormats *formats = NULL;
     int ret, sample_rates[] = { s->sample_rate, -1 };
 
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S16P);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S32P);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
-    if (ret)
-        return ret;
-    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
@@ -96,35 +97,39 @@ static int query_formats(const AVFilterContext *ctx,
 }
 
 static const double ps0[][2] = {
-    { 0.9884885141488587, -2.8913412721028577 },
-    { 0.9646235793462085, -2.8725383706707888 },
-    { 0.9376413211456536, -2.832661339467681 },
-    { 0.9053944812997465, -2.767501426492021 },
-    { 0.8659614497009255, -2.670069249283451 },
-    { 0.8183085139622387, -2.531096384436359 },
-    { 0.7627555154266031, -2.338960112781044 },
-    { 0.7017679608104652, -2.0809711981406522 },
-    { 0.6402459548731267, -1.7459033795089547 },
-    { 0.5849866672726995, -1.3283809111452556 },
-    { 0.5432021521560189, -0.8343296445047873 },
-    { 0.5207237294604229, -0.2848970933789601 },
+    { 0.9791585981204488, -2.9004909567900983 },
+    { 0.9381533694507113, -2.8653371532311414 },
+    { 0.8971721601357491, -2.79387341031217 },
+    { 0.8555316876737423, -2.6839492427848866 },
+    { 0.8130730363386103, -2.5326586154104316 },
+    { 0.770256166562492, -2.336862664803895 },
+    { 0.7281707803101505, -2.093853858748927 },
+    { 0.6884678989513773, -1.8022814355822716 },
+    { 0.6531670075103768, -1.4631796370952466 },
+    { 0.6243784392912154, -1.0809259815920622 },
+    { 0.6039958780685476, -0.6638131767404067 },
+    { 0.5934303883149872, -0.22391621668418932 },
 };
 
 static const double rs0[][2] = {
-    { 0.011039846532879696, -0.0286964628210426 },
-    { -0.10539768133452657, 0.05537805339676757 },
-    { 0.26966002773840014, 0.06485792083895105 },
-    { -0.3170052298703376, -0.3920746380175672 },
-    { 0.07505664632341995, 0.8060143949492781 },
-    { 0.5106586319673042, -1.093194412900967 },
-    { -1.3581448770288282, 1.0278913813241461 },
-    { 2.2495215156295107, -0.4472957689559651 },
-    { -2.8682068073504823, -0.6642370076575542 },
-    { 2.898491670407228, 2.1087119159795518 },
-    { -2.1751928885525507, -3.487421266813519 },
-    { 0.8095191281352391, 4.335108040434057 },
+    { 0.04766363055221467, -0.029314468388944002 },
+    { -0.2104607018724967, -0.03017738190921639 },
+    { 0.32522455742279077, 0.3514247989877169 },
+    { -0.11985651564596085, -0.8159733262998253 },
+    { -0.4523716553534823, 1.141361614247172 },
+    { 1.244955926214351, -1.1159760313464355 },
+    { -2.0361912898993695, 0.6603471582887335 },
+    { 2.605224312806833, 0.1816732193955519 },
+    { -2.7801814149997606, -1.266532785370232 },
+    { 2.4740387536099253, 2.3835658144304133 },
+    { -1.7073681773293923, -3.3001649457834694 },
+    { 0.609322573524028, 3.816372913788743 },
 };
 
+#define DEPTH 8
+#include "aasrc_template.c"
+
+#undef DEPTH
 #define DEPTH 16
 #include "aasrc_template.c"
 
@@ -140,16 +145,23 @@ static const double rs0[][2] = {
 #define DEPTH 65
 #include "aasrc_template.c"
 
+#undef DEPTH
+#define DEPTH 128
+#include "aasrc_template.c"
+
 void ff_aasrc_init(AudioASRCDSPContext *dsp)
 {
     dsp->vector_fmul_complex = vector_mul_complex_fltp;
     dsp->vector_dmul_complex = vector_mul_complex_dblp;
+    dsp->vector_ldmul_complex = vector_mul_complex_ldblp;
 
     dsp->vector_fmul_real = vector_mul_real_fltp;
     dsp->vector_dmul_real = vector_mul_real_dblp;
+    dsp->vector_ldmul_real = vector_mul_real_ldblp;
 
     dsp->vector_fmul_complex_add = vector_mul_complex_add_fltp;
     dsp->vector_dmul_complex_add = vector_mul_complex_add_dblp;
+    dsp->vector_ldmul_complex_add = vector_mul_complex_add_ldblp;
 
 #if ARCH_X86
     ff_aasrc_init_x86(dsp);
@@ -175,6 +187,12 @@ static int config_input(AVFilterLink *inlink)
     ff_aasrc_init(&s->dsp);
 
     switch (inlink->format) {
+    case AV_SAMPLE_FMT_U8P:
+        s->do_aasrc = aasrc_u8p;
+        s->aasrc_uninit = aasrc_uninit_u8p;
+        s->nb_output_samples = nb_output_samples_u8p;
+        ret = aasrc_init_u8p(ctx);
+        break;
     case AV_SAMPLE_FMT_S16P:
         s->do_aasrc = aasrc_s16p;
         s->aasrc_uninit = aasrc_uninit_s16p;
@@ -198,6 +216,12 @@ static int config_input(AVFilterLink *inlink)
         s->aasrc_uninit = aasrc_uninit_dblp;
         s->nb_output_samples = nb_output_samples_dblp;
         ret = aasrc_init_dblp(ctx);
+        break;
+    case AV_SAMPLE_FMT_LDBLP:
+        s->do_aasrc = aasrc_ldblp;
+        s->aasrc_uninit = aasrc_uninit_ldblp;
+        s->nb_output_samples = nb_output_samples_ldblp;
+        ret = aasrc_init_ldblp(ctx);
         break;
     default:
         return AVERROR_BUG;

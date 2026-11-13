@@ -16,10 +16,13 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/crc.h"
 #include "libavutil/float_dsp.h"
+#include "libavutil/log.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
+#include "libavutil/opt.h"
 #include "libavutil/tx.h"
 
 #include "avcodec.h"
@@ -50,6 +53,8 @@ typedef struct ChannelContext {
 } ChannelContext;
 
 typedef struct HCAContext {
+    AVClass *av_class;
+
     const AVCRC *crc_table;
 
     ChannelContext ch[MAX_CHANNELS];
@@ -57,7 +62,7 @@ typedef struct HCAContext {
     uint8_t ath[128];
     uint8_t cipher[256];
     uint64_t key;
-    uint16_t subkey;
+    int subkey;
 
     int     version;
     int     ath_type;
@@ -209,7 +214,7 @@ static av_cold void init_flush(AVCodecContext *avctx)
 {
     HCAContext *c = avctx->priv_data;
 
-    memset(c, 0, offsetof(HCAContext, tx_fn));
+    memset(c->ch, 0, sizeof(c->ch));
 }
 
 static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
@@ -291,12 +296,6 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
         } else {
             break;
         }
-    }
-
-    if (bytestream2_get_bytes_left(gb) >= 10) {
-        bytestream2_skip(gb, bytestream2_get_bytes_left(gb) - 10);
-        c->key = bytestream2_get_be64u(gb);
-        c->subkey = bytestream2_get_be16u(gb);
     }
 
     cipher_init(c->cipher, c->ciph_type, c->key, c->subkey);
@@ -750,9 +749,24 @@ static av_cold void decode_flush(AVCodecContext *avctx)
         memset(c->ch[ch].imdct_prev, 0, sizeof(c->ch[ch].imdct_prev));
 }
 
+#define OFFSET(x) offsetof(HCAContext, x)
+#define AD AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM
+static const AVOption hca_options[] = {
+    { "hca_key", "Key for encrypted files", OFFSET(key), AV_OPT_TYPE_UINT64, { .i64 = 0 }, 0, UINT64_MAX, AD },
+    { "hca_subkey", "Subkey for encrypted files", OFFSET(subkey), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, UINT16_MAX, AD },
+    { NULL },
+};
+
+static const AVClass hca_class = {
+    .class_name = "HCA decoder",
+    .option     = hca_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 const FFCodec ff_hca_decoder = {
     .p.name         = "hca",
     CODEC_LONG_NAME("CRI HCA"),
+    .p.priv_class    = &hca_class,
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_HCA,
     .priv_data_size = sizeof(HCAContext),

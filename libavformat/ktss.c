@@ -24,24 +24,36 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct KTSSDemuxContext {
     int64_t data_end;
 } KTSSDemuxContext;
 
-static int ktss_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "KTSS", 4) || AV_RL32(p->buf + 4) <= 0x40 || p->buf_size <= 0x40 ||
-        AV_RL64(p->buf + 8) != 0 || AV_RL64(p->buf + 16) != 0 || AV_RL64(p->buf + 24) != 0)
+    if (AV_RB32(p->buf) != MKBETAG('K','T','S','S'))
+       return 0;
+
+    if (p->buf_size <= 0x40)
         return 0;
+    if (AV_RL32(p->buf + 4) <= 0x40)
+        return 0;
+    if (AV_RL64(p->buf + 8) != 0 ||
+        AV_RL64(p->buf + 16) != 0 ||
+        AV_RL64(p->buf + 24) != 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 0x2c) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
-static int ktss_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
-    uint32_t start_offset, loop_start, loop_length, coeff_skip, coeff_gap, frames;
+    int64_t start_offset, loop_start, loop_length, coeff_skip, coeff_gap, frames, duration;
     KTSSDemuxContext *kc = s->priv_data;
-    uint16_t format, channels;
+    int format, channels, rate;
     AVIOContext *pb = s->pb;
     uint8_t version;
     int ret, skip;
@@ -52,25 +64,26 @@ static int ktss_read_header(AVFormatContext *s)
     version = avio_r8(pb);
     /* version2 = */avio_r8(pb);
     start_offset = avio_rl32(pb) + 0x20;
+    channels = avio_r8(pb) * avio_r8(pb);
+    avio_skip(pb, 2);
+    rate = avio_rl32(pb);
+    duration = avio_rl32(pb);
+    loop_start = avio_rl32(pb);
+    loop_length = avio_rl32(pb);
+
+    if (channels <= 0 || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    channels = avio_r8(pb) * avio_r8(pb);
-    if (channels <= 0)
-        return AVERROR_INVALIDDATA;
     st->codecpar->ch_layout.nb_channels = channels;
-    avio_skip(pb, 2);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    st->duration = avio_rl32(pb);
+    st->codecpar->sample_rate = rate;
 
-    loop_start = avio_rl32(pb);
-    loop_length = avio_rl32(pb);
     if (loop_length > 0) {
         av_dict_set_int(&s->metadata, "loop_start", loop_start, 0);
         av_dict_set_int(&s->metadata, "loop_end", loop_start + loop_length, 0);
@@ -93,7 +106,7 @@ static int ktss_read_header(AVFormatContext *s)
         }
 
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
-        st->codecpar->block_align = 8 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 8 * channels;
 
         ret = ff_alloc_extradata(st->codecpar, 0x20 * st->codecpar->ch_layout.nb_channels);
         if (ret < 0)
@@ -174,7 +187,7 @@ static int ktss_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int ktss_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret;
@@ -182,7 +195,7 @@ static int ktss_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (s->streams[0]->codecpar->codec_id == AV_CODEC_ID_OPUS) {
         KTSSDemuxContext *kc = s->priv_data;
         int64_t pos = avio_tell(pb);
-        uint32_t size;
+        int size;
 
         if (avio_feof(pb) || pos >= kc->data_end - 8)
             return AVERROR_EOF;
@@ -195,7 +208,7 @@ static int ktss_read_packet(AVFormatContext *s, AVPacket *pkt)
         ret = av_get_packet(pb, pkt, size);
         pkt->pos = pos;
     } else {
-        ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
+        ret = ff_pcm_read_packet(s, pkt);
     }
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
@@ -209,7 +222,7 @@ const FFInputFormat ff_ktss_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "ktss,kns,kno",
     .priv_data_size = sizeof(KTSSDemuxContext),
-    .read_probe     = ktss_probe,
-    .read_header    = ktss_read_header,
-    .read_packet    = ktss_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

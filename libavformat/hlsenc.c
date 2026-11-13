@@ -670,6 +670,9 @@ static int do_encrypt(AVFormatContext *s, VariantStream *vs)
 
         if (!hls->iv) {
             AV_WB64(iv + 8, vs->sequence);
+        } else if (strlen(hls->iv) < sizeof(iv)) {
+            av_log(hls, AV_LOG_ERROR, "hls_enc_iv is shorter than %zu bytes\n", sizeof(iv));
+            return AVERROR(EINVAL);
         } else {
             memcpy(iv, hls->iv, sizeof(iv));
         }
@@ -694,6 +697,9 @@ static int do_encrypt(AVFormatContext *s, VariantStream *vs)
                 av_log(s, AV_LOG_ERROR, "Cannot generate a strong random key\n");
                 return ret;
             }
+        } else if (strlen(hls->key) < sizeof(key)) {
+            av_log(hls, AV_LOG_ERROR, "hls_enc_key is shorter than %zu bytes\n", sizeof(key));
+            return AVERROR(EINVAL);
         } else {
             memcpy(key, hls->key, sizeof(key));
         }
@@ -2494,6 +2500,8 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
                     ((pkt->flags & AV_PKT_FLAG_KEY) || (hls->flags & HLS_SPLIT_BY_TIME));
         is_ref_pkt = (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) && (pkt->stream_index == vs->reference_stream_index);
     }
+    if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE)
+        is_ref_pkt = can_split = 0;
     if (pkt->pts == AV_NOPTS_VALUE)
         is_ref_pkt = can_split = 0;
 
@@ -2535,6 +2543,7 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
         if (hls->segment_type == SEGMENT_TYPE_FMP4) {
             if (!vs->init_range_length) {
                 range_length = avio_close_dyn_buf(oc->pb, &vs->init_buffer);
+                oc->pb = NULL;
                 if (range_length <= 0)
                     return AVERROR(EINVAL);
                 avio_write(vs->out, vs->init_buffer, range_length);
@@ -2724,6 +2733,8 @@ static void hls_deinit(AVFormatContext *s)
         av_freep(&vs->vtt_m3u8_name);
 
         avformat_free_context(vs->vtt_avf);
+        if (vs->avf)
+            ffio_free_dyn_buf(&vs->avf->pb);
         avformat_free_context(vs->avf);
         if (hls->resend_init_file)
             av_freep(&vs->init_buffer);
@@ -2761,6 +2772,8 @@ static int hls_write_trailer(struct AVFormatContext *s)
         vs = &hls->var_streams[i];
         oc = vs->avf;
         vtt_oc = vs->vtt_avf;
+        if (!oc->pb)
+            continue;
         old_filename = av_strdup(oc->url);
         use_temp_file = 0;
 

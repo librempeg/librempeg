@@ -34,6 +34,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/timestamp.h"
@@ -195,6 +196,40 @@ static void fill_buf(uint8_t *data, int w, int h, int linesize, uint8_t v)
     }
 }
 
+static av_always_inline void mark_combed_chroma(const FieldMatchContext *fm, const AVFrame *src,
+                                                int hsub, int vsub)
+{
+    const uint8_t *cmkpU = fm->cmask_data[1];
+    const uint8_t *cmkpV = fm->cmask_data[2];
+    const int width  = AV_CEIL_RSHIFT(src->width,  hsub);
+    const int height = AV_CEIL_RSHIFT(src->height, vsub);
+    const ptrdiff_t cmk_linesize   = fm->cmask_linesize[0];
+    const ptrdiff_t cmk_linesizeUV = fm->cmask_linesize[2];
+
+    for (int y = 1; y < height - 1; y++) {
+        uint8_t *cmkp_row = fm->cmask_data[0] + ((y << vsub) - (vsub ? y & 1 : 0)) * cmk_linesize;
+        cmkpV += cmk_linesizeUV;
+        cmkpU += cmk_linesizeUV;
+        for (int x = 1; x < width - 1; x++) {
+#define HAS_FF_AROUND(p, lz) (p[(x)-1 - (lz)] == 0xff || p[(x) - (lz)] == 0xff || p[(x)+1 - (lz)] == 0xff || \
+                              p[(x)-1       ] == 0xff ||                          p[(x)+1       ] == 0xff || \
+                              p[(x)-1 + (lz)] == 0xff || p[(x) + (lz)] == 0xff || p[(x)+1 + (lz)] == 0xff)
+            if ((cmkpV[x] == 0xff && HAS_FF_AROUND(cmkpV, cmk_linesizeUV)) ||
+                (cmkpU[x] == 0xff && HAS_FF_AROUND(cmkpU, cmk_linesizeUV))) {
+                uint8_t *cmkp = cmkp_row + (x << hsub);
+                for (int i = 0; i < (1 << vsub) + !!vsub; i++, cmkp += cmk_linesize) {
+                    if (hsub == 2)
+                        AV_WN32A(cmkp, 0xffffffff);
+                    else if (hsub)
+                        AV_WN16A(cmkp, 0xffff);
+                    else
+                        *cmkp = 0xff;
+                }
+            }
+        }
+    }
+}
+
 static int calc_combed_score(const FieldMatchContext *fm, const AVFrame *src)
 {
     int x, y, plane, max_v = 0;
@@ -271,36 +306,13 @@ static int calc_combed_score(const FieldMatchContext *fm, const AVFrame *src)
     }
 
     if (fm->chroma) {
-        uint8_t *cmkp  = fm->cmask_data[0];
-        uint8_t *cmkpU = fm->cmask_data[1];
-        uint8_t *cmkpV = fm->cmask_data[2];
-        const int width  = AV_CEIL_RSHIFT(src->width,  fm->hsub[INPUT_MAIN]);
-        const int height = AV_CEIL_RSHIFT(src->height, fm->vsub[INPUT_MAIN]);
-        const int cmk_linesize   = fm->cmask_linesize[0] << 1;
-        const int cmk_linesizeUV = fm->cmask_linesize[2];
-        uint8_t *cmkpp  = cmkp - (cmk_linesize>>1);
-        uint8_t *cmkpn  = cmkp + (cmk_linesize>>1);
-        uint8_t *cmkpnn = cmkp +  cmk_linesize;
-        for (y = 1; y < height - 1; y++) {
-            cmkpp  += cmk_linesize;
-            cmkp   += cmk_linesize;
-            cmkpn  += cmk_linesize;
-            cmkpnn += cmk_linesize;
-            cmkpV  += cmk_linesizeUV;
-            cmkpU  += cmk_linesizeUV;
-            for (x = 1; x < width - 1; x++) {
-#define HAS_FF_AROUND(p, lz) (p[(x)-1 - (lz)] == 0xff || p[(x) - (lz)] == 0xff || p[(x)+1 - (lz)] == 0xff || \
-                              p[(x)-1       ] == 0xff ||                          p[(x)+1       ] == 0xff || \
-                              p[(x)-1 + (lz)] == 0xff || p[(x) + (lz)] == 0xff || p[(x)+1 + (lz)] == 0xff)
-                if ((cmkpV[x] == 0xff && HAS_FF_AROUND(cmkpV, cmk_linesizeUV)) ||
-                    (cmkpU[x] == 0xff && HAS_FF_AROUND(cmkpU, cmk_linesizeUV))) {
-                    ((uint16_t*)cmkp)[x]  = 0xffff;
-                    ((uint16_t*)cmkpn)[x] = 0xffff;
-                    if (y&1) ((uint16_t*)cmkpp)[x]  = 0xffff;
-                    else     ((uint16_t*)cmkpnn)[x] = 0xffff;
-                }
-            }
-        }
+        const int hsub = fm->hsub[INPUT_MAIN];
+        const int vsub = fm->vsub[INPUT_MAIN];
+        if      (hsub == 0 && vsub == 0) mark_combed_chroma(fm, src, 0, 0);
+        else if (hsub == 1 && vsub == 0) mark_combed_chroma(fm, src, 1, 0);
+        else if (hsub == 1 && vsub == 1) mark_combed_chroma(fm, src, 1, 1);
+        else if (hsub == 2 && vsub == 0) mark_combed_chroma(fm, src, 2, 0);
+        else                             mark_combed_chroma(fm, src, hsub, vsub);
     }
 
     {
@@ -496,7 +508,7 @@ static int compare_fields(FieldMatchContext *fm, int match1, int match2, int fie
     const AVFrame *src = fm->src;
 
     for (plane = 0; plane < (fm->mchroma ? 3 : 1); plane++) {
-        int x, y, temp1, temp2, fbase;
+        int x, y, temp1, temp2, fbase, stopy;
         const AVFrame *prev, *next;
         uint8_t *mapp    = fm->map_data[plane];
         int map_linesize = fm->map_linesize[plane];
@@ -519,6 +531,7 @@ static int compare_fields(FieldMatchContext *fm, int match1, int match2, int fie
         /* match1 */
         fbase = get_field_base(match1, field);
         srcf  = srcp + (fbase + 1) * src_linesize;
+        stopy = height - 1 - fbase;
         srcpf = srcf - srcf_linesize;
         srcnf = srcf + srcf_linesize;
         mapp  = mapp + fbase * map_linesize;
@@ -544,7 +557,7 @@ static int compare_fields(FieldMatchContext *fm, int match1, int match2, int fie
             build_diff_map(fm, prvnf, prvf_linesize, nxtnf, nxtf_linesize,
                            mapp + map_linesize, map_linesize, height, width, plane);
 
-        for (y = 2; y < height - 2; y += 2) {
+        for (y = 2; y < stopy; y += 2) {
             if (y0a == y1a || y < y0a || y > y1a) {
                 for (x = startx; x < stopx; x++) {
                     if (mapp[x] > 0 || mapp[x + map_linesize] > 0) {
@@ -927,7 +940,7 @@ static int query_formats(const AVFilterContext *ctx,
     };
     int ret;
 
-    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    AVFilterFormats *fmts_list = ff_make_pixel_format_list(pix_fmts);
     if (!fmts_list)
         return AVERROR(ENOMEM);
     if (!fm->ppsrc) {
@@ -936,7 +949,7 @@ static int query_formats(const AVFilterContext *ctx,
 
     if ((ret = ff_formats_ref(fmts_list, &cfg_in[INPUT_MAIN]->formats)) < 0)
         return ret;
-    fmts_list = ff_make_format_list(unproc_pix_fmts);
+    fmts_list = ff_make_pixel_format_list(unproc_pix_fmts);
     if (!fmts_list)
         return AVERROR(ENOMEM);
     if ((ret = ff_formats_ref(fmts_list, &cfg_out[0]->formats)) < 0)
@@ -954,6 +967,11 @@ static int config_input(AVFilterLink *inlink)
     const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
     const int w = inlink->w;
     const int h = inlink->h;
+
+    if (h <= fm->blocky / 2 || AV_CEIL_RSHIFT(h, pix_desc->log2_chroma_h) < 4) {
+        av_log(ctx, AV_LOG_ERROR, "Height %d is too small\n", h);
+        return AVERROR(EINVAL);
+    }
 
     fm->scthresh = (int64_t)((w * h * 255.0 * fm->scthresh_flt) / 100.0);
 

@@ -468,6 +468,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_8SVX_FIB:
     case AV_CODEC_ID_ADPCM_ARGO:
     case AV_CODEC_ID_ADPCM_CT:
+    case AV_CODEC_ID_ADPCM_IMA:
     case AV_CODEC_ID_ADPCM_IMA_ALP:
     case AV_CODEC_ID_ADPCM_IMA_AMV:
     case AV_CODEC_ID_ADPCM_IMA_APC:
@@ -485,6 +486,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_AICA:
     case AV_CODEC_ID_ADPCM_IMA_WV6:
     case AV_CODEC_ID_ADPCM_IMA_ZMUSIC:
+    case AV_CODEC_ID_ADPCM_RHETOREX:
         return 4;
     case AV_CODEC_ID_DSD_LSBF:
     case AV_CODEC_ID_DSD_MSBF:
@@ -498,6 +500,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_PCM_SGA:
     case AV_CODEC_ID_PCM_SONIC:
     case AV_CODEC_ID_PCM_U8:
+    case AV_CODEC_ID_BIS_DPCM:
     case AV_CODEC_ID_SASSC_DPCM:
     case AV_CODEC_ID_SDX2_DPCM:
     case AV_CODEC_ID_CBD2_DPCM:
@@ -695,6 +698,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
             case AV_CODEC_ID_ADPCM_IMA_FSB:
             case AV_CODEC_ID_ADPCM_IMA_XBOX:
             case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
+            case AV_CODEC_ID_ADPCM_IMA_XBOX_SBR:
             case AV_CODEC_ID_ADPCM_IMA_WW:
                 return (frame_bytes / (0x24 * ch)) * 64;
             case AV_CODEC_ID_ADPCM_AFC:
@@ -734,6 +738,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 return (frame_bytes - 8) * 2;
             case AV_CODEC_ID_ADPCM_IMA_AWC:
                 return ((frame_bytes / (0x800 * ch))) * (0x800 - 4) * 2;
+            case AV_CODEC_ID_ADPCM_IMA_RAUD:
+                return ((frame_bytes / (0x804 * ch))) * 0x800 * 2;
             case AV_CODEC_ID_ADPCM_NXAP:
                 return ((frame_bytes / (0x40 * ch))) * (0x40 - 4) * 2;
             case AV_CODEC_ID_ADPCM_IMA_NDS:
@@ -749,6 +755,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 if (extradata)
                     return frame_bytes * 14LL / (8 * ch);
                 break;
+            case AV_CODEC_ID_ADPCM_MTA2:
+                return frame_bytes / (16 + ch * 0x90) * 256;
             case AV_CODEC_ID_ADPCM_XA:
                 return (frame_bytes / 128) * 224 / ch;
             case AV_CODEC_ID_ADPCM_XA8:
@@ -788,6 +796,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 case AV_CODEC_ID_ADPCM_EA_MAXIS_XA:
                     tmp = blocks * (ba - ch) / ch * 2;
                     break;
+                case AV_CODEC_ID_ADPCM_IMA_TRA:
                 case AV_CODEC_ID_ADPCM_IMA_DAT4:
                     tmp = blocks * ((ba/ch - 4) * 2);
                     break;
@@ -809,10 +818,13 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 case AV_CODEC_ID_ADPCM_IMA_REF:
                     tmp = blocks * (((ba - 4LL * ch) * 2 + ch) / ch);
                     break;
+                case AV_CODEC_ID_ADPCM_IMA_RAD_MONO:
                 case AV_CODEC_ID_ADPCM_IMA_RAD:
                     tmp = blocks * ((ba - 4LL * ch) * 2 / ch);
                     break;
+                case AV_CODEC_ID_ADPCM_CKMK:
                 case AV_CODEC_ID_ADPCM_MS:
+                case AV_CODEC_ID_ADPCM_MS_MONO:
                     tmp = blocks * (2 + (ba - 7LL * ch) * 2LL / ch);
                     break;
                 case AV_CODEC_ID_ADPCM_MTAF:
@@ -832,6 +844,9 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                     break;
                 case AV_CODEC_ID_ADPCM_MPC3:
                     tmp = blocks * (ba - 4) / (4 * ch) * 10;
+                    break;
+                case AV_CODEC_ID_ADPCM_IMA_CITRIX:
+                    tmp = blocks * (1 + ((ba / ch) - 4) * 4);
                     break;
                 }
                 if (tmp) {

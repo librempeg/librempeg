@@ -1,4 +1,4 @@
-adb3b95c07a5f3e0c86641dd62f01dae *tests/data/fate/mov-mp4-disposition-mpegts-remux.mp4
+50577a0d64512851ee6f2ceb178225d4 *tests/data/fate/mov-mp4-disposition-mpegts-remux.mp4
 5709 tests/data/fate/mov-mp4-disposition-mpegts-remux.mp4
 #tb 0: 1/48000
 #media_type 0: audio
@@ -17,12 +17,6 @@ adb3b95c07a5f3e0c86641dd62f01dae *tests/data/fate/mov-mp4-disposition-mpegts-rem
 0,       4608,       4608,     1536,      690, 0xa2714bf3
 1,       4608,       4608,     1536,      626, 0x09f4382f
 {
-    "programs": [
-
-    ],
-    "stream_groups": [
-
-    ],
     "streams": [
         {
             "index": 0,

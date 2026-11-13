@@ -4,21 +4,21 @@
  * Copyright (c) 2011 Anatoliy Wasserman
  * Copyright (c) 2012 Konstantin Shishkov
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -55,13 +55,6 @@ static const AVProfile profiles[] = {
 static const int qp_start_table[] = {  8, 3, 2, 1, 1, 1};
 static const int qp_end_table[]   = { 13, 9, 6, 6, 5, 4};
 static const int bitrate_table[]  = { 1000, 2100, 3500, 5400, 7000, 10000};
-
-static const int valid_primaries[]  = { AVCOL_PRI_RESERVED0, AVCOL_PRI_BT709, AVCOL_PRI_UNSPECIFIED, AVCOL_PRI_BT470BG,
-                                        AVCOL_PRI_SMPTE170M, AVCOL_PRI_BT2020, AVCOL_PRI_SMPTE431, AVCOL_PRI_SMPTE432, INT_MAX };
-static const int valid_trc[]        = { AVCOL_TRC_RESERVED0, AVCOL_TRC_BT709, AVCOL_TRC_UNSPECIFIED, AVCOL_TRC_SMPTE2084,
-                                        AVCOL_TRC_ARIB_STD_B67, INT_MAX };
-static const int valid_colorspace[] = { AVCOL_SPC_BT709, AVCOL_SPC_UNSPECIFIED, AVCOL_SPC_SMPTE170M,
-                                        AVCOL_SPC_BT2020_NCL, INT_MAX };
 
 static const uint8_t QMAT_LUMA[6][64] = {
     {
@@ -198,35 +191,6 @@ typedef struct {
 
     char *vendor;
 } ProresContext;
-
-/**
- * Check if a value is in the list. If not, return the default value
- *
- * @param ctx                Context for the log msg
- * @param val_name           Name of the checked value, for log msg
- * @param array_valid_values Array of valid int, ended with INT_MAX
- * @param default_value      Value return if checked value is not in the array
- * @return                   Value or default_value.
- */
-static int int_from_list_or_default(void *ctx, const char *val_name, int val,
-                                    const int *array_valid_values, int default_value)
-{
-    int i = 0;
-
-    while (1) {
-        int ref_val = array_valid_values[i];
-        if (ref_val == INT_MAX)
-            break;
-        if (val == ref_val)
-            return val;
-        i++;
-    }
-    /* val is not a valid value */
-    av_log(ctx, AV_LOG_DEBUG,
-           "%s %d are not supported. Set to default value : %d\n",
-           val_name, val, default_value);
-    return default_value;
-}
 
 static void encode_vlc_codeword(PutBitContext *pb, unsigned codebook, int val)
 {
@@ -496,7 +460,7 @@ static inline void subimage_with_fill_template(const uint16_t *src, unsigned x, 
     } else {
         src_stride = stride; /* 2 lines stride */
         src += y * src_stride + x;
-        box_height = FFMIN(height/2 - y, dst_height);
+        box_height = FFMIN((height + is_top_field) / 2 - y, dst_height);
         if (!is_top_field)
             src += stride >> 1;
     }
@@ -673,6 +637,7 @@ static int prores_encode_picture(AVCodecContext *avctx, const AVFrame *pic,
     int slice_per_line = 0, rem = mb_width;
 
     if (!ctx->is_interlaced) { /* progressive encoding */
+        picture_height = avctx->height;
         mb_height = (avctx->height + 15) >> 4;
         unsafe_mb_height_limit = mb_height;
     } else {
@@ -701,7 +666,7 @@ static int prores_encode_picture(AVCodecContext *avctx, const AVFrame *pic,
             while (mb_width - mb_x < slice_mb_count)
                 slice_mb_count >>= 1;
 
-            unsafe_bot = (avctx->height & 0xf) && (mb_y == unsafe_mb_height_limit - 1);
+            unsafe_bot = (picture_height & 0xf) && (mb_y == unsafe_mb_height_limit - 1);
             unsafe_right = (avctx->width & 0xf) && (mb_x + slice_mb_count == mb_width);
 
             sl_size = encode_slice(avctx, pic, mb_x, mb_y, slice_mb_count,
@@ -733,7 +698,7 @@ static int prores_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     uint8_t *buf;
     int compress_frame_size, pic_size, ret, is_top_field_first = 0;
     uint8_t frame_flags;
-    int frame_size = FFALIGN(avctx->width, 16) * FFALIGN(avctx->height, 16)*16 + 500 + FF_INPUT_BUFFER_MIN_SIZE; //FIXME choose tighter limit
+    int64_t frame_size = (int64_t)FFALIGN(avctx->width, 16) * FFALIGN(avctx->height, 16)*16 + 500 + FF_INPUT_BUFFER_MIN_SIZE; //FIXME choose tighter limit
 
 
     if ((ret = ff_alloc_packet(avctx, pkt, frame_size + FF_INPUT_BUFFER_MIN_SIZE)) < 0)
@@ -768,13 +733,9 @@ static int prores_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
     *buf++ = frame_flags;
     *buf++ = 0; /* reserved */
-    /* only write color properties, if valid value. set to unspecified otherwise */
-    *buf++ = int_from_list_or_default(avctx, "frame color primaries",
-                                      pict->color_primaries, valid_primaries, 0);
-    *buf++ = int_from_list_or_default(avctx, "frame color trc",
-                                      pict->color_trc, valid_trc, 0);
-    *buf++ = int_from_list_or_default(avctx, "frame colorspace",
-                                      pict->colorspace, valid_colorspace, 0);
+    *buf++ = ff_prores_color_primaries(pict->color_primaries);
+    *buf++ = ff_prores_color_trc(pict->color_trc);
+    *buf++ = ff_prores_colorspace(pict->colorspace);
     *buf++ = ctx->need_alpha ? 0x2 /* 16-bit alpha */ : 0;
     *buf++ = 0; /* reserved */
     *buf++ = 3; /* luma and chroma matrix present */
@@ -884,7 +845,7 @@ static av_cold int prores_encode_init(AVCodecContext *avctx)
 
     if (avctx->profile < AV_PROFILE_PRORES_4444) { /* 422 versions */
         ctx->is_422 = 1;
-        if ((avctx->height & 0xf) || (avctx->width & 0xf)) {
+        if ((avctx->height & (ctx->is_interlaced ? 0x1f : 0xf)) || (avctx->width & 0xf)) {
             ctx->fill_y = av_malloc(4 * (DEFAULT_SLICE_MB_WIDTH << 8));
             if (!ctx->fill_y)
                 return AVERROR(ENOMEM);
@@ -893,7 +854,7 @@ static av_cold int prores_encode_init(AVCodecContext *avctx)
         }
     } else { /* 444 */
         ctx->is_422 = 0;
-        if ((avctx->height & 0xf) || (avctx->width & 0xf)) {
+        if ((avctx->height & (ctx->is_interlaced ? 0x1f : 0xf)) || (avctx->width & 0xf)) {
             ctx->fill_y = av_malloc(3 * (DEFAULT_SLICE_MB_WIDTH << 9));
             if (!ctx->fill_y)
                 return AVERROR(ENOMEM);
@@ -942,6 +903,7 @@ static const AVOption options[] = {
 
 static const AVClass prores_enc_class = {
     .class_name = "ProRes encoder",
+    .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
 };

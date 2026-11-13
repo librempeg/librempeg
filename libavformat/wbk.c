@@ -88,7 +88,7 @@ static int read_header(AVFormatContext *s)
 
     for (int n = 0; n < nb_streams; n++) {
         int64_t name_offset, sound_size, duration, sound_offset, coef_offset;
-        int codec, flags, rate, channels, align, bps = -1, profile = -1;
+        int codec, flags, rate, channels, align;
         WBKStream *wst;
         AVStream *st;
 
@@ -124,10 +124,8 @@ static int read_header(AVFormatContext *s)
             align = 0x24;
             break;
         case 0x07:
-            codec = AV_CODEC_ID_ADPCM_IMA_WS;
-            bps = 4;
+            codec = AV_CODEC_ID_ADPCM_IMA;
             align = 0x40;
-            profile = 3;
             break;
         default:
             avpriv_request_sample(s, "codec %02X", codec);
@@ -158,10 +156,6 @@ static int read_header(AVFormatContext *s)
         st->codecpar->ch_layout.nb_channels = channels;
         st->codecpar->sample_rate = rate;
         st->codecpar->block_align = align * channels;
-        if (bps > 0)
-            st->codecpar->bits_per_coded_sample = bps;
-        if (profile >= 0)
-            st->codecpar->profile = profile;
 
         if (codec == AV_CODEC_ID_ADPCM_NDSP) {
             if (coef_offset == UINT32_MAX || coefsec_offset == 0) {

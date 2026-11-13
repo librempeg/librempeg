@@ -562,13 +562,17 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
     MPEG4AudioConfig *m4ac = &oc->m4ac;
     AACUSACConfig *usac = &oc->usac;
     int elem_id[3 /* SCE, CPE, LFE */];
+    int nb_elems;
 
     int map_pos_set = 0;
+    int nb_elements = 0;
     uint8_t layout_map[MAX_ELEM_ID*4][3] = { 0 };
 
     if (!ac)
         return AVERROR_PATCHWELCOME;
 
+    for (int i = 0; i < usac->nb_elems; i++)
+        av_refstruct_unref(&usac->elems[i].ext.pl_buf);
     memset(usac, 0, sizeof(*usac));
     usac->loudness.input_method_val = -1;
 
@@ -584,6 +588,10 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
     }
 
     usac->core_sbr_frame_len_idx = get_bits(gb, 3); /* coreSbrFrameLengthIndex */
+    if (usac->core_sbr_frame_len_idx == 2 || usac->core_sbr_frame_len_idx == 4) {
+        avpriv_report_missing_feature(avctx, "USAC SBR with a ratio other than 2:1");
+        return AVERROR_PATCHWELCOME;
+    }
     m4ac->frame_length_short = usac->core_sbr_frame_len_idx == 0 ||
                                usac->core_sbr_frame_len_idx == 2;
 
@@ -615,6 +623,7 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
 
     m4ac->sampling_index = ff_aac_sample_rate_idx(m4ac->sample_rate);
     m4ac->sbr = sbr_ratio > 0;
+    m4ac->chan_config = 0;
 
     channel_config_idx = get_bits(gb, 5); /* channelConfigurationIndex */
     if (!channel_config_idx) {
@@ -623,28 +632,25 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
         if (nb_channels > 64)
             return AVERROR(EINVAL);
 
-        av_channel_layout_uninit(&ac->oc[1].ch_layout);
+        AVChannelLayout ch_layout = { 0 };
 
-        ret = av_channel_layout_custom_init(&ac->oc[1].ch_layout, nb_channels);
+        ret = av_channel_layout_custom_init(&ch_layout, nb_channels);
         if (ret < 0)
             return ret;
 
         for (int i = 0; i < nb_channels; i++) {
-            AVChannelCustom *cm = &ac->oc[1].ch_layout.u.map[i];
+            AVChannelCustom *cm = &ch_layout.u.map[i];
             cm->id = usac_ch_pos_to_av[get_bits(gb, 5)]; /* bsOutputChannelPos */
         }
 
-        ret = av_channel_layout_retype(&ac->oc[1].ch_layout,
-                                       AV_CHANNEL_ORDER_NATIVE,
+        ret = av_channel_layout_retype(&ch_layout, AV_CHANNEL_ORDER_NATIVE,
                                        AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL);
-        if (ret < 0)
-            return ret;
-
-        ret = av_channel_layout_copy(&avctx->ch_layout, &ac->oc[1].ch_layout);
+        if (ret >= 0)
+            ret = av_channel_layout_copy(&avctx->ch_layout, &ch_layout);
+        av_channel_layout_uninit(&ch_layout);
         if (ret < 0)
             return ret;
     } else {
-        int nb_elements;
         if ((ret = ff_aac_set_default_channel_config(ac, avctx, layout_map,
                                                      &nb_elements, channel_config_idx)))
             return ret;
@@ -658,15 +664,14 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
 
     /* UsacDecoderConfig */
     elem_id[0] = elem_id[1] = elem_id[2] = 0;
-    usac->nb_elems = get_escaped_value(gb, 4, 8, 16) + 1;
-    if (usac->nb_elems > 64) {
+    nb_elems = get_escaped_value(gb, 4, 8, 16) + 1;
+    if (nb_elems > 64) {
         av_log(ac->avctx, AV_LOG_ERROR, "Too many elements: %i\n",
-               usac->nb_elems);
-        usac->nb_elems = 0;
+               nb_elems);
         return AVERROR(EINVAL);
     }
 
-    for (int i = 0; i < usac->nb_elems; i++) {
+    for (int i = 0; i < nb_elems; i++) {
         int map_count = elem_id[0] + elem_id[1] + elem_id[2];
         AACUsacElemConfig *e = &usac->elems[i];
         memset(e, 0, sizeof(*e));
@@ -675,8 +680,15 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
         if (e->type != ID_USAC_EXT && (map_count + 1) > nb_channels) {
             av_log(ac->avctx, AV_LOG_ERROR, "Too many channels for the channel "
                                             "configuration\n");
-            usac->nb_elems = 0;
             return AVERROR(EINVAL);
+        }
+        if (map_pos_set && e->type != ID_USAC_EXT &&
+            (map_count >= nb_elements ||
+             layout_map[map_count][0] != (e->type == ID_USAC_LFE ? TYPE_LFE : e->type))) {
+            av_log(ac->avctx, AV_LOG_ERROR, "Element %d does not match the "
+                                            "channel configuration\n", i);
+            usac->nb_elems = 0;
+            return AVERROR_INVALIDDATA;
         }
 
         av_log(ac->avctx, AV_LOG_DEBUG, "Element present: idx %i, type %i\n",
@@ -727,11 +739,17 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
         };
     }
 
+    if (map_pos_set && elem_id[0] + elem_id[1] + elem_id[2] != nb_elements) {
+        av_log(ac->avctx, AV_LOG_ERROR, "Element count does not match the "
+                                        "channel configuration\n");
+        usac->nb_elems = 0;
+        return AVERROR_INVALIDDATA;
+    }
+
     ret = ff_aac_output_configure(ac, layout_map, elem_id[0] + elem_id[1] + elem_id[2],
                                   OC_GLOBAL_HDR, 0);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Unable to parse channel config!\n");
-        usac->nb_elems = 0;
         return ret;
     }
 
@@ -777,6 +795,7 @@ int ff_aac_usac_config_decode(AACDecContext *ac, AVCodecContext *avctx,
                -57.75f + 0.25f * usac->loudness.input_method_val,
                usac->loudness.input_method_val);
 
+    usac->nb_elems = nb_elems;
     ret = ff_aac_usac_reset_state(ac, oc);
     if (ret < 0)
         return ret;
@@ -1770,7 +1789,8 @@ static int decode_usac_core_coder(AACDecContext *ac, AACUSACConfig *usac,
             ret = ff_aac_ldp_parse_channel_stream(ac, usac, ue, gb);
             if (ret < 0)
                 return ret;
-            continue;
+            avpriv_report_missing_feature(ac->avctx, "AAC USAC LPD");
+            return AVERROR_PATCHWELCOME;
         }
 
         if ((core_nb_channels == 1) ||
@@ -1857,12 +1877,12 @@ static int decode_usac_core_coder(AACDecContext *ac, AACUSACConfig *usac,
         }
     }
 
-    if (ec->sbr.ratio) {
-        int sbr_ch = nb_channels;
-        if (nb_channels == 2 &&
-            !(ec->stereo_config_index == 0 || ec->stereo_config_index == 3))
-            sbr_ch = 1;
+    int sbr_ch = nb_channels;
+    if (nb_channels == 2 &&
+        !(ec->stereo_config_index == 0 || ec->stereo_config_index == 3))
+        sbr_ch = 1;
 
+    if (ec->sbr.ratio) {
         ret = ff_aac_sbr_decode_usac_data(ac, che, ec, gb, sbr_ch, indep_flag);
         if (ret < 0)
             return ret;
@@ -1877,10 +1897,15 @@ static int decode_usac_core_coder(AACDecContext *ac, AACUSACConfig *usac,
     spectrum_decode(ac, usac, che, core_nb_channels);
 
     if (ac->oc[1].m4ac.sbr > 0) {
-        ac->proc.sbr_apply(ac, che, nb_channels == 2 ? TYPE_CPE : TYPE_SCE, 0,
+        ac->proc.sbr_apply(ac, che, sbr_ch == 2 ? TYPE_CPE : TYPE_SCE, 0,
                            che->ch[0].output,
                            che->ch[1].output);
     }
+
+    /* The MPS212 upmix is not implemented, output the downmix on both channels */
+    if (sbr_ch < nb_channels)
+        memcpy(che->ch[1].output, che->ch[0].output,
+               ac->frame->nb_samples * sizeof(*che->ch[0].output));
 
     return 0;
 }
@@ -1908,8 +1933,6 @@ static int parse_audio_preroll(AACDecContext *ac, GetBitContext *gb)
     if (ret < 0) {
         *m4ac = m4ac_bak;
         return ret;
-    } else {
-        ac->oc[1].m4ac.chan_config = 0;
     }
 
     /* 7.18.3.3 Bitrate adaption
@@ -2081,8 +2104,10 @@ int ff_aac_usac_decode_frame(AVCodecContext *avctx, AACDecContext *ac,
         ratio_dec = 1;
     }
 
-    ff_aac_output_configure(ac, ac->oc[1].layout_map, ac->oc[1].layout_map_tags,
-                            ac->oc[1].status, 0);
+    ret = ff_aac_output_configure(ac, ac->oc[1].layout_map, ac->oc[1].layout_map_tags,
+                                  ac->oc[1].status, 0);
+    if (ret < 0)
+        return ret;
 
     ac->avctx->profile = AV_PROFILE_AAC_USAC;
 
@@ -2152,6 +2177,7 @@ int ff_aac_usac_decode_frame(AVCodecContext *avctx, AACDecContext *ac,
     if (ac->oc[1].status && audio_found) {
         avctx->sample_rate = ac->oc[1].m4ac.ext_sample_rate;
         avctx->frame_size = samples;
+        avctx->seek_preroll = FFMAX(avctx->seek_preroll, samples);
         ac->oc[1].status = OC_LOCKED;
     }
 

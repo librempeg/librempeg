@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2015 Ronald S. Bultje <rsbultje@gmail.com>
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -56,8 +56,8 @@ static void check_ipred(void)
     LOCAL_ALIGNED_32(uint8_t, dst1, [32 * 32 * 2]);
     VP9DSPContext dsp;
     int tx, mode, bit_depth;
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, ptrdiff_t stride,
-                      const uint8_t *left, const uint8_t *top);
+    declare_func(void, uint8_t *dst, ptrdiff_t stride,
+                 const uint8_t *left, const uint8_t *top);
     static const char *const mode_names[N_INTRA_PRED_MODES] = {
         [VERT_PRED] = "vert",
         [HOR_PRED] = "hor",

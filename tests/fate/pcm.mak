@@ -1,14 +1,14 @@
-FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE WAV, ARESAMPLE_FILTER) += fate-iff-pcm
-fate-iff-pcm: CMD = md5 -i $(TARGET_SAMPLES)/iff/Bells -f s16le -af aresample
+FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE WAV, ASF2SF_FILTER) += fate-iff-pcm
+fate-iff-pcm: CMD = md5 -i $(TARGET_SAMPLES)/iff/Bells -f s16le -af asf2sf
 
-FATE_SAMPLES_PCM-$(call FRAMECRC, MPEGPS, PCM_DVD, ARESAMPLE_FILTER) += fate-pcm_dvd
-fate-pcm_dvd: CMD = framecrc -i $(TARGET_SAMPLES)/pcm-dvd/coolitnow-partial.vob -vn -af aresample
+FATE_SAMPLES_PCM-$(call FRAMECRC, MPEGPS, PCM_DVD, ASF2SF_FILTER) += fate-pcm_dvd
+fate-pcm_dvd: CMD = framecrc -i $(TARGET_SAMPLES)/pcm-dvd/coolitnow-partial.vob -vn -af asf2sf
 
 FATE_SAMPLES_PCM-$(call FRAMECRC, MPEGPS, PCM_DVDA, PCM_S24LE_ENCODER) += fate-pcm_dvda
 fate-pcm_dvda: CMD = framecrc -i $(TARGET_SAMPLES)/pcm-dvda/pcm_dvda-96k24bit.aob -c:a pcm_s24le
 
-FATE_SAMPLES_PCM-$(call FRAMECRC, EA, PCM_S16LE_PLANAR, ARESAMPLE_FILTER) += fate-pcm-planar
-fate-pcm-planar: CMD = framecrc -i $(TARGET_SAMPLES)/ea-mad/xeasport.mad -vn -af aresample
+FATE_SAMPLES_PCM-$(call FRAMECRC, EA, PCM_S16LE_PLANAR, ASF2SF_FILTER) += fate-pcm-planar
+fate-pcm-planar: CMD = framecrc -i $(TARGET_SAMPLES)/ea-mad/xeasport.mad -vn -af asf2sf
 
 FATE_SAMPLES_PCM-$(call DEMDEC, MOV, PCM_S16BE, PCM_S16LE_MUXER) += fate-pcm_s16be-stereo
 fate-pcm_s16be-stereo: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-B-twos.mov -f s16le
@@ -16,11 +16,11 @@ fate-pcm_s16be-stereo: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-
 FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE, PCM_S16LE MOV) += fate-pcm_s16le-stereo
 fate-pcm_s16le-stereo: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-L-sowt.mov -f s16le
 
-FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE MOV, ARESAMPLE_FILTER) += fate-pcm_u8-mono
-fate-pcm_u8-mono: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-1-8-raw.mov -f s16le -af aresample
+FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE MOV, ASF2SF_FILTER) += fate-pcm_u8-mono
+fate-pcm_u8-mono: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-1-8-raw.mov -f s16le -af asf2sf
 
-FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE MOV, ARESAMPLE_FILTER) += fate-pcm_u8-stereo
-fate-pcm_u8-stereo: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-2-8-raw.mov -f s16le -af aresample
+FATE_SAMPLES_PCM-$(call TRANSCODE, PCM_S16LE PCM_U8, PCM_S16LE MOV, ASF2SF_FILTER) += fate-pcm_u8-stereo
+fate-pcm_u8-stereo: CMD = md5 -i $(TARGET_SAMPLES)/qt-surge-suite/surge-2-8-raw.mov -f s16le -af asf2sf
 
 FATE_SAMPLES_PCM-$(call CRC, W64, PCM_S16LE) += fate-w64
 fate-w64: CMD = crc -i $(TARGET_SAMPLES)/w64/w64-pcm16.w64
@@ -61,6 +61,14 @@ fate-pcm_dvd-16-1-48000: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/opatom_missin
 FATE_PCM-$(call TRANSCODE, PCM_DVD, MPEG2VOB MPEGPS, WAV_DEMUXER PCM_S16LE_DECODER) += fate-pcm_dvd-16-1-96000
 fate-pcm_dvd-16-1-96000: tests/data/asynth-96000-1.wav
 fate-pcm_dvd-16-1-96000: CMD = transcode wav $(TARGET_PATH)/tests/data/asynth-96000-1.wav vob "-c:a pcm_dvd" "-t 0.2"
+
+FATE_PCM-$(call ALLYES, PCM_DVD_ENCODER LAVFI_INDEV SINE_FILTER ATRIM_FILTER ARESAMPLE_FILTER \
+                       PCM_S16$(if $(filter yes,$(HAVE_BIGENDIAN)),BE,LE)_DECODER FRAMECRC_MUXER PIPE_PROTOCOL) += fate-pcm-dvd-last-block
+fate-pcm-dvd-last-block: CMD = framecrc -auto_conversion_filters -f lavfi -i "sine=r=48000,atrim=end_sample=85" -c:a pcm_dvd -sample_fmt s32 -map 0:a -map 0:a -flags2:a:1 +fixed_frame_size
+
+FATE_PCM-$(call ALLYES, PCM_DVD_ENCODER LAVFI_INDEV SINE_FILTER ATRIM_FILTER ARESAMPLE_FILTER \
+                       PCM_S16$(if $(filter yes,$(HAVE_BIGENDIAN)),BE,LE)_DECODER FRAMECRC_MUXER PIPE_PROTOCOL) += fate-pcm-dvd-last-block-coarse-tb
+fate-pcm-dvd-last-block-coarse-tb: CMD = framecrc -auto_conversion_filters -f lavfi -i "sine=r=48000,atrim=end_sample=69" -c:a pcm_dvd -sample_fmt s32 -enc_time_base 1/1000
 
 # PCM Blu-ray encoder/decoder roundtrip tests (s16, locally generated sources)
 FATE_PCM_BLURAY_S16 = fate-pcm-bluray-s16-mono                                \

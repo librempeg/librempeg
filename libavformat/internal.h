@@ -120,7 +120,12 @@ typedef struct FFFormatContext {
     AVDictionary *id3v2_meta;
 
     int missing_streams;
-} FFFormatContext;
+
+    /**
+     * Set if program ids are strictly monotonic.
+     */
+    int program_ids_monotonic;
+ } FFFormatContext;
 
 static av_always_inline FFFormatContext *ffformatcontext(AVFormatContext *s)
 {
@@ -232,6 +237,26 @@ typedef struct FFStream {
      * early EOF if the gapless info is broken (considered concatenated mp3s).
      */
     int64_t last_discard_sample;
+
+    /**
+     * Set by a seek, cleared on the next packet of the stream, which gets in
+     * skip_samples the rest of the priming if it is inside it, and when
+     * seek_preroll is set and it is not the first packet of the stream, at
+     * least the seek pre-roll of the codec. After the priming, a seek to the
+     * start of the stream gets none.
+     */
+    int seek_discard;
+
+    /**
+     * Set with seek_discard when the seek had AVSEEK_FLAG_PREROLL.
+     */
+    int seek_preroll;
+
+    /**
+     * Set with seek_discard when the target of the seek is at or before the
+     * start of this stream.
+     */
+    int seek_to_start;
 
     /**
      * Number of internally decoded frames, used internally in libavformat, do not access

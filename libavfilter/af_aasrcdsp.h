@@ -27,6 +27,10 @@
 #include "avfilter.h"
 #include "formats.h"
 
+typedef struct complex_long_double {
+    long double re, im;
+} complex_long_double;
+
 typedef struct complex_double {
     double re, im;
 } complex_double;
@@ -44,6 +48,10 @@ typedef struct AudioASRCDSPContext {
                                 const complex_double *a,
                                 const complex_double *b, const int N);
 
+    void (*vector_ldmul_complex)(complex_long_double *x,
+                                 const complex_long_double *a,
+                                 const complex_long_double *b, const int N);
+
     float (*vector_fmul_real)(const complex_float *cur,
                               const complex_float *h,
                               const int N);
@@ -51,6 +59,10 @@ typedef struct AudioASRCDSPContext {
     double (*vector_dmul_real)(const complex_double *cur,
                                const complex_double *h,
                                const int N);
+
+    long double (*vector_ldmul_real)(const complex_long_double *cur,
+                                     const complex_long_double *h,
+                                     const int N);
 
     void (*vector_fmul_complex_add)(const float src,
                                     const complex_float *fixed,
@@ -63,6 +75,12 @@ typedef struct AudioASRCDSPContext {
                                     const complex_double *in,
                                     complex_double *out,
                                     const int N);
+
+    void (*vector_ldmul_complex_add)(const long double src,
+                                     const complex_long_double *fixed,
+                                     const complex_long_double *in,
+                                     complex_long_double *out,
+                                     const int N);
 } AudioASRCDSPContext;
 
 void ff_aasrc_init(AudioASRCDSPContext *s);

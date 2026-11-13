@@ -24,30 +24,30 @@ FATE_VOICE-yes += $(FATE_G722-yes)
 fate-g722: $(FATE_G722-yes)
 
 FATE_G723_1 += fate-g723_1-dec-1
-fate-g723_1-dec-1: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/ineqd53.tco -af aresample
+fate-g723_1-dec-1: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/ineqd53.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-2
-fate-g723_1-dec-2: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/overd53.tco -af aresample
+fate-g723_1-dec-2: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/overd53.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-3
-fate-g723_1-dec-3: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/overd63p.tco -af aresample
+fate-g723_1-dec-3: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/overd63p.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-4
-fate-g723_1-dec-4: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/pathd53.tco -af aresample
+fate-g723_1-dec-4: CMD = framecrc -postfilter 0 -i $(TARGET_SAMPLES)/g723_1/pathd53.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-5
-fate-g723_1-dec-5: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/pathd63p.tco -af aresample
+fate-g723_1-dec-5: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/pathd63p.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-6
-fate-g723_1-dec-6: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/tamed63p.tco -af aresample
+fate-g723_1-dec-6: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/tamed63p.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-7
-fate-g723_1-dec-7: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/dtx63b.tco -af aresample
+fate-g723_1-dec-7: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/dtx63b.tco -af asf2sf
 
 FATE_G723_1 += fate-g723_1-dec-8
-fate-g723_1-dec-8: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/dtx63e.tco -af aresample
+fate-g723_1-dec-8: CMD = framecrc -postfilter 1 -i $(TARGET_SAMPLES)/g723_1/dtx63e.tco -af asf2sf
 
-FATE_VOICE-$(call FRAMECRC, G723_1, G723_1, ARESAMPLE_FILTER) += $(FATE_G723_1)
+FATE_VOICE-$(call FRAMECRC, G723_1, G723_1, ASF2SF_FILTER) += $(FATE_G723_1)
 fate-g723_1: $(FATE_G723_1)
 
 FATE_G726 += fate-g726-encode-2bit
@@ -84,7 +84,7 @@ fate-gsm-toast: CMD = framecrc -i $(TARGET_SAMPLES)/gsm/sample-gsm-8000.mov -t 1
 FATE_VOICE-yes += $(FATE_GSM-yes)
 fate-gsm: $(FATE_GSM-yes)
 
-FATE_VOICE-$(call PCM, QCP, QCELP, ARESAMPLE_FILTER) += fate-qcelp
+FATE_VOICE-$(call PCM, QCP, QCELP, ASF2SF_FILTER) += fate-qcelp
 fate-qcelp: CMD = pcm -i $(TARGET_SAMPLES)/qcp/0036580847.QCP
 fate-qcelp: CMP = oneoff
 fate-qcelp: REF = $(SAMPLES)/qcp/0036580847.pcm
@@ -93,6 +93,19 @@ FATE_VOICE-$(call PCM, WAV, TRUESPEECH) += fate-truespeech
 fate-truespeech: CMD = pcm -i $(TARGET_SAMPLES)/truespeech/a6.wav
 fate-truespeech: CMP = oneoff
 fate-truespeech: REF = $(SAMPLES)/truespeech/a6.pcm
+
+# This test reproduces a float-cast-overflow in the comfortnoise decoder
+# (cngdec.c) when fed with a 24-byte all-zero G.723.1 frame.
+# The bug causes positive float values to overflow to negative integer values
+# during clipping, resulting in massive negative bias (RMS near 0dB).
+# The fixed version clips correctly, resulting in quieter output (RMS < -3dB).
+FATE_VOICE-$(call FILTERDEMDECENCMUX, ASTATS NULLSRC FORMAT GEQ, G723_1, \
+                                      COMFORTNOISE WRAPPED_AVFRAME, PCM_S16LE RAWVIDEO, \
+                                      NULL RAWVIDEO, LAVFI_INDEV PIPE_PROTOCOL) += fate-comfortnoise
+fate-comfortnoise: CMP = grep
+fate-comfortnoise: REF = RMS level dB: \(-[3-9]\|-[1-9][0-9]\)
+fate-comfortnoise: CMD = ffmpeg -lavfi nullsrc=s=4x4,format=yuv420p,geq=lum=0:cb=0:cr=0 -vframes 1 -f rawvideo - | \
+    ffmpeg -f g723_1 -codec:a comfortnoise -i pipe: -af astats -c:a pcm_s16le -f null -
 
 FATE_SAMPLES_FFMPEG += $(FATE_VOICE-yes)
 fate-voice: $(FATE_VOICE-yes)

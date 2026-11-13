@@ -620,7 +620,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_AVS,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "avs",
-        .long_name = NULL_IF_CONFIG_SMALL("AVS (Audio Video Standard) video"),
+        .long_name = NULL_IF_CONFIG_SMALL("Argonaut Games Creature Shock video"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -655,8 +655,9 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_CAVS,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "cavs",
-        .long_name = NULL_IF_CONFIG_SMALL("Chinese AVS (Audio Video Standard) (AVS1-P2, JiZhun profile)"),
+        .long_name = NULL_IF_CONFIG_SMALL("Chinese AVS (Audio Video Standard) (AVS1-P2/P16)"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_cavs_profiles),
     },
     {
         .id        = AV_CODEC_ID_JPEG2000,
@@ -2094,10 +2095,10 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_CFDF_D5_VIDEO,
+        .id        = AV_CODEC_ID_CFDF_VIDEO,
         .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "cfdf_d5_video",
-        .long_name = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5) video"),
+        .name      = "cfdf_video",
+        .long_name = NULL_IF_CONFIG_SMALL("CFDF (Cyberflix DreamFactory) video"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
     {
@@ -2113,6 +2114,28 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "ttvideo",
         .long_name = NULL_IF_CONFIG_SMALL("Traveller's Tales Video"),
         .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ECM,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "ecm",
+        .long_name = NULL_IF_CONFIG_SMALL("Eurocom Video"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_RW2,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "rw2",
+        .long_name = NULL_IF_CONFIG_SMALL("Panasonic RW2"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+        .mime_types= MT("image/x-panasonic-rw2"),
+    },
+    {
+	.id        = AV_CODEC_ID_IMM6,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "imm6",
+        .long_name = NULL_IF_CONFIG_SMALL("Infinity IMM6"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
     },
 
     /* various PCM "codecs" */
@@ -2661,7 +2684,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ADPCM_PSX,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_psx",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Playstation"),
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM PlayStation"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2815,7 +2838,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ADPCM_PSXC,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_psxc",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Playstation C"),
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM PlayStation C"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
@@ -3035,6 +3058,83 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Dialogic OKI (4-shift)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_RAD_MONO,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_rad_mono",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Radical (Mono)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_RAUD,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_raud",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA RAUD"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_TRA,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_tra",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA TRA"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_CKMK,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ckmk",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM CKMK"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_MTA2,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_mta2",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM MTA2"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_XBOX_SBR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_xbox_sbr",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Xbox (Saber)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_MS_MONO,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ms_mono",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Microsoft (Mono)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_RHETOREX,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_rhetorex",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Rhetorex"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_CITRIX,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_citrix",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Citrix"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_CFDF,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_cfdf",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Cyberflix DreamFactory"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* AMR */
     {
@@ -3151,6 +3251,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "cwv_dpcm",
         .long_name = NULL_IF_CONFIG_SMALL("DPCM Nintendo CWV"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_BIS_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "bis_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Bohemia Interactive"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
@@ -4048,6 +4155,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "compresswave",
         .long_name = NULL_IF_CONFIG_SMALL("CompressWave"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ULC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "ulc",
+        .long_name = NULL_IF_CONFIG_SMALL("ULC (Ultra-Low Complexity Codec)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

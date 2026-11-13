@@ -31,10 +31,12 @@
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
+#include "libavutil/pixdesc.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
+#define CACHED_BITSTREAM_READER 1
 #include "get_bits.h"
 #include "hwaccel_internal.h"
 #include "hwconfig.h"
@@ -136,6 +138,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     avctx->bits_per_raw_sample = 10;
 
+    ctx->container_color_primaries = avctx->color_primaries;
+    ctx->container_color_trc       = avctx->color_trc;
+    ctx->container_colorspace      = avctx->colorspace;
+
     switch (avctx->codec_tag) {
     case MKTAG('a','p','c','o'):
         avctx->profile = AV_PROFILE_PRORES_PROXY;
@@ -180,6 +186,17 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ctx->pix_fmt = AV_PIX_FMT_NONE;
 
     return 0;
+}
+
+/**
+ * Whether a frame header colour value describes a colour. 0 and 2 both mean
+ * unknown in all three fields (RDD 36), unlike 0 in H.273; 3 is reserved.
+ *
+ * @param name FFmpeg name of the value, NULL if it has none
+ */
+static int describes_colour(int value, const char *name)
+{
+    return value != 0 && value != 2 && value != 3 && name;
 }
 
 static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
@@ -279,9 +296,12 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
 #endif
     }
 
-    avctx->color_primaries = buf[14];
-    avctx->color_trc       = buf[15];
-    avctx->colorspace      = buf[16];
+    avctx->color_primaries = describes_colour(buf[14], av_color_primaries_name(buf[14])) ?
+                             buf[14] : ctx->container_color_primaries;
+    avctx->color_trc       = describes_colour(buf[15], av_color_transfer_name(buf[15])) ?
+                             buf[15] : ctx->container_color_trc;
+    avctx->colorspace      = describes_colour(buf[16], av_color_space_name(buf[16])) ?
+                             buf[16] : ctx->container_colorspace;
     avctx->color_range     = AVCOL_RANGE_MPEG;
 
     ptr   = buf + 20;
@@ -420,13 +440,12 @@ static int decode_picture_header(AVCodecContext *avctx, const uint8_t *buf, cons
     return pic_data_size;
 }
 
-#define DECODE_CODEWORD(val, codebook, SKIP)                            \
+#define DECODE_CODEWORD(val, codebook, gb)                              \
     do {                                                                \
         unsigned int rice_order, exp_order, switch_bits;                \
         unsigned int q, buf, bits;                                      \
                                                                         \
-        UPDATE_CACHE_32(re, gb); /* We really need 32 bits */           \
-        buf = GET_CACHE(re, gb);                                        \
+        buf = show_bits(gb, 32); /* We really need 32 bits */           \
                                                                         \
         /* number of bits to switch between rice and exp golomb */      \
         switch_bits =  codebook & 3;                                    \
@@ -439,16 +458,17 @@ static int decode_picture_header(AVCodecContext *avctx, const uint8_t *buf, cons
             bits = exp_order - switch_bits + (q<<1);                    \
             if (bits > 31)                                              \
                 return AVERROR_INVALIDDATA;                             \
-            val = SHOW_UBITS(re, gb, bits) - (1 << exp_order) +         \
+            val = (buf >> (32 - bits)) - (1 << exp_order) +             \
                 ((switch_bits + 1) << rice_order);                      \
-            SKIP(re, gb, bits);                                         \
+            skip_bits(gb, bits);                                        \
         } else if (rice_order) {                                        \
-            SKIP_BITS(re, gb, q+1);                                     \
-            val = (q << rice_order) + SHOW_UBITS(re, gb, rice_order);   \
-            SKIP(re, gb, rice_order);                                   \
+            bits = q + 1 + rice_order;                                  \
+            val = (q << rice_order) +                                   \
+                ((buf >> (32 - bits)) & ((1u << rice_order) - 1));      \
+            skip_bits(gb, bits);                                        \
         } else {                                                        \
             val = q;                                                    \
-            SKIP(re, gb, q+1);                                          \
+            skip_bits(gb, q + 1);                                       \
         }                                                               \
     } while (0)
 
@@ -464,9 +484,7 @@ static av_always_inline int decode_dc_coeffs(GetBitContext *gb, int16_t *out,
     int16_t prev_dc;
     int code, i, sign;
 
-    OPEN_READER(re, gb);
-
-    DECODE_CODEWORD(code, FIRST_DC_CB, LAST_SKIP_BITS);
+    DECODE_CODEWORD(code, FIRST_DC_CB, gb);
     prev_dc = TOSIGNED(code);
     out[0] = prev_dc;
 
@@ -475,13 +493,12 @@ static av_always_inline int decode_dc_coeffs(GetBitContext *gb, int16_t *out,
     code = 5;
     sign = 0;
     for (i = 1; i < blocks_per_slice; i++, out += 64) {
-        DECODE_CODEWORD(code, dc_codebook[FFMIN(code, 6U)], LAST_SKIP_BITS);
+        DECODE_CODEWORD(code, dc_codebook[FFMIN(code, 6U)], gb);
         if(code) sign ^= -(code & 1);
         else     sign  = 0;
         prev_dc += (((code + 1) >> 1) ^ sign) - sign;
         out[0] = prev_dc;
     }
-    CLOSE_READER(re, gb);
     return 0;
 }
 
@@ -495,11 +512,9 @@ static av_always_inline int decode_ac_coeffs(AVCodecContext *avctx, GetBitContex
     const ProresContext *ctx = avctx->priv_data;
     int block_mask, sign;
     unsigned pos, run, level;
-    int max_coeffs, i, bits_left;
+    int max_coeffs, i, left_bits;
     int log2_block_count = av_log2(blocks_per_slice);
 
-    OPEN_READER(re, gb);
-    UPDATE_CACHE_32(re, gb);
     run   = 4;
     level = 2;
 
@@ -507,28 +522,26 @@ static av_always_inline int decode_ac_coeffs(AVCodecContext *avctx, GetBitContex
     block_mask = blocks_per_slice - 1;
 
     for (pos = block_mask;;) {
-        bits_left = gb->size_in_bits - re_index;
-        if (bits_left <= 0 || (bits_left < 32 && !SHOW_UBITS(re, gb, bits_left)))
+        left_bits = get_bits_left(gb);
+        if (left_bits <= 0 || (left_bits < 32 && !show_bits(gb, left_bits)))
             break;
 
-        DECODE_CODEWORD(run, run_to_cb[FFMIN(run,  15)], LAST_SKIP_BITS);
+        DECODE_CODEWORD(run, run_to_cb[FFMIN(run,  15)], gb);
         pos += run + 1;
         if (pos >= max_coeffs) {
             av_log(avctx, AV_LOG_ERROR, "ac tex damaged %d, %d\n", pos, max_coeffs);
             return AVERROR_INVALIDDATA;
         }
 
-        DECODE_CODEWORD(level, lev_to_cb[FFMIN(level, 9)], SKIP_BITS);
+        DECODE_CODEWORD(level, lev_to_cb[FFMIN(level, 9)], gb);
         level += 1;
 
         i = pos >> log2_block_count;
 
-        sign = SHOW_SBITS(re, gb, 1);
-        SKIP_BITS(re, gb, 1);
+        sign = -(int)get_bits1(gb);
         out[((pos & block_mask) << 6) + ctx->scan[i]] = ((level ^ sign) - sign);
     }
 
-    CLOSE_READER(re, gb);
     return 0;
 }
 

@@ -27,9 +27,20 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    int score = 0;
+
     if (AV_RB32(p->buf) != MKBETAG('C','A','F',' '))
         return 0;
-    return AVPROBE_SCORE_MAX;
+
+    if (p->buf_size < 108)
+        return 0;
+
+    for (int ch = 0; ch < 2; ch++) {
+        for (int n = 0; n < 16; n++)
+            score += 3 * (AV_RN16(p->buf + 0x34 + n * 2 + (32 + 12) * ch) != 0);
+    }
+
+    return score;
 }
 
 static int read_header(AVFormatContext *s)

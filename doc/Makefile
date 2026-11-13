@@ -1,6 +1,5 @@
 LIBRARIES-$(CONFIG_AVUTIL)     += libavutil
 LIBRARIES-$(CONFIG_SWSCALE)    += libswscale
-LIBRARIES-$(CONFIG_SWRESAMPLE) += libswresample
 LIBRARIES-$(CONFIG_AVCODEC)    += libavcodec
 LIBRARIES-$(CONFIG_AVFORMAT)   += libavformat
 LIBRARIES-$(CONFIG_AVDEVICE)   += libavdevice
@@ -8,7 +7,6 @@ LIBRARIES-$(CONFIG_AVFILTER)   += libavfilter
 
 COMPONENTS-$(CONFIG_AVUTIL)     += ffmpeg-utils
 COMPONENTS-$(CONFIG_SWSCALE)    += ffmpeg-scaler
-COMPONENTS-$(CONFIG_SWRESAMPLE) += ffmpeg-resampler
 COMPONENTS-$(CONFIG_AVCODEC)    += ffmpeg-codecs ffmpeg-bitstream-filters
 COMPONENTS-$(CONFIG_AVFORMAT)   += ffmpeg-formats ffmpeg-protocols
 COMPONENTS-$(CONFIG_AVDEVICE)   += ffmpeg-devices

@@ -177,3 +177,24 @@ static double fn(samples_peak)(const void *src_, const int nb_samples)
 
     return SCALE(sample_peak_per_frame);
 }
+
+static double fn(samples_true_peak)(const void *src_, const int nb_samples, TPKState *state)
+{
+    double spsample = state->psample;
+    ptype sample_peak_per_frame = 0;
+    const ftype *src = src_;
+
+    for (int idx = 0; idx < nb_samples; idx++) {
+        const double csample = spsample;
+        const double nsample = src[idx];
+        const double casample = fabs(csample);
+        double etpk = casample + sqrt((nsample - csample) * (nsample - csample) * 0.5) * 0.25;
+
+        sample_peak_per_frame = FFMAX3(sample_peak_per_frame, casample, etpk);
+
+        spsample = nsample;
+    }
+
+    state->psample = spsample;
+    return SCALE(sample_peak_per_frame);
+}

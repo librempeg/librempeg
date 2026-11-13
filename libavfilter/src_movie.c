@@ -427,7 +427,7 @@ static int movie_query_formats(const AVFilterContext *ctx,
         switch (c->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
             list[0] = c->format;
-            if ((ret = ff_formats_ref(ff_make_format_list(list), &cfg->formats)) < 0)
+            if ((ret = ff_formats_ref(ff_make_pixel_format_list(list), &cfg->formats)) < 0)
                 return ret;
             list[0] = c->color_space;
             if ((ret = ff_formats_ref(ff_make_format_list(list), &cfg->color_spaces)) < 0)
@@ -438,7 +438,7 @@ static int movie_query_formats(const AVFilterContext *ctx,
             break;
         case AVMEDIA_TYPE_AUDIO:
             list[0] = c->format;
-            if ((ret = ff_formats_ref(ff_make_format_list(list), &cfg->formats)) < 0)
+            if ((ret = ff_formats_ref(ff_make_sample_format_list(list), &cfg->formats)) < 0)
                 return ret;
             list[0] = c->sample_rate;
             if ((ret = ff_formats_ref(ff_make_format_list(list), &cfg->samplerates)) < 0)

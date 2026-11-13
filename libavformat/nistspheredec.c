@@ -40,6 +40,7 @@ static int nist_read_header(AVFormatContext *s)
     int bps = 0, be = 0;
     int32_t header_size = -1;
     AVStream *st;
+    int ret;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -74,8 +75,10 @@ static int nist_read_header(AVFormatContext *s)
                 st->codecpar->codec_id = AV_CODEC_ID_PCM_MULAW;
             } else if (!av_strncasecmp(coding, "pcm,embedded-shorten", 20)) {
                 st->codecpar->codec_id = AV_CODEC_ID_SHORTEN;
-                if (ff_alloc_extradata(st->codecpar, 1))
-                    st->codecpar->extradata[0] = 1;
+                ret = ff_alloc_extradata(st->codecpar, 1);
+                if (ret < 0)
+                    return ret;
+                st->codecpar->extradata[0] = 1;
             } else {
                 avpriv_request_sample(s, "coding %s", coding);
             }

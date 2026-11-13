@@ -34,7 +34,6 @@
 #include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
-#include "libavutil/libm.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -47,13 +46,14 @@
 #include "libavutil/x86/cpu.h"
 #include "libavutil/loongarch/cpu.h"
 
+#include "csputils.h"
 #include "rgb2rgb.h"
 #include "swscale.h"
 #include "swscale_internal.h"
 #include "graph.h"
 #include "jit.h"
 
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
 #include "vulkan/ops.h"
 #endif
 
@@ -92,6 +92,19 @@ static SwsContext *alloc_set_opts(int srcW, int srcH, enum AVPixelFormat srcForm
         sws->scaler_params[i] = param[i];
 
     return sws;
+}
+
+static void set_cascade_chr_pos(SwsContext *cascade, const SwsContext *sws,
+                                int src, int dst)
+{
+    if (src) {
+        cascade->src_h_chr_pos = sws->src_h_chr_pos;
+        cascade->src_v_chr_pos = sws->src_v_chr_pos;
+    }
+    if (dst) {
+        cascade->dst_h_chr_pos = sws->dst_h_chr_pos;
+        cascade->dst_v_chr_pos = sws->dst_v_chr_pos;
+    }
 }
 
 int ff_shuffle_filter_coefficients(SwsInternal *c, int *filterPos,
@@ -172,6 +185,11 @@ static av_cold int get_local_pos(SwsInternal *s, int chr_subsample, int pos, int
     }
     pos += 128; // relative to ideal left edge
     return pos >> chr_subsample;
+}
+
+static av_cold int get_center_offset(SwsInternal *s, int chr_subsample, int pos, int dir)
+{
+    return (get_local_pos(s, chr_subsample, pos, dir) - 128) * (1 << chr_subsample);
 }
 
 typedef struct {
@@ -705,49 +723,66 @@ static void fill_rgb2yuv_table(SwsInternal *c, const int table[4], int dstRange)
         AV_WL16(p + 16*4 + 2*i, map[i] >= 0 ? c->input_rgb2yuv_table[map[i]] : 0);
 }
 
-#if CONFIG_SMALL
-static void init_xyz_tables(uint16_t xyzgamma_tab[4096],  uint16_t xyzgammainv_tab[65536],
-                            uint16_t rgbgamma_tab[65536], uint16_t rgbgammainv_tab[4096])
-#else
+static double trc_peak(enum AVColorTransferCharacteristic trc)
+{
+    return av_csp_trc_func_inv_from_id(trc)(1.0);
+}
+
+static void init_xyz_luts(SwsLuts *luts, enum AVColorTransferCharacteristic trc_in,
+                          enum AVColorTransferCharacteristic trc_out)
+{
+    const av_csp_trc_function to_linear   = av_csp_trc_func_inv_from_id(trc_in);
+    const av_csp_trc_function from_linear = av_csp_trc_func_from_id(trc_out);
+    const double peak_in = trc_peak(trc_in), peak_out = trc_peak(trc_out);
+
+    for (int i = 0; i < 4096; i++)
+        luts->in[i] = lrint(to_linear(i / 4095.0) / peak_in * 65535.0);
+    for (int i = 0; i < 65536; i++)
+        luts->out[i] = lrint(from_linear(i / 65535.0 * peak_out) * 4095.0);
+}
+
+static void init_xyz_tables(SwsLuts *xyz2rgb, SwsLuts *rgb2xyz)
+{
+    init_xyz_luts(xyz2rgb, XYZ_TRC, XYZ_RGB_TRC);
+    init_xyz_luts(rgb2xyz, XYZ_RGB_TRC, XYZ_TRC);
+}
+
+#if !CONFIG_SMALL
 static uint16_t xyzgamma_tab[4096],  rgbgammainv_tab[4096];
 static uint16_t rgbgamma_tab[65536], xyzgammainv_tab[65536];
-static av_cold void init_xyz_tables(void)
-#endif
+static av_cold void init_xyz_tables_once(void)
 {
-    double xyzgamma    = XYZ_GAMMA;
-    double rgbgamma    = 1.0 / RGB_GAMMA;
-    double xyzgammainv = 1.0 / XYZ_GAMMA;
-    double rgbgammainv = RGB_GAMMA;
+    SwsLuts xyz2rgb = { xyzgamma_tab,    rgbgamma_tab    };
+    SwsLuts rgb2xyz = { rgbgammainv_tab, xyzgammainv_tab };
+    init_xyz_tables(&xyz2rgb, &rgb2xyz);
+}
+#endif
 
-    /* set input gamma vectors */
-    for (int i = 0; i < 4096; i++) {
-        xyzgamma_tab[i]    = lrint(pow(i / 4095.0, xyzgamma)    * 65535.0);
-        rgbgammainv_tab[i] = lrint(pow(i / 4095.0, rgbgammainv) * 65535.0);
-    }
-
-    /* set output gamma vectors */
-    for (int i = 0; i < 65536; i++) {
-        rgbgamma_tab[i]    = lrint(pow(i / 65535.0, rgbgamma)    * 4095.0);
-        xyzgammainv_tab[i] = lrint(pow(i / 65535.0, xyzgammainv) * 4095.0);
+static void fill_xyz_matrix(int16_t mat[3][3], const SwsMatrix3x3 *m, double scale)
+{
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            const double v = m->m[i][j] * scale * 4096.0;
+            av_assert1(fabs(v) <= INT16_MAX);
+            mat[i][j] = lrint(v);
+        }
     }
 }
 
-av_cold int ff_sws_fill_xyztables(SwsInternal *c)
+av_cold int ff_sws_fill_st428_tables(SwsInternal *c)
 {
-    static const int16_t xyz2rgb_matrix[3][3] = {
-        {13270, -6295, -2041},
-        {-3969,  7682,   170},
-        {  228,  -835,  4329} };
-    static const int16_t rgb2xyz_matrix[3][3] = {
-        {1689, 1464,  739},
-        { 871, 2929,  296},
-        {  79,  488, 3891} };
+    /* X'Y'Z' puts its 48 cd/m2 white at code 3960 and the top code at
+     * 52.37 cd/m2 (ST 428-1), the codes above the white clip in RGB */
+    const double peak = trc_peak(XYZ_TRC) / trc_peak(XYZ_RGB_TRC);
+    const AVColorPrimariesDesc *bt709 = av_csp_primaries_desc_from_id(AVCOL_PRI_BT709);
+    const SwsMatrix3x3 xyz2rgb = ff_sws_xyz2rgb(bt709);
+    const SwsMatrix3x3 rgb2xyz = ff_sws_rgb2xyz(bt709);
 
     if (c->xyz2rgb.gamma.in)
         return 0;
 
-    memcpy(c->xyz2rgb.mat, xyz2rgb_matrix, sizeof(c->xyz2rgb.mat));
-    memcpy(c->rgb2xyz.mat, rgb2xyz_matrix, sizeof(c->rgb2xyz.mat));
+    fill_xyz_matrix(c->xyz2rgb.mat, &xyz2rgb, peak);
+    fill_xyz_matrix(c->rgb2xyz.mat, &rgb2xyz, 1.0 / peak);
 
 #if CONFIG_SMALL
     c->xyz2rgb.gamma.in = av_malloc(sizeof(uint16_t) * 2 * (4096 + 65536));
@@ -756,8 +791,7 @@ av_cold int ff_sws_fill_xyztables(SwsInternal *c)
     c->rgb2xyz.gamma.in  = c->xyz2rgb.gamma.in  + 4096;
     c->xyz2rgb.gamma.out = c->rgb2xyz.gamma.in  + 4096;
     c->rgb2xyz.gamma.out = c->xyz2rgb.gamma.out + 65536;
-    init_xyz_tables(c->xyz2rgb.gamma.in,  c->rgb2xyz.gamma.out,
-                    c->xyz2rgb.gamma.out, c->rgb2xyz.gamma.in);
+    init_xyz_tables(&c->xyz2rgb.gamma, &c->rgb2xyz.gamma);
 #else
     c->xyz2rgb.gamma.in  = xyzgamma_tab;
     c->xyz2rgb.gamma.out = rgbgamma_tab;
@@ -765,7 +799,7 @@ av_cold int ff_sws_fill_xyztables(SwsInternal *c)
     c->rgb2xyz.gamma.out = xyzgammainv_tab;
 
     static AVOnce xyz_init_static_once = AV_ONCE_INIT;
-    ff_thread_once(&xyz_init_static_once, init_xyz_tables);
+    ff_thread_once(&xyz_init_static_once, init_xyz_tables_once);
 #endif
     return 0;
 }
@@ -802,6 +836,15 @@ static int handle_jpeg(/* enum AVPixelFormat */ int *format)
     case AV_PIX_FMT_GRAY16BE:
     case AV_PIX_FMT_YA16BE:
     case AV_PIX_FMT_YA16LE:
+    /* Floating point formats */
+    case AV_PIX_FMT_GRAYF16BE:
+    case AV_PIX_FMT_GRAYF16LE:
+    case AV_PIX_FMT_GRAYF32BE:
+    case AV_PIX_FMT_GRAYF32LE:
+    case AV_PIX_FMT_YAF16BE:
+    case AV_PIX_FMT_YAF16LE:
+    case AV_PIX_FMT_YAF32BE:
+    case AV_PIX_FMT_YAF32LE:
         return 1;
     default:
         return 0;
@@ -836,7 +879,7 @@ static int handle_formats(SwsContext *sws)
     c->srcXYZ    |= handle_xyz(&sws->src_format);
     c->dstXYZ    |= handle_xyz(&sws->dst_format);
     if (c->srcXYZ || c->dstXYZ)
-        return ff_sws_fill_xyztables(c);
+        return ff_sws_fill_st428_tables(c);
     else
         return 0;
 }
@@ -876,8 +919,12 @@ int sws_setColorspaceDetails(SwsContext *sws, const int inv_table[4],
 
     if(range_override_needed(sws->dst_format))
         dstRange = 0;
+    else if (isFloat(sws->dst_format))
+        dstRange = 1; /* float gray formats are always full range */
     if(range_override_needed(sws->src_format))
         srcRange = 0;
+    else if (isFloat(sws->src_format))
+        srcRange = 1;
 
     if (sws->src_range != srcRange ||
         sws->dst_range != dstRange ||
@@ -939,7 +986,7 @@ int sws_setColorspaceDetails(SwsContext *sws, const int inv_table[4],
                 }
             }
 
-            if (srcW*srcH > dstW*dstH) {
+            if (srcW*(int64_t)srcH > dstW*(int64_t)dstH) {
                 tmp_width  = dstW;
                 tmp_height = dstH;
             } else {
@@ -959,6 +1006,7 @@ int sws_setColorspaceDetails(SwsContext *sws, const int inv_table[4],
                 return -1;
 
             c->cascaded_context[0]->alpha_blend = sws->alpha_blend;
+            set_cascade_chr_pos(c->cascaded_context[0], sws, 1, 0);
             ret = sws_init_context(c->cascaded_context[0], NULL , NULL);
             if (ret < 0)
                 return ret;
@@ -974,6 +1022,7 @@ int sws_setColorspaceDetails(SwsContext *sws, const int inv_table[4],
                 return -1;
             c->cascaded_context[1]->src_range = srcRange;
             c->cascaded_context[1]->dst_range = dstRange;
+            set_cascade_chr_pos(c->cascaded_context[1], sws, 0, 1);
             ret = sws_init_context(c->cascaded_context[1], NULL , NULL);
             if (ret < 0)
                 return ret;
@@ -1222,7 +1271,8 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
     }
 
     if (i == SWS_FAST_BILINEAR) {
-        if (srcW < 8 || dstW <= 8) {
+        /* the fast bilinear scalers keep the source position in 16.16 fixed point */
+        if (srcW < 8 || dstW <= 8 || srcW >= 65536) {
             i = SWS_BILINEAR;
             flags ^= SWS_FAST_BILINEAR | i;
             sws->flags = flags;
@@ -1244,6 +1294,12 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
                srcW, srcH, dstW, dstH);
         return AVERROR(EINVAL);
     }
+
+    ret = av_image_check_size2(srcW, srcH, INT64_MAX, AV_PIX_FMT_NONE, 0, c);
+    if (ret >= 0)
+        ret = av_image_check_size2(dstW, dstH, INT64_MAX, AV_PIX_FMT_NONE, 0, c);
+    if (ret < 0)
+        return ret;
 
     if (!dstFilter)
         dstFilter = &dummyFilter;
@@ -1340,6 +1396,10 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
         dstFormat != AV_PIX_FMT_RGB48BE &&
         dstFormat != AV_PIX_FMT_BGR48LE &&
         dstFormat != AV_PIX_FMT_BGR48BE &&
+        dstFormat != AV_PIX_FMT_RGBF32LE &&
+        dstFormat != AV_PIX_FMT_RGBF32BE &&
+        dstFormat != AV_PIX_FMT_RGBAF32LE &&
+        dstFormat != AV_PIX_FMT_RGBAF32BE &&
         dstFormat != AV_PIX_FMT_RGBA  &&
         dstFormat != AV_PIX_FMT_ARGB  &&
         dstFormat != AV_PIX_FMT_BGRA  &&
@@ -1440,8 +1500,8 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
      * some special code for the first and last pixel */
     if (flags & SWS_FAST_BILINEAR) {
         if (c->canMMXEXTBeUsed) {
-            lumXInc += 20;
-            chrXInc += 20;
+            lumXInc += 1;
+            chrXInc += 1;
         }
         // we don't use the x86 asm scaler if MMX is available
         else if (INLINE_MMX(cpu_flags) && c->dstBpc <= 14) {
@@ -1474,13 +1534,15 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
         if (ret < 0)
             return ret;
 
-        c->cascaded_context[0] = sws_getContext(srcW, srcH, srcFormat,
+        c->cascaded_context[0] = alloc_set_opts(srcW, srcH, srcFormat,
                                                 srcW, srcH, tmpFmt,
-                                                flags, NULL, NULL,
-                                                sws->scaler_params);
-        if (!c->cascaded_context[0]) {
+                                                flags, sws->scaler_params);
+        if (!c->cascaded_context[0])
             return AVERROR(ENOMEM);
-        }
+        set_cascade_chr_pos(c->cascaded_context[0], sws, 1, 0);
+        ret = sws_init_context(c->cascaded_context[0], NULL, NULL);
+        if (ret < 0)
+            return ret;
 
         c->cascaded_context[1] = sws_getContext(srcW, srcH, tmpFmt,
                                                 dstW, dstH, tmpFmt,
@@ -1514,15 +1576,27 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
             if (ret < 0)
                 return ret;
 
-            c->cascaded_context[2] = sws_getContext(dstW, dstH, tmpFmt,
+            c->cascaded_context[2] = alloc_set_opts(dstW, dstH, tmpFmt,
                                                     dstW, dstH, dstFormat,
-                                                    flags, NULL, NULL,
-                                                    sws->scaler_params);
+                                                    flags, sws->scaler_params);
             if (!c->cascaded_context[2])
                 return AVERROR(ENOMEM);
+            set_cascade_chr_pos(c->cascaded_context[2], sws, 0, 1);
+            ret = sws_init_context(c->cascaded_context[2], NULL, NULL);
+            if (ret < 0)
+                return ret;
         }
         return 0;
     }
+
+    if (!isGray(srcFormat) &&
+        ((desc_dst->log2_chroma_w &&
+          get_center_offset(c, desc_src->log2_chroma_w, sws->src_h_chr_pos, 0) !=
+          get_center_offset(c, desc_dst->log2_chroma_w, sws->dst_h_chr_pos, 0)) ||
+         (desc_dst->log2_chroma_h &&
+          get_center_offset(c, desc_src->log2_chroma_h, sws->src_v_chr_pos, 1) !=
+          get_center_offset(c, desc_dst->log2_chroma_h, sws->dst_v_chr_pos, 1))))
+        unscaled = 0;
 
     if (isBayer(srcFormat)) {
         if (!unscaled ||
@@ -1542,12 +1616,15 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
             if (!c->cascaded_context[0])
                 return AVERROR(ENOMEM);
 
-            c->cascaded_context[1] = sws_getContext(srcW, srcH, tmpFormat,
+            c->cascaded_context[1] = alloc_set_opts(srcW, srcH, tmpFormat,
                                                     dstW, dstH, dstFormat,
-                                                    flags, NULL, dstFilter,
-                                                    sws->scaler_params);
+                                                    flags, sws->scaler_params);
             if (!c->cascaded_context[1])
                 return AVERROR(ENOMEM);
+            set_cascade_chr_pos(c->cascaded_context[1], sws, 0, 1);
+            ret = sws_init_context(c->cascaded_context[1], NULL, dstFilter);
+            if (ret < 0)
+                return ret;
             return 0;
         }
     }
@@ -1598,6 +1675,7 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
 
                 c->cascaded_context[1]->src_range = sws->src_range;
                 c->cascaded_context[1]->dst_range = sws->dst_range;
+                set_cascade_chr_pos(c->cascaded_context[1], sws, 1, 1);
                 ret = sws_init_context(c->cascaded_context[1], srcFilter , dstFilter);
                 if (ret < 0)
                     return ret;
@@ -1626,7 +1704,7 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
     /* unscaled special cases */
     if (unscaled && !usesHFilter && !usesVFilter &&
         (sws->src_range == sws->dst_range || isAnyRGB(dstFormat) ||
-         isFloat(srcFormat) || isFloat(dstFormat) || isBayer(srcFormat))){
+         isBayer(srcFormat))){
 
         ff_get_unscaled_swscale(c);
 
@@ -1819,19 +1897,25 @@ fail: // FIXME replace things by appropriate error codes
         if (ret < 0)
             return ret;
 
-        c->cascaded_context[0] = sws_getContext(srcW, srcH, srcFormat,
+        c->cascaded_context[0] = alloc_set_opts(srcW, srcH, srcFormat,
                                                 tmpW, tmpH, tmpFormat,
-                                                flags, srcFilter, NULL,
-                                                sws->scaler_params);
+                                                flags, sws->scaler_params);
         if (!c->cascaded_context[0])
             return AVERROR(ENOMEM);
+        set_cascade_chr_pos(c->cascaded_context[0], sws, 1, 0);
+        ret = sws_init_context(c->cascaded_context[0], srcFilter, NULL);
+        if (ret < 0)
+            return ret;
 
-        c->cascaded_context[1] = sws_getContext(tmpW, tmpH, tmpFormat,
+        c->cascaded_context[1] = alloc_set_opts(tmpW, tmpH, tmpFormat,
                                                 dstW, dstH, dstFormat,
-                                                flags, NULL, dstFilter,
-                                                sws->scaler_params);
+                                                flags, sws->scaler_params);
         if (!c->cascaded_context[1])
             return AVERROR(ENOMEM);
+        set_cascade_chr_pos(c->cascaded_context[1], sws, 0, 1);
+        ret = sws_init_context(c->cascaded_context[1], NULL, dstFilter);
+        if (ret < 0)
+            return ret;
         return 0;
     }
     return ret;

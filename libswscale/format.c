@@ -21,6 +21,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/hdr_dynamic_metadata.h"
+#include "libavutil/hwcontext.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/refstruct.h"
 
@@ -28,10 +29,7 @@
 #include "csputils.h"
 #include "ops_internal.h"
 #include "config_components.h"
-
-#if CONFIG_UNSTABLE
-#include "libavutil/hwcontext.h"
-#endif
+#include "swscale_internal.h"
 
 #define RET(x)                                                                 \
     do {                                                                       \
@@ -235,8 +233,8 @@ static const LegacyFormatEntry legacy_format_entries[] = {
     [AV_PIX_FMT_GRAYF32BE]      = { 1, 1 },
     [AV_PIX_FMT_GRAYF16LE]      = { 1, 0 },
     [AV_PIX_FMT_GRAYF16BE]      = { 1, 0 },
-    [AV_PIX_FMT_YAF32LE]        = { 1, 0 },
-    [AV_PIX_FMT_YAF32BE]        = { 1, 0 },
+    [AV_PIX_FMT_YAF32LE]        = { 1, 1 },
+    [AV_PIX_FMT_YAF32BE]        = { 1, 1 },
     [AV_PIX_FMT_YAF16LE]        = { 1, 0 },
     [AV_PIX_FMT_YAF16BE]        = { 1, 0 },
     [AV_PIX_FMT_YUVA422P12BE]   = { 1, 1 },
@@ -271,8 +269,10 @@ static const LegacyFormatEntry legacy_format_entries[] = {
     [AV_PIX_FMT_RGBAF16LE]      = { 1, 0 },
     [AV_PIX_FMT_RGBF16BE]       = { 1, 0 },
     [AV_PIX_FMT_RGBF16LE]       = { 1, 0 },
-    [AV_PIX_FMT_RGBF32BE]       = { 1, 0 },
-    [AV_PIX_FMT_RGBF32LE]       = { 1, 0 },
+    [AV_PIX_FMT_RGBF32BE]       = { 1, 1 },
+    [AV_PIX_FMT_RGBF32LE]       = { 1, 1 },
+    [AV_PIX_FMT_RGBAF32BE]      = { 1, 1 },
+    [AV_PIX_FMT_RGBAF32LE]      = { 1, 1 },
     [AV_PIX_FMT_XV30LE]         = { 1, 1 },
     [AV_PIX_FMT_XV36LE]         = { 1, 1 },
     [AV_PIX_FMT_XV36BE]         = { 1, 1 },
@@ -318,11 +318,11 @@ static void sanitize_fmt(SwsFormat *fmt, const AVPixFmtDescriptor *desc)
         /* Grayscale formats */
         fmt->color.prim = AVCOL_PRI_UNSPECIFIED;
         fmt->csp        = AVCOL_SPC_UNSPECIFIED;
-        if (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
-            fmt->range = AVCOL_RANGE_UNSPECIFIED;
-        else
-            fmt->range = AVCOL_RANGE_JPEG; // FIXME: this restriction should be lifted
+        fmt->range      = AVCOL_RANGE_JPEG; // FIXME: this restriction should be lifted
     }
+
+    if (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
+        fmt->range = AVCOL_RANGE_UNSPECIFIED;
 
     switch (av_pix_fmt_desc_get_id(desc)) {
     case AV_PIX_FMT_YUVJ420P:
@@ -350,13 +350,16 @@ SwsFormat ff_fmt_from_frame(const AVFrame *frame, int field)
     enum AVPixelFormat format = frame->format;
     enum AVPixelFormat hw_format = AV_PIX_FMT_NONE;
 
-#if CONFIG_UNSTABLE
-    if (frame->hw_frames_ctx) {
+    const AVPixFmtDescriptor *hw_desc = av_pix_fmt_desc_get(frame->format);
+    av_assert0(hw_desc);
+
+    if (hw_desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
+        av_assert0(frame->hw_frames_ctx);
+
         AVHWFramesContext *hwfc = (AVHWFramesContext *)frame->hw_frames_ctx->data;
         hw_format = frame->format;
         format = hwfc->sw_format;
     }
-#endif
 
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(format);
 
@@ -551,6 +554,27 @@ bool ff_infer_colors(SwsColor *src, SwsColor *dst)
     return incomplete;
 }
 
+static int infer_loc_ref(SwsFormat *fmt, const SwsFormat *ref)
+{
+    if (fmt->loc != AVCHROMA_LOC_UNSPECIFIED ||
+        ref->loc == AVCHROMA_LOC_UNSPECIFIED ||
+        (!fmt->desc->log2_chroma_w && !fmt->desc->log2_chroma_h))
+        return 0;
+
+    fmt->loc = ref->loc;
+    return 1;
+}
+
+bool ff_infer_chroma_loc(SwsFormat *src, SwsFormat *dst)
+{
+    int incomplete = 0;
+
+    incomplete |= infer_loc_ref(dst, src);
+    incomplete |= infer_loc_ref(src, dst);
+
+    return incomplete;
+}
+
 void ff_sws_chroma_pos(const SwsFormat *fmt, bool *incomplete,
                        int *out_x_pos, int *out_y_pos)
 {
@@ -617,7 +641,7 @@ int sws_test_hw_format(enum AVPixelFormat format)
 {
     switch (format) {
     case AV_PIX_FMT_NONE: return 1;
-#if CONFIG_VULKAN
+#if CONFIG_SWSCALE_VULKAN
     case AV_PIX_FMT_VULKAN: return 1;
 #endif
     default: return 0;
@@ -695,6 +719,7 @@ int sws_is_noop(const AVFrame *dst, const AVFrame *src)
     for (int field = 0; field < 2; field++) {
         SwsFormat dst_fmt = ff_fmt_from_frame(dst, field);
         SwsFormat src_fmt = ff_fmt_from_frame(src, field);
+        ff_infer_chroma_loc(&src_fmt, &dst_fmt);
         if (!ff_fmt_equal(&dst_fmt, &src_fmt))
             return 0;
         if (!dst_fmt.interlaced)
@@ -716,8 +741,6 @@ void ff_sws_frame_from_avframe(SwsFrame *dst, const AVFrame *src)
     }
 }
 
-#if CONFIG_UNSTABLE
-
 /**
  * Returns the underlying descriptor for fake formats like PAL8 whose
  * descriptors alone do not fully describe the pixel data.
@@ -733,9 +756,8 @@ static inline const AVPixFmtDescriptor *fmt_desc_decoded(enum AVPixelFormat fmt)
 }
 
 /* Returns the type suitable for a pixel after fully decoding/unpacking it */
-static SwsPixelType fmt_pixel_type(enum AVPixelFormat fmt)
+static SwsPixelType fmt_pixel_type(const AVPixFmtDescriptor *desc)
 {
-    const AVPixFmtDescriptor *desc = fmt_desc_decoded(fmt);
     const int bits = FFALIGN(desc->comp[0].depth, 8);
     if (desc->flags & AV_PIX_FMT_FLAG_FLOAT) {
         switch (bits) {
@@ -935,6 +957,7 @@ static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *r
 
     *shift = (SwsShiftOp) { desc->comp[0].shift };
     *rw_op = (SwsReadWriteOp) {
+        .type  = fmt_pixel_type(desc),
         .elems = desc->nb_components,
         .mode  = mode,
     };
@@ -943,8 +966,7 @@ static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *r
 
 static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
                        SwsPackOp *pack_op, SwsSwizzleOp *swizzle,
-                       SwsShiftOp *shift, SwsPixelType *pixel_type,
-                       SwsPixelType *raw_type)
+                       SwsShiftOp *shift, SwsPixelType *pixel_type)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
     if (!desc)
@@ -954,12 +976,16 @@ static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
     if (desc->log2_chroma_w || desc->log2_chroma_h)
         return AVERROR(ENOTSUP);
 
+    /* XYZ decoding requires TRC support, which is not implemented yet */
+    if (desc->flags & AV_PIX_FMT_FLAG_XYZ)
+        return AVERROR(ENOTSUP);
+
     /* No support for semi-planar formats at the moment */
     if (desc->flags & AV_PIX_FMT_FLAG_PLANAR &&
         av_pix_fmt_count_planes(fmt) < desc->nb_components)
         return AVERROR(ENOTSUP);
 
-    *pixel_type = *raw_type = fmt_pixel_type(fmt);
+    *pixel_type = fmt_pixel_type(desc);
     if (!*pixel_type)
         return AVERROR(ENOTSUP);
 
@@ -981,11 +1007,13 @@ static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
         const int sum = info.pack.pattern[0] + info.pack.pattern[1] +
                         info.pack.pattern[2] + info.pack.pattern[3];
         if (sum > 16)
-            *raw_type = SWS_PIXEL_U32;
+            rw_op->type = SWS_PIXEL_U32;
         else if (sum > 8)
-            *raw_type = SWS_PIXEL_U16;
+            rw_op->type = SWS_PIXEL_U16;
         else
-            *raw_type = SWS_PIXEL_U8;
+            rw_op->type = SWS_PIXEL_U8;
+    } else {
+        rw_op->type = *pixel_type;
     }
 
     return 0;
@@ -997,9 +1025,8 @@ static int test_format_ops(enum AVPixelFormat format, int output)
     SwsSwizzleOp swizzle;
     SwsPackOp pack;
     SwsShiftOp shift;
-    SwsPixelType pixel_type, raw_type;
-    int ret = fmt_analyze(format, &rw, &pack, &swizzle, &shift,
-                          &pixel_type, &raw_type);
+    SwsPixelType pixel_type;
+    int ret = fmt_analyze(format, &rw, &pack, &swizzle, &shift, &pixel_type);
     if (ret < 0)
         return 0;
     if (rw.mode == SWS_RW_PALETTE && output)
@@ -1031,16 +1058,22 @@ static SwsClearOp fmt_clear(const SwsFormat *fmt)
     const AVPixFmtDescriptor *desc = fmt_desc_decoded(fmt->format);
     const bool has_chroma = desc->nb_components >= 3;
     const bool has_alpha  = desc->flags & AV_PIX_FMT_FLAG_ALPHA;
+    const SwsPixelType type = fmt_pixel_type(desc);
 
-    SwsClearOp c = {0};
+    SwsClearOp c = {
+        .mask = SWS_COMP_NONE,
+    };
+
     if (!has_chroma) {
         c.mask |= SWS_COMP(1) | SWS_COMP(2);
         c.value[1] = c.value[2] = Q(0);
+        c.type[1] = c.type[2] = type;
     }
 
     if (!has_alpha) {
         c.mask |= SWS_COMP(3);
         c.value[3] = Q(0);
+        c.type[3] = type;
     }
 
     return c;
@@ -1058,27 +1091,26 @@ static inline AVRational64 intmax_q64(int bits)
     return Q(UINT64_MAX >> (64 - bits));
 }
 
-int ff_sws_decode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
+/* Decode raw pixel values (read, swap, unpack, swizzle, shift, clear) */
+static int decode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
 {
     const AVPixFmtDescriptor *desc = fmt_desc_decoded(fmt->format);
-    SwsPixelType pixel_type, raw_type;
+    SwsPixelType pixel_type;
     SwsReadWriteOp rw_op;
     SwsSwizzleOp swizzle;
     SwsPackOp unpack;
-    SwsComps *comps = &ops->comps_src;
+    SwsOpPad *inputs = ops->inputs;
     SwsShiftOp shift;
 
-    RET(fmt_analyze(fmt->format, &rw_op, &unpack, &swizzle, &shift,
-                    &pixel_type, &raw_type));
-
+    RET(fmt_analyze(fmt->format, &rw_op, &unpack, &swizzle, &shift, &pixel_type));
     swizzle_inv(&swizzle);
 
     /* Set baseline pixel content flags */
-    const int integer = ff_sws_pixel_type_is_int(raw_type);
-    const int swapped = ff_sws_pixel_type_size(raw_type) > 1 &&
+    const int integer = ff_sws_pixel_type_is_int(rw_op.type);
+    const int swapped = ff_sws_pixel_type_size(rw_op.type) > 1 &&
                         (desc->flags & AV_PIX_FMT_FLAG_BE) != NATIVE_ENDIAN_FLAG;
     for (int i = 0; i < rw_op.elems; i++) {
-        comps->flags[i] = (integer ? SWS_COMP_EXACT   : 0) |
+        inputs[i].flags = (integer ? SWS_COMP_EXACT   : 0) |
                           (swapped ? SWS_COMP_SWAPPED : 0);
     }
 
@@ -1090,81 +1122,72 @@ int ff_sws_decode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
         for (int c = 0; c < desc->nb_components; c++) {
             const int bits  = desc->comp[c].depth + shift.amount;
             const int idx   = swizzle.in[is_ya ? 3 * c : c];
-            comps->min[idx] = Q(0);
-            comps->max[idx] = intmax_q64(bits);
+            inputs[idx].min = Q(0);
+            inputs[idx].max = intmax_q64(bits);
         }
     }
 
     /* TODO: handle subsampled or semipacked input formats */
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op    = SWS_OP_READ,
-        .type  = raw_type,
         .rw    = rw_op,
     }));
 
     if (swapped) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_SWAP_BYTES,
-            .type = raw_type,
+            .op = SWS_OP_SWAP_BYTES,
         }));
     }
 
     if (unpack.pattern[0]) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_UNPACK,
-            .type = raw_type,
             .pack = unpack,
         }));
 
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_CONVERT,
-            .type = raw_type,
             .convert.to = pixel_type,
         }));
     }
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op      = SWS_OP_SWIZZLE,
-        .type    = pixel_type,
         .swizzle = swizzle,
     }));
 
     if (shift.amount) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op    = SWS_OP_RSHIFT,
-            .type  = pixel_type,
             .shift = shift,
         }));
     }
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op    = SWS_OP_CLEAR,
-        .type  = pixel_type,
         .clear = fmt_clear(fmt),
     }));
 
     return 0;
 }
 
-int ff_sws_encode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
+/* Encode raw pixel values (shift, swizzle, pack, swap, write) */
+static int encode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
 {
     const AVPixFmtDescriptor *desc = fmt_desc_decoded(fmt->format);
-    SwsPixelType pixel_type, raw_type;
+    SwsPixelType pixel_type;
     SwsReadWriteOp rw_op;
     SwsSwizzleOp swizzle;
     SwsPackOp pack;
     SwsShiftOp shift;
 
-    RET(fmt_analyze(fmt->format, &rw_op, &pack, &swizzle, &shift,
-                    &pixel_type, &raw_type));
-
+    RET(fmt_analyze(fmt->format, &rw_op, &pack, &swizzle, &shift, &pixel_type));
     if (rw_op.mode == SWS_RW_PALETTE)
         return AVERROR(ENOTSUP);
 
     if (shift.amount) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op    = SWS_OP_LSHIFT,
-            .type  = pixel_type,
             .shift = shift,
         }));
     }
@@ -1174,7 +1197,7 @@ int ff_sws_encode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
         av_assert1(!(desc->flags & AV_PIX_FMT_FLAG_ALPHA));
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_CLEAR,
-            .type = pixel_type,
+            .clear.type[3] = pixel_type,
             .clear.mask = SWS_COMP(3),
             .clear.value[3] = Q(0),
         }));
@@ -1182,35 +1205,30 @@ int ff_sws_encode_pixfmt(SwsOpList *ops, const SwsFormat *fmt)
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op      = SWS_OP_SWIZZLE,
-        .type    = pixel_type,
         .swizzle = swizzle,
     }));
 
     if (pack.pattern[0]) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_CONVERT,
-            .type = pixel_type,
-            .convert.to = raw_type,
+            .convert.to = rw_op.type,
         }));
 
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_PACK,
-            .type = raw_type,
             .pack = pack,
         }));
     }
 
-    if (ff_sws_pixel_type_size(raw_type) > 1 &&
+    if (ff_sws_pixel_type_size(rw_op.type) > 1 &&
         (desc->flags & AV_PIX_FMT_FLAG_BE) != NATIVE_ENDIAN_FLAG) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_SWAP_BYTES,
-            .type = raw_type,
+            .op = SWS_OP_SWAP_BYTES,
         }));
     }
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op   = SWS_OP_WRITE,
-        .type = raw_type,
         .rw   = rw_op,
     }));
 
@@ -1222,17 +1240,23 @@ static inline AVRational64 av_neg_q64(AVRational64 x)
     return (AVRational64) { -x.num, x.den };
 }
 
-static SwsLinearOp fmt_encode_range(const SwsFormat *fmt, bool *incomplete)
+#define LINEAR_OP_DATA(TYPE, ...) ((SwsLinearOp) {  \
+    .type = { TYPE, TYPE, TYPE, TYPE },             \
+    .m    = { __VA_ARGS__ },                        \
+})
+
+static SwsLinearOp fmt_encode_range(const SwsFormat *fmt, SwsPixelType type,
+                                    bool *incomplete)
 {
     const AVRational64 q0 = Q(0);
     const AVRational64 q1 = Q(1);
 
-    SwsLinearOp c = { .m = {
+    SwsLinearOp c = LINEAR_OP_DATA(type,
         { q1, q0, q0, q0, q0 },
         { q0, q1, q0, q0, q0 },
         { q0, q0, q1, q0, q0 },
         { q0, q0, q0, q1, q0 },
-    }};
+    );
 
     const AVPixFmtDescriptor *desc = fmt_desc_decoded(fmt->format);
     const int depth0 = desc->comp[0].depth;
@@ -1279,22 +1303,22 @@ static SwsLinearOp fmt_encode_range(const SwsFormat *fmt, bool *incomplete)
 
     if (fmt->format == AV_PIX_FMT_MONOWHITE) {
         /* This format is inverted, 0 = white, 1 = black */
-        c.m[0][4] = av_add_q64(c.m[0][4], c.m[0][0]);
+        c.m[0][4] = ff_add_q64(c.m[0][4], c.m[0][0]);
         c.m[0][0] = av_neg_q64(c.m[0][0]);
     }
 
     return c;
 }
 
-static SwsLinearOp fmt_decode_range(const SwsFormat *fmt, bool *incomplete)
+static SwsLinearOp fmt_decode_range(const SwsFormat *fmt, SwsPixelType type, bool *incomplete)
 {
-    SwsLinearOp c = fmt_encode_range(fmt, incomplete);
+    SwsLinearOp c = fmt_encode_range(fmt, type, incomplete);
 
     /* Invert main diagonal + offset: x = s * y + k  ==>  y = (x - k) / s */
     for (int i = 0; i < 4; i++) {
         av_assert1(c.m[i][i].num);
-        c.m[i][i] = av_inv_q64(c.m[i][i]);
-        c.m[i][4] = av_mul_q64(c.m[i][4], av_neg_q64(c.m[i][i]));
+        c.m[i][i] = ff_inv_q64(c.m[i][i]);
+        c.m[i][4] = ff_mul_q64(c.m[i][4], av_neg_q64(c.m[i][i]));
     }
 
     /* Explicitly initialize alpha for sanity */
@@ -1308,7 +1332,7 @@ static AVRational64 *generate_bayer_matrix(const int size_log2)
 {
     const int size = 1 << size_log2;
     const int num_entries = size * size;
-    AVRational64 *m = av_refstruct_allocz(sizeof(*m) * num_entries);
+    AVRational64 *m = ff_refstruct_calloc(num_entries, sizeof(*m));
     av_assert1(size_log2 < 16);
     if (!m)
         return NULL;
@@ -1322,9 +1346,9 @@ static AVRational64 *generate_bayer_matrix(const int size_log2)
         for (int y = 0; y < sz; y++) {
             for (int x = 0; x < sz; x++) {
                 const AVRational64 cur = m[y * size + x];
-                m[(y + sz) * size + x + sz] = av_add_q64(cur, av_make_q64(1, den));
-                m[(y     ) * size + x + sz] = av_add_q64(cur, av_make_q64(2, den));
-                m[(y + sz) * size + x     ] = av_add_q64(cur, av_make_q64(3, den));
+                m[(y + sz) * size + x + sz] = ff_add_q64(cur, ff_make_q64(1, den));
+                m[(y     ) * size + x + sz] = ff_add_q64(cur, ff_make_q64(2, den));
+                m[(y + sz) * size + x     ] = ff_add_q64(cur, ff_make_q64(3, den));
             }
         }
     }
@@ -1340,7 +1364,7 @@ static AVRational64 *generate_bayer_matrix(const int size_log2)
      * To make the average value equal to 1/2 = N/(2N), add a bias of 1/(2N).
      */
     for (int i = 0; i < num_entries; i++)
-        m[i] = av_add_q64(m[i], av_make_q64(1, 2 * num_entries));
+        m[i] = ff_add_q64(m[i], ff_make_q64(1, 2 * num_entries));
 
     return m;
 }
@@ -1362,7 +1386,6 @@ static bool trc_is_hdr(enum AVColorTransferCharacteristic trc)
 }
 
 static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
-                      const SwsPixelType type,
                       const SwsFormat *src, const SwsFormat *dst)
 {
     SwsDither mode = ctx->dither;
@@ -1385,7 +1408,6 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
             *bias = (AVRational64) {1, 2};
             return ff_sws_op_list_append(ops, &(SwsOp) {
                 .op   = SWS_OP_DITHER,
-                .type = type,
                 .dither.matrix = bias,
                 .dither.min = *bias,
                 .dither.max = *bias,
@@ -1407,9 +1429,9 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
         const int size = 1 << dither.size_log2;
         dither.min = dither.max = dither.matrix[0];
         for (int i = 1; i < size * size; i++) {
-            if (av_cmp_q64(dither.min, dither.matrix[i]) > 0)
+            if (ff_cmp_q64(dither.min, dither.matrix[i]) > 0)
                 dither.min = dither.matrix[i];
-            if (av_cmp_q64(dither.matrix[i], dither.max) > 0)
+            if (ff_cmp_q64(dither.matrix[i], dither.max) > 0)
                 dither.max = dither.matrix[i];
         }
 
@@ -1439,7 +1461,6 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
 
         return ff_sws_op_list_append(ops, &(SwsOp) {
             .op     = SWS_OP_DITHER,
-            .type   = type,
             .dither = dither,
         });
     case SWS_DITHER_ED:
@@ -1455,26 +1476,28 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
     return AVERROR(EINVAL);
 }
 
-#define Q64(x) av_make_q64((x).num, (x).den)
+#define Q64(x) ff_make_q64((x).num, (x).den)
 
 static inline SwsLinearOp
-linear_mat3(const AVRational m00, const AVRational m01, const AVRational m02,
+linear_mat3(const SwsPixelType type,
+            const AVRational m00, const AVRational m01, const AVRational m02,
             const AVRational m10, const AVRational m11, const AVRational m12,
             const AVRational m20, const AVRational m21, const AVRational m22)
 {
-    return (SwsLinearOp) {{
+    return LINEAR_OP_DATA(type,
         { Q64(m00), Q64(m01), Q64(m02), Q(0), Q(0) },
         { Q64(m10), Q64(m11), Q64(m12), Q(0), Q(0) },
         { Q64(m20), Q64(m21), Q64(m22), Q(0), Q(0) },
         {     Q(0),     Q(0),     Q(0), Q(1), Q(0) },
-    }};
+    );
 }
 
-int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
-                         SwsOpList *ops, const SwsFormat *fmt, bool *incomplete)
+/* Transform decoded pixel values to normalized RGB */
+static int decode_colors(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+                         const SwsFormat *fmt, bool *incomplete)
 {
     const AVLumaCoefficients *c = av_csp_luma_coeffs_from_avcsp(fmt->csp);
-    const SwsPixelType pixel_type = fmt_pixel_type(fmt->format);
+    const SwsPixelType pixel_type = fmt_pixel_type(fmt->desc);
     if (!pixel_type)
          return AVERROR(ENOTSUP);
 
@@ -1484,15 +1507,13 @@ int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op         = SWS_OP_CONVERT,
-        .type       = pixel_type,
         .convert.to = type,
     }));
 
     /* Decode pixel format into standardized range */
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
-        .type = type,
         .op   = SWS_OP_LINEAR,
-        .lin  = fmt_decode_range(fmt, incomplete),
+        .lin  = fmt_decode_range(fmt, type, incomplete),
     }));
 
     /* Final step, decode colorspace */
@@ -1517,9 +1538,8 @@ int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
         AVRational m12 = av_mul_q(crg, m02);
 
         return ff_sws_op_list_append(ops, &(SwsOp) {
-            .type = type,
             .op   = SWS_OP_LINEAR,
-            .lin  = linear_mat3(
+            .lin  = linear_mat3(type,
                 q1,  q0, m02,
                 q1, m11, m12,
                 q1, m21,  q0
@@ -1529,9 +1549,8 @@ int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
 
     case AVCOL_SPC_YCGCO:
         return ff_sws_op_list_append(ops, &(SwsOp) {
-            .type = type,
             .op   = SWS_OP_LINEAR,
-            .lin  = linear_mat3(
+            .lin  = linear_mat3(type,
                 q1, av_make_q(-1, 1), av_make_q( 1, 1),
                 q1, av_make_q( 1, 1), av_make_q( 0, 1),
                 q1, av_make_q(-1, 1), av_make_q(-1, 1)
@@ -1559,12 +1578,13 @@ int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
     return AVERROR(EINVAL);
 }
 
-int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
-                         SwsOpList *ops, const SwsFormat *src,
-                         const SwsFormat *dst, bool *incomplete)
+/* Transform decoded pixel values from normalized RGB */
+static int encode_colors(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+                         const SwsFormat *src, const SwsFormat *dst,
+                         bool *incomplete)
 {
     const AVLumaCoefficients *c = av_csp_luma_coeffs_from_avcsp(dst->csp);
-    const SwsPixelType pixel_type = fmt_pixel_type(dst->format);
+    const SwsPixelType pixel_type = fmt_pixel_type(dst->desc);
     if (!pixel_type)
          return AVERROR(ENOTSUP);
 
@@ -1590,9 +1610,8 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
         AVRational m22 = av_mul_q(m20, av_div_q(c->cb, cr1));
 
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .type = type,
             .op   = SWS_OP_LINEAR,
-            .lin  = linear_mat3(
+            .lin  = linear_mat3(type,
                 c->cr, c->cg, c->cb,
                 m10,     m11,   m20,
                 m20,     m21,   m22
@@ -1603,9 +1622,8 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
 
     case AVCOL_SPC_YCGCO:
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .type = type,
             .op   = SWS_OP_LINEAR,
-            .lin  = linear_mat3(
+            .lin  = linear_mat3(type,
                 av_make_q( 1, 4), av_make_q(1, 2), av_make_q( 1, 4),
                 av_make_q( 1, 2), av_make_q(0, 1), av_make_q(-1, 2),
                 av_make_q(-1, 4), av_make_q(1, 2), av_make_q(-1, 4)
@@ -1629,9 +1647,8 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
     }
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
-        .type = type,
         .op   = SWS_OP_LINEAR,
-        .lin  = fmt_encode_range(dst, incomplete),
+        .lin  = fmt_encode_range(dst, type, incomplete),
     }));
 
     if (!(dst->desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
@@ -1644,22 +1661,19 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
             range.limit[idx] = intmax_q64(dst->desc->comp[i].depth);
         }
 
-        RET(fmt_dither(ctx, ops, type, src, dst));
+        RET(fmt_dither(ctx, ops, src, dst));
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op    = SWS_OP_MAX,
-            .type  = type,
             .clamp = {{ Q(0), Q(0), Q(0), Q(0) }},
         }));
 
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op    = SWS_OP_MIN,
-            .type  = type,
             .clamp = range,
         }));
     }
 
     return ff_sws_op_list_append(ops, &(SwsOp) {
-        .type       = type,
         .op         = SWS_OP_CONVERT,
         .convert.to = pixel_type,
     });
@@ -1723,14 +1737,13 @@ static int add_filter(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
     }
 
     return ff_sws_op_list_append(ops, &(SwsOp) {
-        .type = type,
         .op   = filter,
         .filter.kernel = kernel,
         .filter.type   = type,
     });
 }
 
-int ff_sws_add_filters(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+static int add_filters(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
                        const SwsFormat *src, const SwsFormat *dst)
 {
     /**
@@ -1745,56 +1758,66 @@ int ff_sws_add_filters(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
     return add_filter(ctx, type, ops, SWS_OP_FILTER_V, src->height, dst->height);
 }
 
-int ff_sws_apply_lut3d(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+/* The input and output domain are assumed to be normalized [0, 1] RGBA */
+static int apply_lut3d(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
                        const SwsLut3D *lut3d)
 {
     /* Unnormalize to LUT input domain and clamp */
     const AVRational64 domain = Q(INPUT_LUT_SIZE - 1);
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
-        .type   = type,
         .op     = SWS_OP_LINEAR,
-        .lin    = {{
+        .lin    = LINEAR_OP_DATA(type,
             { domain,   Q(0),   Q(0), Q(0), Q(0) },
             {   Q(0), domain,   Q(0), Q(0), Q(0) },
             {   Q(0),   Q(0), domain, Q(0), Q(0) },
             {   Q(0),   Q(0),   Q(0), Q(1), Q(0) },
-        }},
+        ),
     }));
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op     = SWS_OP_MAX,
-        .type   = type,
         .clamp  = {{ Q(0), Q(0), Q(0) }},
     }));
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op     = SWS_OP_MIN,
-        .type   = type,
         .clamp  = {{ domain, domain, domain }},
     }));
 
     /* Apply the 3DLUT itself */
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
         .op     = SWS_OP_LUT_3D,
-        .type   = type,
         .lut3d.lut     = av_refstruct_ref_c(lut3d),
         .lut3d.dynamic = lut3d->dynamic,
     }));
 
     /* Normalize back to [0, 1] */
-    const AVRational64 inv = av_inv_q64(Q(UINT16_MAX));
+    const AVRational64 inv = ff_inv_q64(Q(UINT16_MAX));
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
-        .type   = type,
         .op     = SWS_OP_LINEAR,
-        .lin    = {{
+        .lin    = LINEAR_OP_DATA(type,
             {  inv, Q(0), Q(0), Q(0), Q(0) },
             { Q(0),  inv, Q(0), Q(0), Q(0) },
             { Q(0), Q(0),  inv, Q(0), Q(0) },
             { Q(0), Q(0), Q(0), Q(1), Q(0) },
-        }},
+        ),
     }));
 
+    return 0;
+}
+
+static int fmt_convert(SwsContext *ctx, const SwsFormat *src, const SwsFormat *dst,
+                       const SwsLut3D *lut3d, SwsOpList *ops, bool *incomplete)
+{
+    const SwsPixelType type = SWS_PIXEL_F32;
+    RET(decode_pixfmt(ops, src));
+    RET(decode_colors(ctx, type, ops, src, incomplete));
+    RET(add_filters(ctx, type, ops, src, dst));
+    if (lut3d)
+        RET(apply_lut3d(ctx, type, ops, lut3d));
+    RET(encode_colors(ctx, type, ops, src, dst, incomplete));
+    RET(encode_pixfmt(ops, dst));
     return 0;
 }
 
@@ -1813,25 +1836,7 @@ int ff_sws_op_list_generate(SwsContext *ctx, const SwsFormat *src,
     ops->src = *src;
     ops->dst = *dst;
 
-    const SwsPixelType type = SWS_PIXEL_F32;
-    int ret = ff_sws_decode_pixfmt(ops, src);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_decode_colors(ctx, type, ops, src, incomplete);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_add_filters(ctx, type, ops, src, dst);
-    if (ret < 0)
-        goto fail;
-    if (lut3d) {
-        ret = ff_sws_apply_lut3d(ctx, type, ops, lut3d);
-        if (ret < 0)
-            goto fail;
-    }
-    ret = ff_sws_encode_colors(ctx, type, ops, src, dst, incomplete);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_encode_pixfmt(ops, dst);
+    int ret = fmt_convert(ctx, src, dst, lut3d, ops, incomplete);
     if (ret < 0)
         goto fail;
 
@@ -1842,12 +1847,3 @@ fail:
     ff_sws_op_list_free(&ops);
     return ret;
 }
-
-#else /* !CONFIG_UNSTABLE */
-
-static int test_format_ops(enum AVPixelFormat format, int output)
-{
-    return 0;
-}
-
-#endif

@@ -377,6 +377,24 @@ on MPEG-4 Part 14 format with a few incompatible variants, used to
 play files on PlayStation devices.
 @end table
 
+@subsection Stereoscopic 3D
+
+When the output stream has stereoscopic 3D side data (see the
+@option{-stereo3d} option), these muxers write:
+
+@itemize
+@item
+MP4: Google spatial-media @code{st3d} and Apple @code{vexu} can be
+written for supported metadata with @option{-strict unofficial}.
+Stricter compliance levels skip these boxes. Warnings are logged
+when stereoscopic or spherical side data is present, naming
+@code{st3d} or @code{sv3d}, respectively; there is no corresponding
+compliance warning for @code{vexu}. Monoscopic layouts do not
+produce an @code{eyes} box.
+@item
+MOV: Apple @code{vexu} eyes only. @code{st3d} is not written.
+@end itemize
+
 @subsection Fragmentation
 
 The @samp{mov}, @samp{mp4}, and @samp{ismv} muxers support
@@ -881,6 +899,17 @@ Specify loop end position expressed in milliseconds, from @code{0} to
 @code{INT_MAX}, default is @code{0}, in case @code{0} is set it
 assumes the total stream duration.
 @end table
+
+@section astc
+ASTC (Adaptive Scalable Texture Compression) muxer.
+
+This muxer accepts a single @samp{libastcenc} video stream and writes one
+image: the 16-byte @file{.astc} header, taken from the encoder's extradata,
+followed by the raw ASTC bitstream. The block footprint and the image
+dimensions come from the same extradata, and a second packet is rejected.
+
+Use the @file{.ktx} container for a texture that also needs its color space
+or row order recorded.
 
 @section au
 SUN AU audio muxer.
@@ -1412,7 +1441,7 @@ encoded with the @samp{pcm_24daud} codec.
 Use @command{ffmpeg} to mux input audio to a @samp{5.1} channel layout
 resampled at 96000Hz:
 @example
-ffmpeg -i INPUT -af aresample=96000,pan=5.1 slow.302
+ffmpeg -i INPUT -af ardftsrc=96000,pan=5.1 slow.302
 @end example
 
 For ffmpeg versions before 7.0 you might have to use the @samp{asetnsamples}
@@ -2718,6 +2747,27 @@ computer-generated compositions.
 
 This muxer accepts a single audio stream containing PCM data.
 
+@section jpeg_mpf
+JPEG Multi-Picture Format muxer.
+
+Stores multiple JPEG images in a single file using the CIPA DC-007 MP
+extensions. The first input stream is always the primary image. Every other
+stream must be specified by a stream group describing what it is; see the
+@option{-stream_group} option of the @command{ffmpeg} tool.
+
+Note: Currently, the only implemented type of stream group is @samp{gain_map},
+which may be used to store a gain map for JPEG Ultra HDR.
+
+@subsection Examples
+
+Encode an SDR tone-mapped image and an HDR gain map computed from it:
+@example
+ffmpeg -i input-hdr.png -filter_complex
+"[0:v] scale=out_transfer=srgb:out_primaries=bt709,split [base][sdr];
+[base][0:v] gainmap [gain]" -map "[sdr]" -map "[gain]" -c:v mjpeg
+-stream_group type=gain_map:st=0:st=1:el_index=1 -f jpeg_mpf output.jpg
+@end example
+
 @section ivf
 On2 IVF muxer.
 
@@ -2734,6 +2784,36 @@ This muxer accepts a single @samp{jacosub} subtitles stream.
 
 For more information about the format, see
 @url{http://unicorn.us.com/jacosub/jscripts.html}.
+
+@section ktx
+Khronos Texture 1.0 muxer for ASTC textures.
+
+This muxer accepts a single @samp{libastcenc} video stream and writes one
+image: the ASTC block size and the image dimensions are taken from the
+encoder's extradata, and a second packet is rejected. The stored row order
+is recorded in a @code{KTXorientation} key.
+
+@subsection Options
+
+@table @option
+
+@item srgb @var{integer}
+Select the GL internal format color space. Possible values:
+@table @samp
+@item auto
+Use the color profile published by the encoder, which is the default.
+@item linear
+Write the linear ASTC format.
+@item srgb
+Write the sRGB ASTC format.
+@end table
+
+An explicit value that contradicts a known encoder profile is rejected.
+A raw @file{.astc} input does not carry a color profile, so remuxing it to
+@file{.ktx} with @code{auto} writes the sRGB format; pass
+@option{-srgb linear} to keep a linear texture.
+
+@end table
 
 @section kvag
 Simon & Schuster Interactive VAG muxer.
@@ -2805,6 +2885,11 @@ French).
 
 @item stereo_mode
 Set stereo 3D video layout of two views in a single video track.
+The @option{-stereo3d} option overrides existing stereoscopic side data
+and @code{stereo_mode} metadata for the selected output stream.
+Otherwise, stream-level @code{stereo_mode} metadata takes priority over
+global metadata, and stereoscopic side data is used when neither tag is
+present.
 
 The following values are recognized:
 @table @samp
@@ -3278,6 +3363,16 @@ ffmpeg -i INPUT -f_strict experimental -syncpoints none - | processor
 
 Ogg container muxer.
 
+A new link is started on new metadata or extradata of a single Vorbis, FLAC,
+Opus or Theora stream.
+Other outputs ignore new metadata.
+So does Theora on an inter frame.
+New extradata ends them at the current link.
+So does new Theora extradata that changes the frame rate.
+The packet carrying it and the ones that follow are dropped, and their writes
+still return success.
+New extradata on the first packet is ignored.
+
 @table @option
 @item -page_duration @var{duration}
 Preferred page duration, in microseconds. The muxer will attempt to create
@@ -3288,9 +3383,21 @@ possible. A value of 1 will effectively use 1 packet-per-page in most
 situations, giving a small seek granularity at the cost of additional container
 overhead.
 @item -serial_offset @var{value}
-Serial value from which to set the streams serial number.
-Setting it to different and sufficiently large values ensures that the produced
-ogg files can be safely chained.
+Serial number of the first stream in bitexact mode, the others following
+consecutively.
+Chained links need distinct serial numbers, which disjoint ranges of values
+guarantee.
+The default of -1 derives each serial number from the stream's headers
+instead.
+This makes links with different headers or tags unlikely to share a serial
+number, without ruling it out.
+Links with identical headers and tags always share one, which separately muxed
+outputs avoid with explicit offsets.
+
+A link the muxer starts itself on new stream metadata or extradata keeps the
+offset of the link before it.
+With an explicit offset it then reuses its serial number.
+With the default it does so when its headers and tags are unchanged.
 
 @end table
 

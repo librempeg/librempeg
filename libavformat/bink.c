@@ -262,7 +262,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
     while (bink->current_track < bink->num_audio_tracks) {
         uint32_t audio_size = avio_rl32(pb);
-        if (audio_size > bink->remain_packet_size - 4) {
+        if (audio_size + 4LL > bink->remain_packet_size) {
             av_log(s, AV_LOG_ERROR,
                    "frame %"PRId64": audio size in header (%"PRIu32") > size of packet left (%"PRIu32")\n",
                    bink->video_pts, audio_size, bink->remain_packet_size);
@@ -311,6 +311,10 @@ static int read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, in
 
     if (!(s->pb->seekable & AVIO_SEEKABLE_NORMAL))
         return -1;
+
+    /* read_header() builds no index when the frame count is zero */
+    if (!vsti->index_entries)
+        return AVERROR(EINVAL);
 
     /* seek to the first frame */
     ret = avio_seek(s->pb, vsti->index_entries[0].pos + bink->smush_size, SEEK_SET);

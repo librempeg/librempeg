@@ -28,6 +28,7 @@
 #include "demux.h"
 #include "internal.h"
 #include "fsbvorbis_data.h"
+#include "pcm.h"
 
 typedef struct FSBStream {
     int64_t name_offset;
@@ -52,7 +53,7 @@ static int load_vorbis_cb(const uint32_t setup_id, const uint8_t **buf, int *buf
     return AVERROR(EINVAL);
 }
 
-static int fsb_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "FSB", 3) || p->buf[3] - '0' < 1 || p->buf[3] - '0' > 5)
         return 0;
@@ -81,7 +82,7 @@ static int sort_streams(const void *a, const void *b)
     return FFDIFFSIGN(fs1->start_offset, fs2->start_offset);
 }
 
-static int fsb_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned format, version, nb_streams;
@@ -346,9 +347,11 @@ static int fsb_read_header(AVFormatContext *s)
                 break;
             case AV_CODEC_ID_PCM_S16BE:
             case AV_CODEC_ID_PCM_S16LE:
+                par->block_align = 2 * par->ch_layout.nb_channels;
+                break;
             case AV_CODEC_ID_PCM_S8:
             case AV_CODEC_ID_PCM_U8:
-                par->block_align = 1024 * par->ch_layout.nb_channels;
+                par->block_align = 1 * par->ch_layout.nb_channels;
                 break;
             }
 
@@ -481,7 +484,7 @@ static int fsb_read_header(AVFormatContext *s)
 
             loop_start = loop_end = 0;
             if (sample_mode & 0x01) {
-                uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end;
+                uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end, config;
 
                 do {
                     extraflag = avio_rl32(pb);
@@ -533,7 +536,9 @@ static int fsb_read_header(AVFormatContext *s)
                                 return ret;
                             memset(par->extradata, 0, par->extradata_size);
 
-                            avio_read(pb, par->extradata + 4, 4);
+                            config = avio_rb32(pb);
+                            AV_WB32(par->extradata + 4, config);
+                            par->block_align = (((config >> 5) & 0x7FF) + 1) * (1 << ((config >> 3) & 0x2));
                             extraflag_size -= 4;
                             if (par->extradata[4] != 0xFE && extraflag_size >= 4) {
                                 par->block_align = AV_RL16(par->extradata + 4);
@@ -557,7 +562,7 @@ static int fsb_read_header(AVFormatContext *s)
                                 par->block_align = avio_rb16(pb);
                                 extraflag_size -= 2;
                                 if (!par->block_align) par->block_align = 2230;
-                                par->bit_rate = avio_rb32(pb) * 8;
+                                par->bit_rate = avio_rb32(pb) * 8LL;
                                 extraflag_size -= 4;
                                 par->bits_per_coded_sample = 16;
 
@@ -629,30 +634,30 @@ static int fsb_read_header(AVFormatContext *s)
             switch (codec) {
             case 0x01:
                 par->codec_id = AV_CODEC_ID_PCM_U8;
-                par->block_align = 1024 * channels;
+                par->block_align = 1 * channels;
                 break;
             case 0x02:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
-                par->block_align = 512 * channels;
+                par->block_align = 2 * channels;
                 break;
             case 0x03:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S24BE : AV_CODEC_ID_PCM_S24LE;
-                par->block_align = 768 * channels;
+                par->block_align = 3 * channels;
                 break;
             case 0x04:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S32BE : AV_CODEC_ID_PCM_S32LE;
-                par->block_align = 512 * channels;
+                par->block_align = 4 * channels;
                 break;
             case 0x05:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_F32BE : AV_CODEC_ID_PCM_F32LE;
-                par->block_align = 256 * channels;
+                par->block_align = 4 * channels;
                 break;
             case 0x06:
                 par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_SI;
                 par->block_align = 0x8 * channels;
                 break;
             case 0x07:
-                par->codec_id = (channels > 2) ? AV_CODEC_ID_NONE : AV_CODEC_ID_ADPCM_IMA_XBOX;
+                par->codec_id = (channels > 2) ? AV_CODEC_ID_ADPCM_IMA_FSB : AV_CODEC_ID_ADPCM_IMA_XBOX;
                 par->bits_per_coded_sample = 4;
                 par->block_align = 0x24 * channels;
                 break;
@@ -687,7 +692,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->codec_id = AV_CODEC_ID_ATRAC9;
                 if (par->block_align == 0)
                     par->block_align = 1024;
-                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case 0x0E:
                 /* XWMA */
@@ -837,7 +842,7 @@ static int fsb_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
@@ -854,7 +859,8 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
         pos = avio_tell(pb);
         if (pos >= fst->start_offset && pos < fst->stop_offset) {
             if (par->block_align > 0) {
-                const int size = FFMIN(par->block_align, fst->stop_offset - pos);
+                int size = ff_pcm_default_packet_size(par);
+                size = FFMIN(size, fst->stop_offset - pos);
 
                 ret = av_get_packet(pb, pkt, size);
             } else {
@@ -898,7 +904,7 @@ const FFInputFormat ff_fsb_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("FMOD Sample Bank"),
     .p.extensions   = "fsb",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = fsb_probe,
-    .read_header    = fsb_read_header,
-    .read_packet    = fsb_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

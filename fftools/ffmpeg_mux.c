@@ -30,6 +30,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/log.h"
 #include "libavutil/mem.h"
+#include "libavutil/stereo3d.h"
 #include "libavutil/time.h"
 #include "libavutil/timestamp.h"
 
@@ -165,9 +166,7 @@ static int mux_fixup_ts(Muxer *mux, MuxStream *ms, AVPacket *pkt)
             av_log(ost, AV_LOG_WARNING, "Invalid DTS: %"PRId64" PTS: %"PRId64", replacing by guess\n",
                    pkt->dts, pkt->pts);
             pkt->pts =
-            pkt->dts = pkt->pts + pkt->dts + ms->last_mux_dts + 1
-                     - FFMIN3(pkt->pts, pkt->dts, ms->last_mux_dts + 1)
-                     - FFMAX3(pkt->pts, pkt->dts, ms->last_mux_dts + 1);
+            pkt->dts = av_clip64(ms->last_mux_dts, pkt->pts - 1, pkt->dts - 1) + 1;
         }
         if ((ost->type == AVMEDIA_TYPE_AUDIO || ost->type == AVMEDIA_TYPE_VIDEO || ost->type == AVMEDIA_TYPE_SUBTITLE) &&
             pkt->dts != AV_NOPTS_VALUE &&
@@ -632,6 +631,40 @@ int of_stream_init(OutputFile *of, OutputStream *ost,
     ret = bsf_init(ms);
     if (ret < 0)
         return ret;
+
+    if (ms->stereo3d_set) {
+        AVCodecParameters *par = ost->st->codecpar;
+        AVStereo3D *stereo;
+        size_t size;
+
+        stereo = av_stereo3d_alloc_size(&size);
+        if (!stereo)
+            return AVERROR(ENOMEM);
+        stereo->type = ms->stereo3d_type;
+
+        if (av_packet_side_data_get(par->coded_side_data, par->nb_coded_side_data,
+                                    AV_PKT_DATA_STEREO3D))
+            av_log(ost, AV_LOG_INFO, "Overriding existing stereoscopic 3D side data\n");
+
+        if (!av_packet_side_data_add(&par->coded_side_data, &par->nb_coded_side_data,
+                                     AV_PKT_DATA_STEREO3D, stereo, size, 0)) {
+            av_freep(&stereo);
+            return AVERROR(ENOMEM);
+        }
+
+        /* Keep Matroska/WebM metadata consistent with the explicit layout,
+         * as their muxer consults the tag before the side data. */
+        if (!strcmp(mux->fc->oformat->name, "matroska") ||
+            !strcmp(mux->fc->oformat->name, "webm")) {
+            const char *stereo_mode =
+                ms->stereo3d_type == AV_STEREO3D_2D         ? "mono" :
+                ms->stereo3d_type == AV_STEREO3D_SIDEBYSIDE ? "left_right" :
+                                                              "top_bottom";
+            ret = av_dict_set(&ost->st->metadata, "stereo_mode", stereo_mode, 0);
+            if (ret < 0)
+                return ret;
+        }
+    }
 
     if (ms->stream_duration) {
         ost->st->duration = av_rescale_q(ms->stream_duration, ms->stream_duration_tb,

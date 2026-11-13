@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2024 Geoff Hill <geoff@geoffhill.org>
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -26,7 +26,7 @@
 #include "config.h"
 
 void ff_ac3_exponent_min_neon(uint8_t *exp, int num_reuse_blocks, int nb_coefs);
-void ff_ac3_extract_exponents_neon(uint8_t *exp, int32_t *coef, int nb_coefs);
+void ff_ac3_extract_exponents_neon(uint8_t *exp, const int32_t *coef, int nb_coefs);
 void ff_float_to_fixed24_neon(int32_t *dst, const float *src, size_t len);
 void ff_ac3_sum_square_butterfly_int32_neon(int64_t sum[4],
                                             const int32_t *coef0,

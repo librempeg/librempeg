@@ -91,7 +91,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_i3ds_demuxer = {
     .p.name         = "i3ds",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("i3DS"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Codemasters i3DS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "3ds",
     .read_probe     = read_probe,

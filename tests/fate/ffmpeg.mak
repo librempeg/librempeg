@@ -2,12 +2,12 @@ FATE_FFMPEG-$(call FILTERFRAMECRC, COLOR) += fate-ffmpeg-filter_complex
 fate-ffmpeg-filter_complex: CMD = framecrc -filter_complex color=d=1:r=5 -fflags +bitexact
 
 # Ticket 6603
-FATE_FFMPEG-$(call FILTERFRAMECRC, AEVALSRC ASETNSAMPLES ARESAMPLE, AC3_FIXED_ENCODER) += fate-ffmpeg-filter_complex_audio
+FATE_FFMPEG-$(call FILTERFRAMECRC, AEVALSRC ASETNSAMPLES ASF2SF, AC3_FIXED_ENCODER) += fate-ffmpeg-filter_complex_audio
 fate-ffmpeg-filter_complex_audio: CMD = framecrc -auto_conversion_filters -filter_complex "aevalsrc=0:d=0.1,asetnsamples=1537" -c ac3_fixed
 
 # Ticket 6375, use case of NoX
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, PNG ALAC, ARESAMPLE_FILTER) += fate-ffmpeg-attached_pics
-fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossless-audio/inside.m4a -threads 1 -max_muxing_queue_size 16 -af aresample
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, PNG ALAC, ASF2SF_FILTER) += fate-ffmpeg-attached_pics
+fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossless-audio/inside.m4a -threads 1 -max_muxing_queue_size 16 -af asf2sf
 
 FATE_SAMPLES_FFMPEG-$(call FILTERDEMDEC, COLORKEY OVERLAY SCALE, MPEGPS IMAGE_PPM_PIPE, CAVS PPM, CAVSVIDEO_PARSER) += fate-ffmpeg-filter_colorkey
 fate-ffmpeg-filter_colorkey: tests/data/filtergraphs/colorkey
@@ -15,6 +15,12 @@ fate-ffmpeg-filter_colorkey: CMD = framecrc -auto_conversion_filters -idct simpl
 
 FATE_FFMPEG-$(call FILTERFRAMECRC, COLOR) += fate-ffmpeg-lavfi
 fate-ffmpeg-lavfi: CMD = framecrc -lavfi color=d=1:r=5 -fflags +bitexact
+
+FATE_FFMPEG-$(call FILTERFRAMECRC, TESTSRC2 FORMAT SETPARAMS SCALE, LAVFI_INDEV WRAPPED_AVFRAME_DECODER MPEG2VIDEO_ENCODER) += fate-ffmpeg-chroma-location
+fate-ffmpeg-chroma-location: CMD = framecrc -auto_conversion_filters -f lavfi -i testsrc2=s=64x64:r=25:d=1,format=yuv420p,setparams=chroma_location=topleft -sws_flags +accurate_rnd+bitexact -flags +bitexact -idct simple -dct fastint -threads 1 -c:v mpeg2video -qscale:v 2 -frames:v 1
+
+FATE_FFMPEG-$(if $(CONFIG_SMALL),no,$(call ALLYES, TESTSRC2_FILTER SCALE_FILTER FORMAT_FILTER LAVFI_INDEV WRAPPED_AVFRAME_DECODER RAWVIDEO_ENCODER NULL_MUXER)) += fate-ffmpeg-print-graphs-compact
+fate-ffmpeg-print-graphs-compact: CMD = ffmpeg -f lavfi -i testsrc2=s=64x64:r=25:d=0.08 -filter_complex "[0:v]scale=32:32,format=yuv420p[v]" -map "[v]" -c:v rawvideo -print_graphs_file - -print_graphs_format compact -f null -
 
 FATE_FFMPEG-$(call ENCDEC2, MPEG4, RAWVIDEO, AVI, RAWVIDEO_DEMUXER FRAMECRC_MUXER) += fate-force_key_frames
 fate-force_key_frames: tests/data/vsynth1.yuv
@@ -88,13 +94,13 @@ fate-unknown_layout-pcm: $(AREF)
 fate-unknown_layout-pcm: CMD = md5 \
   -guess_layout_max 0 -f s16le -ac 1 -ar 44100 -i $(TARGET_PATH)/$(AREF) -f s16le
 
-FATE_FFMPEG-$(call FILTERDEMDECENCMUX, ARESAMPLE, PCM_S32LE, PCM_S32LE, AC3_FIXED, AC3) += fate-unknown_layout-ac3
+FATE_FFMPEG-$(call FILTERDEMDECENCMUX, ASF2SF, PCM_S32LE, PCM_S32LE, AC3_FIXED, AC3) += fate-unknown_layout-ac3
 fate-unknown_layout-ac3: $(AREF)
 fate-unknown_layout-ac3: CMD = md5 -auto_conversion_filters \
   -guess_layout_max 0 -f s32le -ac 1 -ar 44100 -i $(TARGET_PATH)/$(AREF) \
   -f ac3 -flags +bitexact -c ac3_fixed
 
-FATE_FFMPEG-$(call FILTERDEMDEC, AMIX ARESAMPLE SINE, RAWVIDEO, \
+FATE_FFMPEG-$(call FILTERDEMDEC, AMIX ASF2SF SINE, RAWVIDEO, \
                            PCM_S16LE RAWVIDEO, LAVFI_INDEV  \
                            MPEG4_ENCODER AC3_FIXED_ENCODER) \
                            += fate-shortest
@@ -141,7 +147,7 @@ fate-ffmpeg-fix_sub_duration_heartbeat: CMP = null
 
 # FIXME: the integer AAC decoder does not produce the same output on all platforms
 # so until that is fixed we use the volume filter to silence the data
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MATROSKA, H264 AAC_FIXED, PCM_S32LE_ENCODER VOLUME_FILTER ARESAMPLE_FILTER) += fate-ffmpeg-streamloop-transcode-av
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MATROSKA, H264 AAC_FIXED, PCM_S32LE_ENCODER VOLUME_FILTER ASF2SF_FILTER) += fate-ffmpeg-streamloop-transcode-av
 fate-ffmpeg-streamloop-transcode-av: CMD = \
     framecrc -auto_conversion_filters -stream_loop 3 -c:a aac_fixed -i $(TARGET_SAMPLES)/mkv/1242-small.mkv \
     -af volume=0:precision=fixed -c:a pcm_s32le
@@ -154,13 +160,13 @@ FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO DVVIDEO, MOV, PCM_S16LE_DECODER) += f
 fate-copy-trac236: CMD = transcode mov $(TARGET_SAMPLES)/mov/fcp_export8-236.mov\
                      mov "-codec copy -map 0"
 
-FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, MXF, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER MP2_DECODER ARESAMPLE_FILTER PCM_S16LE_DECODER) += fate-copy-trac4914
+FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, MXF, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER MP2_DECODER ASF2SF_FILTER PCM_S16LE_DECODER) += fate-copy-trac4914
 fate-copy-trac4914: CMD = transcode mpegts $(TARGET_SAMPLES)/mpeg2/xdcam8mp2-1s_small.ts\
-                      mxf "-c:a pcm_s16le -af aresample -c:v copy"
+                      mxf "-c:a pcm_s16le -af asf2sf -c:v copy"
 
-FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, AVI, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER EXTRACT_EXTRADATA_BSF MP2_DECODER ARESAMPLE_FILTER) += fate-copy-trac4914-avi
+FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, AVI, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER EXTRACT_EXTRADATA_BSF MP2_DECODER ASF2SF_FILTER) += fate-copy-trac4914-avi
 fate-copy-trac4914-avi: CMD = transcode mpegts $(TARGET_SAMPLES)/mpeg2/xdcam8mp2-1s_small.ts\
-                          avi "-c:a copy -c:v copy" "-af aresample"
+                          avi "-c:a copy -c:v copy" "-af asf2sf"
 
 FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO H264, AVI, H264_DEMUXER H264_PARSER EXTRACT_EXTRADATA_BSF) += fate-copy-trac2211-avi
 fate-copy-trac2211-avi: CMD = transcode "h264 -r 14" $(TARGET_SAMPLES)/h264/bbc2.sample.h264\
@@ -196,7 +202,7 @@ tests/data/audio_shorter_than_video.nut: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 FATE_STREAMCOPY-$(call FRAMEMD5, NUT, RAWVIDEO PCM_S16LE MPEG4,  \
                                  RAWVIDEO_DEMUXER LAVFI_INDEV    \
                                  MPEG4_ENCODER PCM_S16LE_ENCODER \
-                                 SINE_FILTER ARESAMPLE_FILTER AMIX_FILTER \
+                                 SINE_FILTER ASF2SF_FILTER AMIX_FILTER \
                                  NUT_MUXER AC3_FIXED_ENCODER)    \
                                += fate-copy-shortest1 fate-copy-shortest2
 fate-copy-shortest1 fate-copy-shortest2: tests/data/audio_shorter_than_video.nut
@@ -228,6 +234,161 @@ fate-ffmpeg-bsf-remove-e: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixb
 
 FATE_SAMPLES_FFMPEG-$(call DEMMUX, APNG, FRAMECRC, SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-setts-bsf
 fate-ffmpeg-setts-bsf: CMD = framecrc -i $(TARGET_SAMPLES)/apng/clock.png -c:v copy -bsf:v "setts=duration=if(eq(NEXT_PTS\,NOPTS)\,PREV_OUTDURATION\,(NEXT_PTS-PTS)/2):ts=PTS/2" -fflags +bitexact
+
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, AAC, FRAMECRC, AAC_PARSER TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-pts fate-ffmpeg-trim-bsf-dts fate-ffmpeg-trim-bsf-pkt fate-ffmpeg-trim-bsf-dts-pts fate-ffmpeg-trim-bsf-pts-dts fate-ffmpeg-trim-bsf-pts-duration fate-ffmpeg-trim-bsf-dts-duration fate-ffmpeg-trim-bsf-samples fate-ffmpeg-trim-bsf-msec fate-ffmpeg-trim-bsf-rel fate-ffmpeg-trim-bsf-duration-zero fate-ffmpeg-trim-bsf-pkt-rel fate-ffmpeg-trim-bsf-untrimmed
+fate-ffmpeg-trim-bsf-pts: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:end=18063360
+fate-ffmpeg-trim-bsf-dts: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=3612672:start_type=dts:end=10838016:end_type=dts
+fate-ffmpeg-trim-bsf-dts-pts: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=3612672:start_type=dts:end=18063360
+fate-ffmpeg-trim-bsf-pts-dts: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:end=10838016:end_type=dts
+fate-ffmpeg-trim-bsf-pts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:end=1000:end_type=dur_ts
+fate-ffmpeg-trim-bsf-dts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=3612672:start_type=dts:end=1000:end_type=dur_ts
+fate-ffmpeg-trim-bsf-pkt: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=5:start_type=pkt_index:end=15:end_type=pkt_index
+fate-ffmpeg-trim-bsf-samples: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=903168:end=17160192
+fate-ffmpeg-trim-bsf-msec: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1000:start_type=msec_pt:end=5000:end_type=dur_t_msec
+fate-ffmpeg-trim-bsf-rel: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:start_rel=1:end=1000:end_type=dur_ts
+fate-ffmpeg-trim-bsf-duration-zero: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:end=0:end_type=dur_ts
+fate-ffmpeg-trim-bsf-pkt-rel: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=1806336:end=5:end_type=pkt_index:end_rel=1
+fate-ffmpeg-trim-bsf-untrimmed: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=903168:end=17160192:trim_packets=0
+
+# Both trims land on the same 1024 sample packet, 256 off each end. The composed
+# skip leaves a 512 sample frame.
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, AAC, AAC, AAC_PARSER TRIM_BSF ASF2SF_FILTER) += fate-ffmpeg-trim-bsf-skip-samples
+fate-ffmpeg-trim-bsf-skip-samples: CMD = framecrc -bsf:a trim=start=2257920,trim=end=3161088 -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a pcm_s16le -af asf2sf
+
+# Both bounds fall in a presentation gap the first packet's duration is stretched
+# over, where only the decoded sample count places them.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, AAC, FRAMECRC, AAC_PARSER TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-gap-end fate-ffmpeg-trim-bsf-gap-start
+fate-ffmpeg-trim-bsf-gap-end: CMD = framecrc -copyts -bsf:a "setts=duration=if(eq(N\,0)\,18063360\,DURATION):pts=PTS+if(gte(N\,1)\,16257024\,0),trim=end=9031680" -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy
+fate-ffmpeg-trim-bsf-gap-start: CMD = framecrc -copyts -bsf:a "setts=duration=if(eq(N\,0)\,18063360\,DURATION):pts=PTS+if(gte(N\,1)\,16257024\,0),trim=start=9031680" -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -frames:a 1
+
+# The same gap where the size gives no sample count, so no bound falls inside the
+# packet and it is judged whole.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, OGG, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-opus-gap-end fate-ffmpeg-trim-bsf-opus-gap-start
+fate-ffmpeg-trim-bsf-opus-gap-end: CMD = framecrc -copyts -bsf:a "setts=duration=if(eq(N\,0)\,10000\,DURATION):pts=PTS+if(gte(N\,1)\,9040\,0),trim=end=9188" -i $(TARGET_SAMPLES)/audiomatch/tones_opus_48000_stereo.opus -c:a copy
+fate-ffmpeg-trim-bsf-opus-gap-start: CMD = framecrc -copyts -bsf:a "setts=duration=if(eq(N\,0)\,10000\,DURATION):pts=PTS+if(gte(N\,1)\,9040\,0),trim=start=9188" -i $(TARGET_SAMPLES)/audiomatch/tones_opus_48000_stereo.opus -c:a copy -frames:a 2
+
+# The 2112 sample priming spans three packets, so a trim from 512 stays inside
+# it and carries the 1088 samples left over to the second packet.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming
+fate-ffmpeg-trim-bsf-priming: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a trim=start=512
+
+# Same priming with the durations erased. The codec frame size still leaves the
+# packet at 1024, carrying 1088 samples of priming rather than the whole 2112.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-nodur
+fate-ffmpeg-trim-bsf-priming-nodur: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a setts=duration=0,trim=start=1:start_type=pkt_index -frames:a 3
+
+# The skip counts decoded samples, so a gap opened after the dropped packet
+# leaves the same 1088.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-gap
+fate-ffmpeg-trim-bsf-priming-gap: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a "setts=pts=PTS+if(gte(N\,1)\,10000\,0),trim=start=1:start_type=pkt_index" -frames:a 2
+
+# Nor does the packet the skip lands on need a timestamp at all.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-nopts
+fate-ffmpeg-trim-bsf-priming-nopts: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a "setts=pts=if(gte(N\,1)\,NOPTS\,PTS),trim=start=1:start_type=pkt_index" -frames:a 2
+
+# The same gap with the duration stretched across it. A duration places the next
+# packet and does not count this one's samples.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-gap-duration
+fate-ffmpeg-trim-bsf-priming-gap-duration: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a "setts=duration=if(eq(N\,0)\,11024\,DURATION):pts=PTS+if(gte(N\,1)\,10000\,0),trim=start=1:start_type=pkt_index" -frames:a 1
+
+# The end is measured from the first sample the stream contributes, which the
+# priming pushes to 4160, leaving the last packet a 960 sample tail skip.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-duration
+fate-ffmpeg-trim-bsf-priming-duration: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a trim=start=512:end=2048:end_type=dur_ts
+
+# Untouched mode has no sample space, so a dropped packet takes its skip along.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-priming-untrimmed
+fate-ffmpeg-trim-bsf-priming-untrimmed: CMD = framecrc -copyts -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a trim=start=1:start_type=pkt_index:trim_packets=0 -frames:a 3
+
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, SIDE_DATA_BSF PIPE_PROTOCOL) += fate-ffmpeg-side-data-bsf-remove
+fate-ffmpeg-side-data-bsf-remove: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a side_data=remove=skip_samples -frames:a 2
+
+# Only the first and the last packets carry skip samples: the priming and the
+# padding.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, SIDE_DATA_BSF PIPE_PROTOCOL) += fate-ffmpeg-side-data-bsf-select
+fate-ffmpeg-side-data-bsf-select: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a side_data=select=skip_samples -frames:a 2
+
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, SIDE_DATA_BSF PIPE_PROTOCOL) += fate-ffmpeg-side-data-bsf-select-none
+fate-ffmpeg-side-data-bsf-select-none: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.m4a -c:a copy -bsf:a side_data=select=palette -frames:a 2
+
+# The display matrix is stream side data, which ffprobe shows on the output.
+# Removing another type keeps it.
+FATE_SAMPLES_FFMPEG_FFPROBE-$(call REMUX, MOV, SIDE_DATA_BSF) += fate-ffmpeg-side-data-bsf-keep-stream
+fate-ffmpeg-side-data-bsf-keep-stream: CMD = transcode mov $(TARGET_SAMPLES)/filter/sample-in-issue-505.mov mov "-c copy -an -t 0.5 -bsf:v side_data=remove=palette" "-c copy" "-select_streams v -show_entries stream_side_data_list"
+
+FATE_SAMPLES_FFMPEG_FFPROBE-$(call REMUX, MOV, SIDE_DATA_BSF) += fate-ffmpeg-side-data-bsf-remove-stream
+fate-ffmpeg-side-data-bsf-remove-stream: CMD = transcode mov $(TARGET_SAMPLES)/filter/sample-in-issue-505.mov mov "-c copy -an -t 0.5 -bsf:v side_data=remove=displaymatrix" "-c copy" "-select_streams v -show_entries stream_side_data_list"
+
+# The composed skips cover 800 + 300 of the 1024 samples, leaving nothing.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, AAC, FRAMECRC, AAC_PARSER TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-skip-samples-empty
+fate-ffmpeg-trim-bsf-skip-samples-empty: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a copy -bsf:a trim=start=3217536,trim=end=3083472
+
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-pts fate-ffmpeg-trim-bsf-video-dts fate-ffmpeg-trim-bsf-video-dts-pts fate-ffmpeg-trim-bsf-video-pts-dts fate-ffmpeg-trim-bsf-video-dts-duration fate-ffmpeg-trim-bsf-video-pts-duration fate-ffmpeg-trim-bsf-video-pkt fate-ffmpeg-trim-bsf-video-samples fate-ffmpeg-trim-bsf-video-untrimmed
+fate-ffmpeg-trim-bsf-video-pts: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=60:end=600
+fate-ffmpeg-trim-bsf-video-dts: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=120:start_type=dts:end=360:end_type=dts
+fate-ffmpeg-trim-bsf-video-dts-pts: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=120:start_type=dts:end=600
+fate-ffmpeg-trim-bsf-video-pts-dts: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=60:end=360:end_type=dts
+fate-ffmpeg-trim-bsf-video-dts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=120:start_type=dts:end=100:end_type=dur_ts
+fate-ffmpeg-trim-bsf-video-pts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=60:end=100:end_type=dur_ts
+fate-ffmpeg-trim-bsf-video-pkt: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=5:start_type=pkt_index:end=15:end_type=pkt_index
+fate-ffmpeg-trim-bsf-video-samples: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=30:end=150
+fate-ffmpeg-trim-bsf-video-untrimmed: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v trim=start=30:end=150:trim_packets=0
+
+# A pts past the end with a dts before it drops its packet without ending the
+# stream, and three in-range packets follow.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-reordered
+fate-ffmpeg-trim-bsf-video-reordered: CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0 -c:v copy -bsf:v trim=end=1600
+
+# The held packets carry the discard flag. B-frames placed before the bound after
+# it was crossed are held the same way.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-preroll fate-ffmpeg-trim-bsf-video-preroll-overflow
+fate-ffmpeg-trim-bsf-video-preroll: CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0 -c:v copy -bsf:v trim=start=4096:preroll=1
+
+# A group that does not fit is dropped whole, leaving the output the one an
+# unset preroll gives.
+fate-ffmpeg-trim-bsf-video-preroll-overflow: CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0 -c:v copy -bsf:v trim=start=4096:preroll=1:preroll_size=3
+
+# Decoding the held packets leaves the frames in range as the untrimmed stream
+# decodes them.
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, H264, TRIM_BSF) += fate-ffmpeg-trim-bsf-video-preroll-decoded
+fate-ffmpeg-trim-bsf-video-preroll-decoded: CMD = framecrc -bsf:v trim=start=4096:preroll=1 -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0
+
+# Only the group the bound falls in is held, the keyframe at packet 11 starting
+# the window over.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MPEGPS, FRAMECRC, MPEG2VIDEO_DECODER MPEGVIDEO_DEMUXER MPEGVIDEO_PARSER EXTRACT_EXTRADATA_BSF TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-preroll-keyframe fate-ffmpeg-trim-bsf-video-preroll-on-keyframe
+fate-ffmpeg-trim-bsf-video-preroll-keyframe: CMD = framecrc -i $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg -map 0:v:0 -c:v copy -bsf:v trim=start=15:start_type=pkt_index:preroll=1
+fate-ffmpeg-trim-bsf-video-preroll-on-keyframe: CMD = framecrc -i $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg -map 0:v:0 -c:v copy -bsf:v trim=start=11:start_type=pkt_index:preroll=1
+
+# Input bsfs are flushed between loops, so each pass drops its own first packet.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-flush fate-ffmpeg-trim-bsf-video-flush-rel
+fate-ffmpeg-trim-bsf-video-flush: CMD = framecrc -stream_loop 1 -bsf:v trim=start=1:start_type=pkt_index -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy
+fate-ffmpeg-trim-bsf-video-flush-rel: CMD = framecrc -stream_loop 1 -bsf:v trim=start=120:start_rel=1 -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy
+
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-mixed-axes fate-ffmpeg-trim-bsf-video-mixed-axes-empty
+fate-ffmpeg-trim-bsf-video-mixed-axes: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v setts=pts=PTS+100,trim=start=10:start_type=dts:end=140:end_type=pts
+fate-ffmpeg-trim-bsf-video-mixed-axes-empty: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v setts=pts=PTS+100,trim=start=30:start_type=dts:end=120:end_type=pts
+
+# The first packet has no pts to be placed by, so both bounds are measured from
+# the second one.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-nopts-duration fate-ffmpeg-trim-bsf-video-nopts-rel fate-ffmpeg-trim-bsf-video-nopts-empty
+fate-ffmpeg-trim-bsf-video-nopts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v "setts=pts=if(eq(N\,0)\,NOPTS\,PTS),trim=end=100:end_type=dur_ts"
+fate-ffmpeg-trim-bsf-video-nopts-rel: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v "setts=pts=if(eq(N\,0)\,NOPTS\,PTS),trim=start=120:start_rel=1:end=600"
+fate-ffmpeg-trim-bsf-video-nopts-empty: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v "setts=pts=NOPTS,trim=end=100:end_type=dur_ts"
+
+# The dts start falls inside the first packet, and the duration runs from the
+# presentation time it is trimmed to.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-partial-dts-duration
+fate-ffmpeg-trim-bsf-video-partial-dts-duration: CMD = framecrc -i $(TARGET_SAMPLES)/qtrle/aletrek-rle.mov -map 0:v:0 -c:v copy -bsf:v setts=pts=PTS+100,trim=start=30:start_type=dts:end=100:end_type=dur_ts
+
+# Without a dts, nothing proves a later pts cannot come back into range, so an
+# out of range pts only drops its packet.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-reordered-nodts
+fate-ffmpeg-trim-bsf-video-reordered-nodts: CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0 -c:v copy -bsf:v "setts=pts=PTS:dts=NOPTS,trim=end=1600"
+
+# A relative packet count is measured on the exported packets, so a packet the
+# pts start drops does not count against it.
+FATE_SAMPLES_FFMPEG-$(call DEMMUX, MOV, FRAMECRC, TRIM_BSF PIPE_PROTOCOL) += fate-ffmpeg-trim-bsf-video-reordered-count
+fate-ffmpeg-trim-bsf-video-reordered-count: CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264_3bf_nopyramid_nobsrestriction.mp4 -map 0:v:0 -c:v copy -bsf:v trim=start=1100:end=3:end_type=pkt_index:end_rel=1
 
 FATE_TIME_BASE-$(call PARSERDEMDEC, MPEGVIDEO, MPEGPS, MPEG2VIDEO, MPEGVIDEO_DEMUXER MXF_MUXER) += fate-time_base
 fate-time_base: CMD = md5 -i $(TARGET_SAMPLES)/mpeg2/dvd_single_frame.vob -an -sn -c:v copy -r 25 -fflags +bitexact -f mxf
@@ -262,6 +423,22 @@ fate-ffmpeg-filter-in-eof: CMD = framecrc                                       
     -f rawvideo -s 352x288 -pix_fmt yuv420p -t 1 -i $(TARGET_PATH)/tests/data/vsynth1.yuv  \
     -filter_complex "[0][1]concat" -c:v rawvideo
 FATE_FFMPEG-$(call FRAMECRC, RAWVIDEO, RAWVIDEO, CONCAT_FILTER) += fate-ffmpeg-filter-in-eof
+
+# Test that the CLI does not deadlock when a filtergraph closes one of its
+# looped inputs (here via trim returning EOF) while other inputs are still
+# active; the closed input must no longer be chosen for receiving frames.
+# cf. #25548
+fate-ffmpeg-filter-closed-input: tests/data/vsynth1.yuv
+fate-ffmpeg-filter-closed-input: CMD = framecrc -auto_conversion_filters -filter_complex_threads 1 \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -filter_complex "[2:v][1:v]scale2ref=w=iw:h=ih[m][s1];[3:v][s1]scale2ref=w=iw:h=ih[f][s2];[f][m]alphamerge[k];[s2]vflip[bg];[bg][k]overlay=format=yuv420,null,null,null,null,null,null,null,null,trim=duration=1.64,setpts=PTS-STARTPTS[l];[0:v][l]overlay=format=yuv420:eof_action=pass[v]" \
+    -map "[v]" -t 3 -c:v rawvideo
+FATE_FFMPEG-$(call FRAMECRC, RAWVIDEO, RAWVIDEO, SCALE_FILTER \
+    ALPHAMERGE_FILTER VFLIP_FILTER OVERLAY_FILTER NULL_FILTER TRIM_FILTER      \
+    SETPTS_FILTER) += fate-ffmpeg-filter-closed-input
 
 # Test termination on streamcopy with -t as an output option.
 fate-ffmpeg-streamcopy-t: tests/data/vsynth1.yuv
@@ -308,3 +485,7 @@ FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER) += fate-ffmpeg-heif
 # binding the internal filtegraph with a caller defined filtergraph
 fate-ffmpeg-heif-merge-filtergraph: CMD = framecrc -i $(TARGET_SAMPLES)/heif-conformance/C007.heic -filter_complex "sws_flags=+accurate_rnd+bitexact\;[0:g:0]scale=w=1280:h=720[out]" -map "[out]"
 FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER SCALE_FILTER) += fate-ffmpeg-heif-merge-filtergraph
+
+# alpha merging
+fate-ffmpeg-heif-merge-alpha: CMD = framecrc -auto_conversion_filters -i $(TARGET_SAMPLES)/heif/alpha.heic
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER SCALE_FILTER) += fate-ffmpeg-heif-merge-alpha

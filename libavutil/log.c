@@ -81,7 +81,6 @@ static const uint8_t win_color[16 + AV_CLASS_CATEGORY_NB] = {
     [16+AV_CLASS_CATEGORY_FILTER          ] = 10,
     [16+AV_CLASS_CATEGORY_BITSTREAM_FILTER] =  9,
     [16+AV_CLASS_CATEGORY_SWSCALER        ] =  7,
-    [16+AV_CLASS_CATEGORY_SWRESAMPLER     ] =  7,
     [16+AV_CLASS_CATEGORY_HWDEVICE        ] =  6,
     [16+AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT ] = 13,
     [16+AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT  ] = 5,
@@ -114,7 +113,6 @@ static const uint32_t color[16 + AV_CLASS_CATEGORY_NB] = {
     [16+AV_CLASS_CATEGORY_FILTER          ] = 155 << 8 | 0x12,
     [16+AV_CLASS_CATEGORY_BITSTREAM_FILTER] = 192 << 8 | 0x14,
     [16+AV_CLASS_CATEGORY_SWSCALER        ] = 153 << 8 | 0x14,
-    [16+AV_CLASS_CATEGORY_SWRESAMPLER     ] = 147 << 8 | 0x14,
     [16+AV_CLASS_CATEGORY_HWDEVICE        ] = 214 << 8 | 0x13,
     [16+AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT ] = 213 << 8 | 0x15,
     [16+AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT  ] = 207 << 8 | 0x05,
@@ -189,11 +187,17 @@ static void check_color_terminal(void)
 static void ansi_fputs(int level, int tint, const char *str, int local_use_color)
 {
     if (local_use_color == 1) {
+        uint32_t intensity = (color[level] >> 4) & 15;
+        uint32_t fg       = color[level] & 15;
+#if defined(_WIN32)
+        /* Piped stderr is 8-color ANSI. Linux keeps 0;33m; Windows console
+         * already uses win_color 14 (bright yellow), so match that here. */
+        if (level == AV_LOG_WARNING / 8)
+            intensity = 1;
+#endif
         fprintf(stderr,
                 "\033[%"PRIu32";3%"PRIu32"m%s\033[0m",
-                (color[level] >> 4) & 15,
-                color[level] & 15,
-                str);
+                intensity, fg, str);
     } else if (tint && use_color == 256) {
         fprintf(stderr,
                 "\033[48;5;%"PRIu32"m\033[38;5;%dm%s\033[0m",
@@ -437,7 +441,7 @@ end:
     ff_mutex_unlock(&mutex);
 }
 
-static atomic_uintptr_t av_log_callback = (uintptr_t)av_log_default_callback;
+static void (*_Atomic av_log_callback)(void*, int, const char*, va_list) = av_log_default_callback;
 
 void av_log(void* avcl, int level, const char *fmt, ...)
 {
@@ -460,7 +464,7 @@ void av_vlog(void* avcl, int level, const char *fmt, va_list vl)
 {
     AVClass* avc = avcl ? *(AVClass **) avcl : NULL;
     void (*log_callback)(void*, int, const char*, va_list) =
-        (void *)atomic_load_explicit(&av_log_callback, memory_order_relaxed);
+        atomic_load_explicit(&av_log_callback, memory_order_relaxed);
     if (avc && avc->version >= (50 << 16 | 15 << 8 | 2) &&
         avc->log_level_offset_offset && level >= AV_LOG_FATAL)
         level += *(int *) (((uint8_t *) avcl) + avc->log_level_offset_offset);
@@ -490,7 +494,7 @@ int av_log_get_flags(void)
 
 void av_log_set_callback(void (*callback)(void*, int, const char*, va_list))
 {
-    atomic_store_explicit(&av_log_callback, (uintptr_t)callback, memory_order_relaxed);
+    atomic_store_explicit(&av_log_callback, callback, memory_order_relaxed);
 }
 
 static void missing_feature_sample(int sample, void *avc, const char *msg,

@@ -490,7 +490,8 @@ Exports the HTTP response version number. Usually "1.0" or "1.1".
 @item cookies
 Set the cookies to be sent in future requests. The format of each cookie is the
 same as the value of a Set-Cookie HTTP response field. Multiple cookies can be
-delimited by a newline character.
+delimited by a newline character. A cookie without a Domain attribute is only
+sent to the host of the URL it is set for.
 
 @item icy
 If set to 1 request ICY (SHOUTcast) metadata from the server. If the server
@@ -565,6 +566,10 @@ Reconnect automatically when disconnected before EOF is hit.
 @item reconnect_at_eof
 If set then eof is treated like an error and causes reconnection, this is useful
 for live / endless streams.
+This does not apply to the deliberately established end of a resource whose
+complete size is unknown, i.e. when a ranged request past the end is answered
+with @code{416}. Such an end is reported as a clean EOF and is not retried,
+unless @option{reconnect_on_http_error} lists 416 by number.
 
 @item reconnect_on_network_error
 Reconnect automatically in case of TCP/TLS errors during connect.
@@ -572,6 +577,10 @@ Reconnect automatically in case of TCP/TLS errors during connect.
 @item reconnect_on_http_error
 A comma separated list of HTTP status codes to reconnect on. The list can
 include specific status codes (e.g. '503') or the strings '4xx' / '5xx'.
+A @code{416} that ends a read or a seek past the end of a resource whose
+complete size is unknown is reported as EOF. It is retried first only if 416
+is listed by number, for example to read a resource that is still being
+written. '4xx' does not cover it.
 
 @item reconnect_streamed
 If set then even streamed/non seekable streams will be reconnected on errors.
@@ -633,7 +642,7 @@ is used for reading large video packets with small audio packets in between.
 
 Some HTTP requests will be denied unless cookie values are passed in with the
 request. The @option{cookies} option allows these cookies to be specified. At
-the very least, each cookie must specify a value along with a path and domain.
+the very least, each cookie must specify a value.
 HTTP requests that match both the domain and path will automatically include the
 cookie value in the HTTP Cookie header field. Multiple cookies can be delimited
 by a newline.
@@ -1113,6 +1122,11 @@ truncating. Default value is 1.
 Specify the path of the file containing private key to use during authorization.
 By default libssh searches for keys in the @file{~/.ssh/} directory.
 
+@item verify
+Verify the server host key against the known_hosts file before
+authenticating, if set to 1. Servers that are not in the file, or whose
+key differs from the one recorded there, are refused. Default value is 1.
+
 @end table
 
 Example: Play a file stored on remote server.
@@ -1579,12 +1593,29 @@ some risk of collision if the same URL is used for different content (e.g.
 as a result of extra POST data being used to select the stream ID). To avoid
 this, make sure to only use this protocol for URLs that uniquely identify
 the content; otherwise you may get a garbled mix of sources.
+This includes content selected by request options such as headers, cookies or
+credentials: data cached for one user is returned to every other user of the
+same cache directory.
+
+See also the @option{cache_key} option.
 
 The accepted options are:
 @table @option
 
 @item cache_dir
 Path to the directory where cache files are stored. This option is required.
+Anyone who can write to this directory or to @option{metadata_dir} can alter
+the data read by all users of the cache, or make them crash, so neither may be
+writable by untrusted users.
+
+@item metadata_dir
+Path to the directory where metadata files are stored. Optional. If not
+specified, metadata is stored in the same directory as the cache file.
+
+@item cache_key
+Override the hash used to identify the cached content. Note that this is also
+used verbatim as the base name of the cache and metadata files, so it must be
+a valid file name.
 
 @item block_shift
 Shift factor (log2) of the block size used for internal reads/writes. Defaults
@@ -1592,15 +1623,15 @@ to 15, i.e. 32KB blocks. If this does not match the value that was specified
 when an existing cache file was created, the previously specified value will
 be used instead.
 
-@item read_only
+@item cache_read_only
 If true, use the shared cache for reads but don't write any new blocks to it.
 Default is false. Note that even with this option enabled, the cache file will
 be initialized if it does not already exist.
 
 @item cache_verify
 If true, verify any data read from the cache against the underlying input
-stream, and report any mismatches. Note that this will make the cache layer
-effectively useless. This is purely a debug option.
+stream, and error out on any mismatches. Note that this will make the cache
+layer effectively useless. This is purely a debug option.
 
 @item cache_timeout
 If set to a nonzero value, specifies the maximum time (in microseconds) to wait
@@ -1610,6 +1641,12 @@ assumed that the other process may have gotten stuck or died in the meantime.
 
 If set to zero, no waiting is done and all processes will immediately race
 to try and fetch the same missing blocks themselves. Defaults to 10000 (10 ms).
+
+@item ignore_errors
+If true, failures of the underlying input stream are not treated as fatal, and
+playback continues using only the data already present in the cache file.
+Default is false. Any attempt to read into uncached data will result in an
+unrecoverable IO error.
 
 @item retry_errors
 If true (the default), transient read errors from the underlying input stream
@@ -1621,6 +1658,27 @@ If true (the default), blocks whose contents fail the CRC integrity check are
 re-fetched from the underlying input stream, overwriting the corrupt cached
 data. If false, cache corruption is treated as a fatal read error.
 
+@item cache_size_max
+Maximum amount of data to cache, in bytes, rounded down to a multiple of the
+chosen block size. Accepts the usual size suffixes, e.g. @code{10G} for
+10*10^9 bytes, or @code{10Gi} for 10*2^30 bytes. Defaults to 0, meaning no
+limit.
+
+Once this limit is reached, the protocol switches to read-only mode (see
+@option{cache_read_only}). Already cached data is never evicted, so once this
+limit is reached, no new data will ever be cached until the cache file is
+deleted.
+
+Note that this option is best-effort only, and may over-write up to N-1
+blocks, where N is the number of concurrent processes using the same cache
+file. Note also that the underlying file system may reserve more space than
+written, if the underlying allocation granularity is larger than the block
+size.
+
+@item offset
+Initial byte offset to start reading from. This option is not passed on to the
+underlying protocol; it instead gets a regular seek on the first cache miss.
+Defaults to 0.
 @end table
 
 URL Syntax is
@@ -2281,6 +2339,7 @@ exclude the source addresses in the multicast subscription.
 @item fifo_size=@var{units}
 Set the UDP receiving circular buffer size, expressed as a number of
 packets with size of 188 bytes. If not specified defaults to 7*4096.
+Set to 0 to disable the receiving circular buffer and its receive thread.
 
 @item overrun_nonfatal=@var{1|0}
 Survive in case of UDP receiving circular buffer overrun. Default

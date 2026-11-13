@@ -123,7 +123,7 @@ bool decode_remap(uint slice_idx, inout SliceContext sc)
             uint run0 = lu != 0 ? 0u  : run;
             uint run1 = lu != 0 ? run : 1u;
 
-            i += int64_t(run0) * int64_t(current_mul);
+            i += int64_t(run0 * uint(current_mul));
 
             while (run1 > 0u) {
                 run1--;
@@ -182,6 +182,12 @@ bool decode_slice_header(uint slice_idx, inout SliceContext sc)
     sc.slice_dim = ivec2(sxe - sxs, sye - sys);
     sc.slice_rct_coef = ivec2(1, 1);
     sc.slice_coding_mode = int(0);
+
+    /* Only coded from version 4 on, but the slice context buffer is never
+     * cleared, so they must be reset here */
+    sc.slice_reset_contexts = false;
+    sc.remap = 0;
+    sc.remap_count = i32vec4(0);
 
     for (uint i = 0; i < codec_planes; i++) {
         uint idx = hdr_sym[4 + i];

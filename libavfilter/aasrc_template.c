@@ -19,10 +19,8 @@
 #undef ctype
 #undef ftype
 #undef itype
-#undef FLOG
-#undef FSIN
-#undef FCOS
-#undef FEXP
+#undef EPS
+#undef FABS
 #undef FLOOR
 #undef LRINT
 #undef CLIP
@@ -30,14 +28,25 @@
 #undef dsp_vector_mul_complex
 #undef dsp_vector_mul_complex_add
 #undef SAMPLE_FORMAT
-#if DEPTH == 16
+#if DEPTH == 8
+#define ctype complex_float
+#define ftype float
+#define itype uint8_t
+#define EPS FLT_EPSILON
+#define FABS fabsf
+#define FLOOR floorf
+#define LRINT lrintf
+#define CLIP av_clip_int8
+#define dsp_vector_mul_real dsp->vector_fmul_real
+#define dsp_vector_mul_complex dsp->vector_fmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
+#define SAMPLE_FORMAT u8p
+#elif DEPTH == 16
 #define ctype complex_float
 #define ftype float
 #define itype int16_t
-#define FLOG logf
-#define FSIN sinf
-#define FCOS cosf
-#define FEXP expf
+#define EPS FLT_EPSILON
+#define FABS fabsf
 #define FLOOR floorf
 #define LRINT lrintf
 #define CLIP av_clip_int16
@@ -49,12 +58,10 @@
 #define ctype complex_double
 #define ftype double
 #define itype int32_t
-#define FLOG log
-#define FSIN sin
-#define FCOS cos
-#define FEXP exp
+#define EPS DBL_EPSILON
+#define FABS fabs
 #define FLOOR floor
-#define LRINT lrint
+#define LRINT llrint
 #define CLIP av_clipl_int32
 #define dsp_vector_mul_real dsp->vector_dmul_real
 #define dsp_vector_mul_complex dsp->vector_dmul_complex
@@ -64,35 +71,42 @@
 #define ctype complex_float
 #define ftype float
 #define itype float
-#define FLOG logf
-#define FSIN sinf
-#define FCOS cosf
-#define FEXP expf
+#define EPS FLT_EPSILON
+#define FABS fabsf
 #define FLOOR floorf
 #define LRINT lrintf
 #define dsp_vector_mul_real dsp->vector_fmul_real
 #define dsp_vector_mul_complex dsp->vector_fmul_complex
 #define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
 #define SAMPLE_FORMAT fltp
-#else
+#elif DEPTH == 65
 #define ctype complex_double
 #define ftype double
 #define itype double
-#define FLOG log
-#define FSIN sin
-#define FCOS cos
-#define FEXP exp
+#define EPS DBL_EPSILON
+#define FABS fabs
 #define FLOOR floor
-#define LRINT lrint
+#define LRINT llrint
 #define dsp_vector_mul_real dsp->vector_dmul_real
 #define dsp_vector_mul_complex dsp->vector_dmul_complex
 #define dsp_vector_mul_complex_add dsp->vector_dmul_complex_add
 #define SAMPLE_FORMAT dblp
+#else
+#define ctype complex_long_double
+#define ftype long double
+#define itype long double
+#define EPS LDBL_EPSILON
+#define FABS fabsl
+#define FLOOR floorl
+#define LRINT llrintl
+#define dsp_vector_mul_real dsp->vector_ldmul_real
+#define dsp_vector_mul_complex dsp->vector_ldmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_ldmul_complex_add
+#define SAMPLE_FORMAT ldblp
 #endif
 
 #define F(x) ((ftype)(x))
-#undef isnormal
-#define isnormal(x) (1)
+#define ISNORMAL(x) (fabs(x) >= EPS)
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -102,19 +116,12 @@
 #define fnc2(a,b)   fn3(a, b)
 #define fnc(a)      fnc2(a, ftype)
 
-#define K1 32
 #define MAX_NB_POLES 12
-#define MAX_HISTORY 4
+#define MAX_HISTORY 8
 
 typedef struct fn(StateContext) {
-    ftype scale_factor;
-    ftype log_mag[MAX_NB_POLES];
-    ftype angle[MAX_NB_POLES];
-    ftype log_mag_scaled[MAX_NB_POLES];
-    ftype angle_scaled[MAX_NB_POLES];
-    ctype inv[MAX_NB_POLES];
-    ctype p_fixed[MAX_NB_POLES];
-    ctype r_fixed[MAX_NB_POLES];
+    double log_mag_scaled[MAX_NB_POLES];
+    double angle_scaled[MAX_NB_POLES];
 
     int   reset_index;
     int   in_idx;
@@ -126,42 +133,69 @@ typedef struct fn(StateContext) {
     int   t_inc_int;
     const ctype *adv_ptr;
     ctype one[MAX_NB_POLES];
-    ctype cur[MAX_NB_POLES];
-    ctype adv[2][MAX_NB_POLES];
-    ctype h[MAX_NB_POLES];
+
+    DECLARE_ALIGNED(32, ctype, p_fixed)[MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, r_fixed)[MAX_NB_POLES];
+
+    DECLARE_ALIGNED(32, ctype, cur)[MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, adv)[2][MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, h)[MAX_NB_POLES];
+
+    int   idx;
+    int   idx_inc;
 
     int   prev_index;
-    ftype prev_delta_t[MAX_HISTORY];
-    ctype prev_cur[MAX_HISTORY][MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ftype, prev_delta_t)[MAX_HISTORY];
+    DECLARE_ALIGNED(32, ctype, prev_cur)[MAX_HISTORY][MAX_NB_POLES];
 } fn(StateContext);
+
+static void fn(complex_exponential_precise)(complex_double *x,
+                                            const double *log_mag,
+                                            const double *theta,
+                                            const double delta_t,
+                                            const int N)
+{
+    for (int n = 0; n < N; n++) {
+        double mag = exp(log_mag[n] * delta_t);
+        double re, im, w;
+
+        w = theta[n] * delta_t;
+
+        re = mag * cos(w);
+        im = mag * sin(w);
+
+        x[n].re = re;
+        x[n].im = im;
+    }
+}
 
 static void fn(complex_exponential)(fn(StateContext) *stc,
                                     ctype *x,
-                                    const ftype *log_mag,
-                                    const ftype *theta,
+                                    const double *log_mag,
+                                    const double *theta,
                                     const ftype delta_t,
                                     const int N)
 {
     ftype *prev_delta_t = stc->prev_delta_t;
 
     for (int n = 0; n < MAX_HISTORY; n++) {
-        if (prev_delta_t[n] == delta_t) {
+        if (FABS(prev_delta_t[n] - delta_t) < EPS) {
             memcpy(x, stc->prev_cur[n], MAX_NB_POLES * sizeof(*x));
             return;
         }
     }
 
     for (int n = 0; n < N; n++) {
-        ftype mag = FEXP(log_mag[n] * delta_t);
-        ftype re, im, w;
+        double mag = exp(log_mag[n] * delta_t);
+        double re, im, w;
 
         w = theta[n] * delta_t;
 
-        re = mag * FCOS(w);
-        im = mag * FSIN(w);
+        re = mag * cos(w);
+        im = mag * sin(w);
 
-        x[n].re = isnormal(re) ? re : F(0.0);
-        x[n].im = isnormal(im) ? im : F(0.0);
+        x[n].re = ISNORMAL(re) ? re : F(0.0);
+        x[n].im = ISNORMAL(im) ? im : F(0.0);
     }
 
     prev_delta_t[stc->prev_index] = delta_t;
@@ -170,6 +204,24 @@ static void fn(complex_exponential)(fn(StateContext) *stc,
     stc->prev_index++;
     if (stc->prev_index >= MAX_HISTORY)
         stc->prev_index = 0;
+}
+
+static void fn(vector_mul_complex_precise)(complex_double *x,
+                                           const complex_double *a,
+                                           const complex_double *b,
+                                           const int N)
+{
+    for (int n = 0; n < N; n++) {
+        const double are = a[n].re;
+        const double aim = a[n].im;
+        const double bre = b[n].re;
+        const double bim = b[n].im;
+        double re = are * bre - aim * bim;
+        double im = are * bim + aim * bre;
+
+        x[n].re = re;
+        x[n].im = im;
+    }
 }
 
 static void fn(vector_mul_complex)(ctype *x,
@@ -185,12 +237,12 @@ static void fn(vector_mul_complex)(ctype *x,
         ftype re = are * bre - aim * bim;
         ftype im = are * bim + aim * bre;
 
-        x[n].re = isnormal(re) ? re : F(0.0);
-        x[n].im = isnormal(im) ? im : F(0.0);
+        x[n].re = re;
+        x[n].im = im;
     }
 }
 
-#if DEPTH == 33 || DEPTH == 65
+#if DEPTH == 33 || DEPTH == 65 || DEPTH == 128
 static ftype fn(vector_mul_real)(const ctype *cur,
                                  const ctype *h,
                                  const int N)
@@ -234,17 +286,20 @@ static void fn(vector_mul_complex_add)(const ftype src,
 static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                              const double t_inc)
 {
+    const double scale_factor = (t_inc > 1.0) ? 1.0 / t_inc : 1.0;
+    const double t_inc_frac = t_inc - floor(t_inc);
+    complex_double adv[2][MAX_NB_POLES];
+    complex_double inv[MAX_NB_POLES];
     AASRCContext *s = ctx->priv;
     const double (*ps)[2];
     const double (*rs)[2];
 
-    stc->scale_factor = (t_inc > 1.0) ? F(1.0) / t_inc : F(1.0);
     stc->out_idx = 0;
     stc->in_idx = 0;
     stc->delta_t = F(0.0);
     stc->reset_index = 0;
-    stc->t_inc_frac = t_inc - FLOOR(t_inc);
-    stc->t_inc_int = LRINT(t_inc - stc->t_inc_frac);
+    stc->t_inc_frac = t_inc_frac;
+    stc->t_inc_int = LRINT(t_inc - t_inc_frac);
 
     switch (s->coeffs) {
     case 0:
@@ -260,48 +315,57 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->prev_delta_t[n] = F(-1.0);
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        ftype inv_mag, p_cos, p_sin, mag;
-        ftype re, im, a, b;
+        double inv_mag, p_cos, p_sin, mag, log_mag, angle;
+        double angle_scaled;
+        double re, im, a, b;
 
-        stc->log_mag[n] = FLOG(ps[n][0]);
-        stc->angle[n] = ps[n][1];
-        a = stc->log_mag[n] * stc->scale_factor;
-        b = stc->angle[n] * stc->scale_factor;
-        stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
-        stc->angle_scaled[n] = isnormal(b) ? b : F(0.0);
+        log_mag = log(ps[n][0]);
+        angle = ps[n][1];
+        a = (scale_factor < 1.0) ? log_mag * scale_factor : log_mag;
+        b = (scale_factor < 1.0) ? angle * scale_factor : angle;
+        stc->log_mag_scaled[n] = a;
+        stc->angle_scaled[n] = b;
+        angle_scaled = b;
 
         stc->one[n].re = F(1.0);
         stc->one[n].im = F(0.0);
         stc->cur[n] = stc->one[n];
-        re = rs[n][0] * stc->scale_factor;
-        im = rs[n][1] * stc->scale_factor;
-        stc->r_fixed[n].re = isnormal(re) ? re : F(0.0);
-        stc->r_fixed[n].im = isnormal(im) ? im : F(0.0);
+        re = rs[n][0] * scale_factor;
+        im = rs[n][1] * scale_factor;
+        stc->r_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
+        stc->r_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
 
-        inv_mag = FEXP(-stc->log_mag_scaled[n]);
-        p_cos = FCOS(stc->angle_scaled[n]);
-        p_sin = FSIN(stc->angle_scaled[n]);
-        mag = FEXP(stc->log_mag_scaled[n]);
+        inv_mag = (scale_factor < 1.0) ? pow(ps[n][0], -scale_factor) : 1.0/ps[n][0];
+        p_cos = cos(angle_scaled);
+        p_sin = sin(angle_scaled);
+        mag = (scale_factor < 1.0) ? pow(ps[n][0], scale_factor) : ps[n][0];
 
         re = inv_mag *  p_cos;
         im = inv_mag * -p_sin;
 
-        stc->inv[n].re = isnormal(re) ? re : F(0.0);
-        stc->inv[n].im = isnormal(im) ? im : F(0.0);
+        inv[n].re = ISNORMAL(re) ? re : F(0.0);
+        inv[n].im = ISNORMAL(im) ? im : F(0.0);
 
         re = mag * p_cos;
         im = mag * p_sin;
 
-        stc->p_fixed[n].re = isnormal(re) ? re : F(0.0);
-        stc->p_fixed[n].im = isnormal(im) ? im : F(0.0);
+        stc->p_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
+        stc->p_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
     }
 
     fn(vector_mul_complex)(stc->cur, stc->cur, stc->r_fixed, stc->nb_poles);
 
     stc->adv_ptr = stc->one;
 
-    fn(complex_exponential)(stc, stc->adv[0], stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
-    fn(vector_mul_complex)(stc->adv[1], stc->adv[0], stc->inv, stc->nb_poles);
+    fn(complex_exponential_precise)(adv[0], stc->log_mag_scaled, stc->angle_scaled, t_inc_frac, stc->nb_poles);
+    fn(vector_mul_complex_precise)(adv[1], adv[0], inv, stc->nb_poles);
+
+    for (int n = 0; n < stc->nb_poles; n++) {
+        stc->adv[0][n].re = ISNORMAL(adv[0][n].re) ? adv[0][n].re : F(0.0);
+        stc->adv[0][n].im = ISNORMAL(adv[0][n].im) ? adv[0][n].im : F(0.0);
+        stc->adv[1][n].re = ISNORMAL(adv[1][n].re) ? adv[1][n].re : F(0.0);
+        stc->adv[1][n].im = ISNORMAL(adv[1][n].im) ? adv[1][n].im : F(0.0);
+    }
 
     return 0;
 }
@@ -337,20 +401,22 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     itype *dst = (itype *)out->extended_data[ch];
     const int n_out_samples = out->nb_samples;
     const int n_in_samples = in->nb_samples;
+    const int max_reset = s->max_reset;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
+    const ctype (*adv)[MAX_NB_POLES] = stc->adv;
     const ftype t_inc_frac = stc->t_inc_frac;
     ftype reset_delta_t = stc->reset_delta_t;
     const int t_inc_int = stc->t_inc_int;
-    const int nb_poles = stc->nb_poles;
-    ftype delta_t = stc->delta_t;
-    int in_idx = stc->in_idx;
-    int reset_index = stc->reset_index;
     const ctype *p_fixed = stc->p_fixed;
-    const ctype (*adv)[MAX_NB_POLES] = stc->adv;
     const ctype *adv_ptr = stc->adv_ptr;
+    const int nb_poles = stc->nb_poles;
+    int reset_index = stc->reset_index;
+    ftype delta_t = stc->delta_t;
+    int idx_inc = stc->idx_inc;
+    int in_idx = stc->in_idx;
     ctype *cur = stc->cur;
-    int prev_in_idx = -1;
+    int idx = stc->idx;
     ctype *h = stc->h;
     ftype x;
     int n;
@@ -372,67 +438,67 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     n = 0;
 repeat:
-    if (reset_index >= K1) {
+    if (reset_index >= max_reset) {
         fn(complex_exponential)(stc, cur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
         vector_mul_complex(cur, stc->r_fixed, cur, nb_poles);
         reset_index = 0;
     }
 
-    while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
-        int frac_carry, idx_inc;
+    while ((n < n_out_samples) && ((in_idx + idx) < n_in_samples) && (reset_index < max_reset)) {
         ftype delta_t_frac, y;
+        int frac_carry;
 
-        if (prev_in_idx < in_idx) {
-            x = src[in_idx];
-#if DEPTH == 16 || DEPTH == 32
-            x /= F(1<<(DEPTH-1));
+        if (idx_inc > 0) {
+            x = src[in_idx+idx++];
+#if DEPTH == 8
+            x -= 0x80;
+#endif
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 32
+            x /= F(1LL<<(DEPTH-1));
 #endif
             vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
-            prev_in_idx = in_idx;
         }
 
-        vector_mul_complex(cur, cur, adv_ptr, nb_poles);
+        if (idx >= idx_inc) {
+            vector_mul_complex(cur, cur, adv_ptr, nb_poles);
 
-        y = vector_mul_real(cur, h, nb_poles);
+            y = vector_mul_real(cur, h, nb_poles);
 
 #if DEPTH == 16 || DEPTH == 32
-        dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
+            dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1))));
+#elif DEPTH == 8
+            dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1)))) + 0x80;
 #else
-        dst[n] = y;
+            dst[n] = y;
 #endif
 
-        reset_delta_t = delta_t;
-        reset_index++;
+            in_idx += idx_inc;
+            delta_t += t_inc_frac;
+            delta_t_frac = delta_t - FLOOR(delta_t);
+            frac_carry = LRINT(delta_t - delta_t_frac);
+            idx_inc = frac_carry + t_inc_int;
+            delta_t = delta_t_frac;
 
-        delta_t += t_inc_frac;
-        delta_t_frac = delta_t - FLOOR(delta_t);
-        frac_carry = LRINT(delta_t - delta_t_frac);
-        idx_inc = frac_carry + t_inc_int;
-        delta_t = delta_t_frac;
+            adv_ptr = adv[frac_carry];
+            reset_index += frac_carry;
+            reset_delta_t = delta_t;
 
-        adv_ptr = adv[frac_carry];
-
-        for (int i = 1; i < idx_inc; i++) {
-            x = src[in_idx+i];
-#if DEPTH == 16 || DEPTH == 32
-            x /= F(1<<(DEPTH-1));
-#endif
-            vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
+            idx = 0;
+            n++;
         }
-
-        in_idx += idx_inc;
-        n++;
     }
 
-    if (n < n_out_samples && in_idx < n_in_samples)
+    if ((n < n_out_samples) && (in_idx + idx < n_in_samples))
         goto repeat;
 
+    stc->idx = idx;
     stc->out_idx = n;
+    stc->idx_inc = idx_inc;
     stc->adv_ptr = adv_ptr;
     stc->delta_t = delta_t;
     stc->reset_index = reset_index;
     stc->reset_delta_t = reset_delta_t;
-    stc->in_idx = FFMAX(0, in_idx - n_in_samples);
+    stc->in_idx = in_idx - n_in_samples;
 }
 
 static int fn(nb_output_samples)(AVFilterContext *ctx)

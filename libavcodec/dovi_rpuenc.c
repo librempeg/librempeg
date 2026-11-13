@@ -182,12 +182,9 @@ static av_cold int dovi_configure_ext(DOVIContext *s, enum AVCodecID codec_id,
         }
     }
 
-    pps = width * height;
-    if (framerate.num) {
-        pps = pps * framerate.num / framerate.den;
-    } else {
-        pps *= 25; /* sanity fallback */
-    }
+    if (framerate.num <= 0 || framerate.den <= 0)
+        framerate = (AVRational){ 25, 1 }; /* sanity fallback */
+    pps = av_rescale_rnd((int64_t)width * height, framerate.num, framerate.den, AV_ROUND_DOWN);
 
     dv_level = 0;
     for (int i = 1; i < FF_ARRAY_ELEMS(dv_levels); i++) {
@@ -303,6 +300,7 @@ static int cmp_dm_level0(const AVDOVIColorMetadata *dm1,
 /* Tries to reuse the static ext blocks. May reorder `ext->dm_static` */
 static int try_reuse_ext(DOVIExt *ext, const AVDOVIMetadata *metadata)
 {
+    const int num_static = ext ? ext->num_static : 0;
     int i, j, idx = 0;
 
     for (i = 0; i < metadata->num_ext_blocks; i++) {
@@ -311,7 +309,7 @@ static int try_reuse_ext(DOVIExt *ext, const AVDOVIMetadata *metadata)
             continue;
 
         /* Find the first matching ext block and move it to [idx] */
-        for (j = idx; j < ext->num_static; j++) {
+        for (j = idx; j < num_static; j++) {
             if (!memcmp(&ext->dm_static[j], dm, sizeof(*dm))) {
                 if (j != idx)
                     FFSWAP(AVDOVIDmData, ext->dm_static[j], ext->dm_static[idx]);
@@ -320,15 +318,15 @@ static int try_reuse_ext(DOVIExt *ext, const AVDOVIMetadata *metadata)
             }
         }
 
-        if (j == ext->num_static) {
+        if (j == num_static) {
             /* Found no matching ext block */
             return 0;
         }
     }
 
-    /* If idx is less than ext->num_static, then there are extra unmatched
+    /* If idx is less than num_static, then there are extra unmatched
      * ext blocks inside ext->dm_static */
-    return idx == ext->num_static;
+    return idx == num_static;
 }
 
 static inline void put_ue_coef(PutBitContext *pb, const AVDOVIRpuDataHeader *hdr,
@@ -650,7 +648,7 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
     const AVDOVIColorMetadata *color;
     int vdr_dm_metadata_present, vdr_rpu_id, use_prev_vdr_rpu, profile,
         buffer_size, rpu_size, pad, zero_run, dm_compression;
-    int num_ext_blocks_v1, num_ext_blocks_v2;
+    int num_ext_blocks_v1, num_ext_blocks_v2, num_static, num_dynamic;
     int dv_md_compression = s->cfg.dv_md_compression;
     uint32_t crc;
     uint8_t *dst;
@@ -737,16 +735,21 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
     }
 
     dm_compression = 0;
-    if (dv_md_compression != AV_DOVI_COMPRESSION_NONE) {
-        if (!cmp_dm_level0(s->dm, color) && try_reuse_ext(s->ext_blocks, metadata))
+    if (vdr_dm_metadata_present && dv_md_compression != AV_DOVI_COMPRESSION_NONE) {
+        if (s->dm && !cmp_dm_level0(s->dm, color) && try_reuse_ext(s->ext_blocks, metadata))
             dm_compression = 1;
     }
 
     num_ext_blocks_v1 = num_ext_blocks_v2 = 0;
+    num_static = num_dynamic = 0;
     for (int i = 0; i < metadata->num_ext_blocks; i++) {
         const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
-        if (dm_compression && ff_dovi_rpu_extension_is_static(dm->level))
-            continue;
+        if (ff_dovi_rpu_extension_is_static(dm->level)) {
+            num_static++;
+            if (dm_compression)
+                continue;
+        } else
+            num_dynamic++;
 
         switch (dm->level) {
         case 1:
@@ -770,6 +773,12 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
                    dm->level);
             return AVERROR_INVALIDDATA;
         }
+    }
+    if (num_static  > FF_ARRAY_ELEMS(s->ext_blocks->dm_static) ||
+        num_dynamic > FF_ARRAY_ELEMS(s->ext_blocks->dm_dynamic)) {
+        av_log(s->logctx, AV_LOG_ERROR, "Too many ext blocks: %d static, %d dynamic\n",
+               num_static, num_dynamic);
+        return AVERROR_INVALIDDATA;
     }
 
     buffer_size = 12 /* vdr seq info */ + 5 /* CRC32 + terminator */;

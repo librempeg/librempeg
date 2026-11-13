@@ -88,7 +88,7 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 3);
     if (codec == 0x0a) {
         align = avio_rl16(pb);
-        if (align > INT_MAX/channels)
+        if (align == 0 || align > INT_MAX/channels)
             return AVERROR_INVALIDDATA;
     }
 

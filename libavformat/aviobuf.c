@@ -520,6 +520,11 @@ static void fill_buffer(AVIOContext *s)
                           s->buf_end : s->buffer;
     int len             = s->buffer_size - (dst - s->buffer);
 
+    if (s->error == AVERROR(EAGAIN)) {
+        s->error       = 0;
+        s->eof_reached = 0;
+    }
+
     /* can't fill the buffer without read_packet, just set EOF if appropriate */
     if (!s->read_packet && s->buf_ptr >= s->buf_end)
         s->eof_reached = 1;
@@ -622,6 +627,10 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
         if (len == 0 || s->write_flag) {
             if((s->direct || size > s->buffer_size) && !s->update_checksum && s->read_packet) {
                 // bypass the buffer and read data directly into buf
+                if (s->error == AVERROR(EAGAIN)) {
+                    s->error       = 0;
+                    s->eof_reached = 0;
+                }
                 len = read_packet_wrapper(s, buf, size);
                 if (len == AVERROR_EOF) {
                     /* do not modify buffer if EOF reached so that a seek back can
@@ -714,61 +723,28 @@ int avio_read_partial(AVIOContext *s, unsigned char *buf, int size)
     return len;
 }
 
-unsigned int avio_rl16(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_r8(s);
-    val |= avio_r8(s) << 8;
-    return val;
+#define AVIO_READER(name, type, bytes, load, read1, shift1, read2, shift2) \
+type name(AVIOContext *s)                                       \
+{                                                               \
+    type val;                                                   \
+    if (s->buf_end - s->buf_ptr >= bytes) {                     \
+        val = load(s->buf_ptr);                                 \
+        s->buf_ptr += bytes;                                    \
+    } else {                                                    \
+        val  = (type)read1(s) << shift1;                        \
+        val |= (type)read2(s) << shift2;                        \
+    }                                                           \
+    return val;                                                 \
 }
 
-unsigned int avio_rl24(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_rl16(s);
-    val |= avio_r8(s) << 16;
-    return val;
-}
-
-unsigned int avio_rl32(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_rl16(s);
-    val |= avio_rl16(s) << 16;
-    return val;
-}
-
-uint64_t avio_rl64(AVIOContext *s)
-{
-    uint64_t val;
-    val = (uint64_t)avio_rl32(s);
-    val |= (uint64_t)avio_rl32(s) << 32;
-    return val;
-}
-
-unsigned int avio_rb16(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_r8(s) << 8;
-    val |= avio_r8(s);
-    return val;
-}
-
-unsigned int avio_rb24(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_rb16(s) << 8;
-    val |= avio_r8(s);
-    return val;
-}
-unsigned int avio_rb32(AVIOContext *s)
-{
-    unsigned int val;
-    val = avio_rb16(s) << 16;
-    val |= avio_rb16(s);
-    return val;
-}
-
+AVIO_READER(avio_rl16, unsigned int, 2, AV_RL16, avio_r8,    0, avio_r8,    8)
+AVIO_READER(avio_rl24, unsigned int, 3, AV_RL24, avio_rl16,  0, avio_r8,   16)
+AVIO_READER(avio_rl32, unsigned int, 4, AV_RL32, avio_rl16,  0, avio_rl16, 16)
+AVIO_READER(avio_rl64, uint64_t,     8, AV_RL64, avio_rl32,  0, avio_rl32, 32)
+AVIO_READER(avio_rb16, unsigned int, 2, AV_RB16, avio_r8,    8, avio_r8,    0)
+AVIO_READER(avio_rb24, unsigned int, 3, AV_RB24, avio_rb16,  8, avio_r8,    0)
+AVIO_READER(avio_rb32, unsigned int, 4, AV_RB32, avio_rb16, 16, avio_rb16,  0)
+AVIO_READER(avio_rb64, uint64_t,     8, AV_RB64, avio_rb32, 32, avio_rb32,  0)
 int ff_get_line(AVIOContext *s, char *buf, int maxlen)
 {
     int i = 0;
@@ -907,14 +883,6 @@ GET_STR16(le, avio_rl16)
 GET_STR16(be, avio_rb16)
 
 #undef GET_STR16
-
-uint64_t avio_rb64(AVIOContext *s)
-{
-    uint64_t val;
-    val = (uint64_t)avio_rb32(s) << 32;
-    val |= (uint64_t)avio_rb32(s);
-    return val;
-}
 
 uint64_t ffio_read_varlen(AVIOContext *bc){
     uint64_t val = 0;

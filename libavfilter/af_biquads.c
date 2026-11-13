@@ -33,6 +33,12 @@
 #include "filters.h"
 #include "formats.h"
 
+enum ModeType {
+    LOWPASS,
+    HIGHPASS,
+    NB_MTYPE
+};
+
 enum FilterType {
     biquad,
     equalizer,
@@ -82,6 +88,7 @@ typedef struct BiquadsContext {
     int transform_type;
     int precision;
     int block_samples;
+    int mode;
 
     int bypass;
 
@@ -490,7 +497,8 @@ static int config_filter(AVFilterLink *outlink, int reset)
             const double w0z = 2.0*M_PI*fz / fs, w0p = 2.0*M_PI*fp / fs;
             const double cos_w0z = cos(w0z), cos_w0p = cos(w0p);
             const double alpha_z = sin(w0z) / (2.0*qz), alpha_p = sin(w0p) / (2.0*qp);
-            const double kz = 2.0/(1.0+cos_w0z), kp = 2.0/(1.0+cos_w0p);
+            const double kz = (s->mode == LOWPASS) ? 2.0/(1.0-cos_w0z) : 2.0/(1.0+cos_w0z);
+            const double kp = (s->mode == LOWPASS) ? 2.0/(1.0-cos_w0p) : 2.0/(1.0+cos_w0p);
 
             s->b[0] = ( 1.0 + alpha_z) * kz;
             s->b[1] = (-2.0 * cos_w0z) * kz;
@@ -1092,6 +1100,7 @@ static const AVOption equalizer_options[] = {
 
 DEFINE_BIQUAD_FILTER(equalizer, "Apply two-pole peaking equalization (EQ) filter.");
 #endif  /* CONFIG_EQUALIZER_FILTER */
+
 #if CONFIG_BASS_FILTER || CONFIG_LOWSHELF_FILTER
 static const AVOption bass_lowshelf_options[] = {
     {"frequency", "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=100}, 0, 999999, FLAGS},
@@ -1117,7 +1126,9 @@ DEFINE_BIQUAD_FILTER_2(bass, "Boost or cut lower frequencies.", bass_lowshelf);
 #if CONFIG_LOWSHELF_FILTER
 DEFINE_BIQUAD_FILTER_2(lowshelf, "Apply a low shelf filter.", bass_lowshelf);
 #endif  /* CONFIG_LOWSHELF_FILTER */
+
 #endif  /* CONFIG_BASS_FILTER || CONFIG LOWSHELF_FILTER */
+
 #if CONFIG_TREBLE_FILTER || CONFIG_HIGHSHELF_FILTER || CONFIG_TILTSHELF_FILTER
 static const AVOption treble_highshelf_options[] = {
     {"frequency", "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
@@ -1149,6 +1160,7 @@ DEFINE_BIQUAD_FILTER_2(highshelf, "Apply a high shelf filter.", treble_highshelf
 #if CONFIG_TILTSHELF_FILTER
 DEFINE_BIQUAD_FILTER_2(tiltshelf, "Apply a tilt shelf filter.", treble_highshelf);
 #endif
+
 #endif  /* CONFIG_TREBLE_FILTER || CONFIG_HIGHSHELF_FILTER || CONFIG_TILTSHELF_FILTER */
 
 #if CONFIG_BANDPASS_FILTER
@@ -1168,6 +1180,7 @@ static const AVOption bandpass_options[] = {
 
 DEFINE_BIQUAD_FILTER(bandpass, "Apply a two-pole Butterworth band-pass filter.");
 #endif  /* CONFIG_BANDPASS_FILTER */
+
 #if CONFIG_BANDREJECT_FILTER
 static const AVOption bandreject_options[] = {
     {"frequency", "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
@@ -1184,6 +1197,7 @@ static const AVOption bandreject_options[] = {
 
 DEFINE_BIQUAD_FILTER(bandreject, "Apply a two-pole Butterworth band-reject filter.");
 #endif  /* CONFIG_BANDREJECT_FILTER */
+
 #if CONFIG_LOWPASS_FILTER
 static const AVOption lowpass_options[] = {
     {"frequency", "set frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=500}, 0, 999999, FLAGS},
@@ -1201,6 +1215,7 @@ static const AVOption lowpass_options[] = {
 
 DEFINE_BIQUAD_FILTER(lowpass, "Apply a low-pass filter with 3dB point frequency.");
 #endif  /* CONFIG_LOWPASS_FILTER */
+
 #if CONFIG_HIGHPASS_FILTER
 static const AVOption highpass_options[] = {
     {"frequency", "set frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
@@ -1218,6 +1233,7 @@ static const AVOption highpass_options[] = {
 
 DEFINE_BIQUAD_FILTER(highpass, "Apply a high-pass filter with 3dB point frequency.");
 #endif  /* CONFIG_HIGHPASS_FILTER */
+
 #if CONFIG_ALLPASS_FILTER
 static const AVOption allpass_options[] = {
     {"frequency", "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
@@ -1251,12 +1267,16 @@ static const AVOption biquad_options[] = {
 
 DEFINE_BIQUAD_FILTER(biquad, "Apply a biquad IIR filter with the given coefficients.");
 #endif  /* CONFIG_BIQUAD_FILTER */
+
 #if CONFIG_TRANSFORM_FILTER
 static const AVOption transform_options[] = {
     {"fz", "source frequency",      OFFSET(fz), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 0, 999999, FLAGS},
     {"qz", "source Q-Factor",       OFFSET(qz), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
     {"fp", "destination frequency", OFFSET(fp), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 0, 999999, FLAGS},
     {"qp", "destination Q-Factor",  OFFSET(qp), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
+    {"mode", "set the processing mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=HIGHPASS}, 0, NB_MTYPE-1, FLAGS, .unit = "mode" },
+    {"lowpass",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=LOWPASS},  0, 0, FLAGS, .unit = "mode"},
+    {"highpass", NULL, 0, AV_OPT_TYPE_CONST, {.i64=HIGHPASS}, 0, 0, FLAGS, .unit = "mode"},
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),

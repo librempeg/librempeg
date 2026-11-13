@@ -58,6 +58,7 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FF_ARRAY_ELEMS(a) (sizeof(a) / sizeof((a)[0]))
 #define MKTAG(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((unsigned)(d) << 24))
+#define FFALIGN(x, a) (((x)+(a)-1)&~((a)-1))
 
 static void av_freep(void *ptr)
 {
@@ -142,11 +143,10 @@ static void asmgen_set_load_cont_node(SwsAArch64Context *s)
 }
 
 /*********************************************************************/
-/* gather raw pixels from planes */
-/* SWS_UOP_READ_BIT */
-/* SWS_UOP_READ_NIBBLE */
-/* SWS_UOP_READ_PACKED */
-/* SWS_UOP_READ_PLANAR */
+/* SWS_UOP_READ_BIT:    fractional read (1 bit) from single plane */
+/* SWS_UOP_READ_NIBBLE: fractional read (4 bits) from single plane */
+/* SWS_UOP_READ_PACKED: simple packed byte-aligned read */
+/* SWS_UOP_READ_PLANAR: simple planar byte-aligned read */
 
 static void asmgen_setup_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                                   SwsAArch64OpRegs *regs)
@@ -246,6 +246,18 @@ static void asmgen_setup_clear(SwsAArch64Context *s, const SwsAArch64OpImplParam
     }
 }
 
+static void asmgen_setup_add(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                             SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vk = regs->vk;
+
+    RasmOp add_vec = regs->vt[0];
+    i_ldr(r, v_q(add_vec), IMPL_PRIV(s));                           CMT("v128 add_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
+    LOOP_MASK(p, i) { i_dup(r, vk[i], a64op_elem(add_vec, i));      CMTF("v128 vadd%u = add_vec[%u];", i, i); }
+}
+
 static void asmgen_setup_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                              SwsAArch64OpRegs *regs)
 {
@@ -303,9 +315,22 @@ static void asmgen_setup_linear(SwsAArch64Context *s, const SwsAArch64OpImplPara
     case 3: coeff_veclist = vv_3(vc[0], vc[1], vc[2]);        break;
     case 4: coeff_veclist = vv_4(vc[0], vc[1], vc[2], vc[3]); break;
     }
-    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
+    i_add(r, ptr, s->impl, IMM(offsetof_impl_priv));        CMT("v128 *vcoeff_ptr = &impl->priv;");
     asmgen_set_load_cont_node(s);
     i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
+
+    /**
+     * Integer mul/mla by element does not exist for 8-bit elements, and
+     * requires the element register to be in v0-v15 for 16-bit elements.
+     * For these types, the coefficients used as multiplication operands
+     * are broadcast into full temp vectors instead. Temp vectors 8-11
+     * are otherwise only used by the floating-point fmul+fadd path, so
+     * they are free for integer types.
+     */
+    const bool dup_coeffs = (p->type == SWS_PIXEL_U8 || p->type == SWS_PIXEL_U16);
+    const int nelems = linear_vreg_nelems(p->type);
+    RasmOp *vint = &vt[8];
+    int i_vint = 0;
 
     /**
      * Populate operands matrix from packed data into linear_vcoeff matrix
@@ -315,15 +340,28 @@ static void asmgen_setup_linear(SwsAArch64Context *s, const SwsAArch64OpImplPara
     bool overwritten[4] = { false, false, false, false };
     int i_coeff = 0;
     LOOP_MASK(p, i) {
+        bool first = true;
         for (int j = 0; j < 5; j++) {
             bool is_offset = (j == 0);
             int src_j = is_offset ? 4 : (j - 1);
             if (p->par.lin.zero & SWS_MASK(i, src_j))
                 continue;
-            uint8_t vc_i = i_coeff / 4;
-            uint8_t vc_j = i_coeff & 3;
-            regs->linear_vcoeff[i][j] = a64op_elem(vc[vc_i], vc_j);
+            uint8_t vc_i = i_coeff / nelems;
+            uint8_t vc_j = i_coeff & (nelems - 1);
+            RasmOp vcoeff = a64op_elem(vc[vc_i], vc_j);
+            /**
+             * The first coefficient of a row is not used as a multiplication
+             * operand if it is either an offset (broadcast) or one (move).
+             */
+            bool is_one = !is_offset && (p->par.lin.one & SWS_MASK(i, src_j));
+            if (dup_coeffs && !(first && (is_offset || is_one))) {
+                av_assert0(i_vint < 4);
+                i_dup(r, vint[i_vint], vcoeff);             CMTF("vcoeff%u = broadcast(coeff[%u][%u]);", i_vint, i, src_j);
+                vcoeff = vint[i_vint++];
+            }
+            regs->linear_vcoeff[i][j] = vcoeff;
             i_coeff++;
+            first = false;
             if (!is_offset && overwritten[src_j])
                 save_mask |= SWS_COMP(src_j);
             overwritten[i] = true;
@@ -425,7 +463,7 @@ static void asmgen_process_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCom
 
     /* CPS-related variables. */
     s->op0_func  = a64op_gpx(7);
-    s->op1_impl  = a64op_gpx(8);
+    s->op0_impl  = a64op_gpx(8);
 
     /* Read/Write data pointer padding. */
     LOOP(imask, i) { s->in_bump [i] = a64op_gpx(rw_gprs[(i * 4) + 2]); }
@@ -493,13 +531,13 @@ static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
 
     /* Load values from impl. */
     rasm_set_current_node(r, s->setup);
-    RasmOp impl_cont = a64op_off(s->impl, offsetof_impl_cont);
-    i_ldr(r, s->op0_func, impl_cont);                   CMT("SwsFuncPtr op0_func = impl->cont;");
-    i_add(r, s->op1_impl, s->impl, IMM(sizeof_impl));   CMT("SwsOpImpl *op1_impl = impl + 1;");
+    RasmOp impl_func = a64op_off(s->impl, offsetof_impl_func);
+    i_ldr(r, s->op0_func, impl_func);                   CMT("SwsFuncPtr op0_func = impl->func;");
+    i_mov(r, s->op0_impl, s->impl);                     CMT("SwsOpImpl *op0_impl = impl;");
 
     /* Reset impl and call first kernel. */
     rasm_set_current_node(r, s->loop);
-    i_mov(r, s->impl, s->op1_impl);                     CMT("impl = op1_impl;");
+    i_mov(r, s->impl, s->op0_impl);                     CMT("impl = op0_impl;");
     i_blr(r, s->op0_func);                              CMT("op0_func();");
 }
 
@@ -558,6 +596,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
     case SWS_UOP_WRITE_BIT:    asmgen_setup_write_bit(s, p, &s->regs);    break;
     case SWS_UOP_UNPACK:       asmgen_setup_unpack(s, p, &s->regs);       break;
     case SWS_UOP_CLEAR:        asmgen_setup_clear(s, p, &s->regs);        break;
+    case SWS_UOP_ADD:          asmgen_setup_add(s, p, &s->regs);          break;
     case SWS_UOP_MIN:          asmgen_setup_min(s, p, &s->regs);          break;
     case SWS_UOP_MAX:          asmgen_setup_max(s, p, &s->regs);          break;
     case SWS_UOP_SCALE:        asmgen_setup_scale(s, p, &s->regs);        break;
@@ -592,6 +631,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
     case SWS_UOP_TO_F32:       asmgen_op_convert(s, p, &s->regs);      break;
     case SWS_UOP_EXPAND_PAIR:  asmgen_op_expand(s, p, &s->regs);       break;
     case SWS_UOP_EXPAND_QUAD:  asmgen_op_expand(s, p, &s->regs);       break;
+    case SWS_UOP_ADD:          asmgen_op_add(s, p, &s->regs);          break;
     case SWS_UOP_MIN:          asmgen_op_min(s, p, &s->regs);          break;
     case SWS_UOP_MAX:          asmgen_op_max(s, p, &s->regs);          break;
     case SWS_UOP_SCALE:        asmgen_op_scale(s, p, &s->regs);        break;
@@ -608,9 +648,10 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
         i_ret(r);
     } else {
         /* Load continuation address and increment impl pointer. */
+        const size_t priv_size = FFALIGN(aarch64_priv_size(p), alignof_impl);
         RasmNode *node = rasm_set_current_node(r, s->load_cont_node);
-        RasmOp impl_post = a64op_post(s->impl, sizeof_impl);
-        i_ldr(r, s->cont, impl_post);                   CMT("SwsFuncPtr cont = (impl++)->cont;");
+        RasmOp impl_pre = a64op_pre(s->impl, offsetof_impl_priv + priv_size);
+        i_ldr(r, s->cont, impl_pre);                    CMT("SwsFuncPtr cont = (++impl)->func;");
         rasm_set_current_node(r, node);
         /* Common end for remaining CPS functions. */
         i_br (r, s->cont);                              CMT("jump to cont");

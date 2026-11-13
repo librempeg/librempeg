@@ -389,7 +389,7 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
 #if HAVE_FAST_64BIT
         uint64_t *ldst = (uint64_t *)dst;
         const uint8_t *yc = ysrc, *uc = usrc, *vc = vsrc;
-        for (i = 0; i < chromWidth; i += 2) {
+        for (i = 0; i < (chromWidth & ~1); i += 2) {
             uint64_t k = yc[0] + (uc[0] << 8) +
                          (yc[1] << 16) + ((unsigned) vc[0] << 24);
             uint64_t l = yc[2] + (uc[1] << 8) +
@@ -399,6 +399,7 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
             uc     += 2;
             vc     += 2;
         }
+        ff_pack_yuv422_line(dst, ysrc, usrc, vsrc, chromWidth & ~1, width, 1);
 
 #else
         int *idst = (int32_t *)dst;
@@ -416,6 +417,7 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
             uc++;
             vc++;
         }
+        ff_pack_yuv422_line(dst, ysrc, usrc, vsrc, chromWidth, width, 1);
 #endif
         if ((y & (vertLumPerChroma - 1)) == vertLumPerChroma - 1) {
             usrc += chromStride;
@@ -426,10 +428,6 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
     }
 }
 
-/**
- * Height should be a multiple of 2 and width should be a multiple of 16.
- * (If this is a problem for anyone then tell me, and I will fix it.)
- */
 static inline void yv12toyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
                                 const uint8_t *vsrc, uint8_t *dst,
                                 int width, int height, int lumStride,
@@ -453,7 +451,7 @@ static inline void yuvPlanartouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
 #if HAVE_FAST_64BIT
         uint64_t *ldst = (uint64_t *)dst;
         const uint8_t *yc = ysrc, *uc = usrc, *vc = vsrc;
-        for (i = 0; i < chromWidth; i += 2) {
+        for (i = 0; i < (chromWidth & ~1); i += 2) {
             uint64_t k = uc[0] + (yc[0] << 8) +
                          (vc[0] << 16) + ((unsigned) yc[1] << 24);
             uint64_t l = uc[1] + (yc[2] << 8) +
@@ -463,6 +461,7 @@ static inline void yuvPlanartouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
             uc     += 2;
             vc     += 2;
         }
+        ff_pack_yuv422_line(dst, ysrc, usrc, vsrc, chromWidth & ~1, width, 0);
 
 #else
         int *idst = (int32_t *)dst;
@@ -480,6 +479,7 @@ static inline void yuvPlanartouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
             uc++;
             vc++;
         }
+        ff_pack_yuv422_line(dst, ysrc, usrc, vsrc, chromWidth, width, 0);
 #endif
         if ((y & (vertLumPerChroma - 1)) == vertLumPerChroma - 1) {
             usrc += chromStride;
@@ -490,10 +490,6 @@ static inline void yuvPlanartouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
     }
 }
 
-/**
- * Height should be a multiple of 2 and width should be a multiple of 16
- * (If this is a problem for anyone then tell me, and I will fix it.)
- */
 static inline void yv12touyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
                                 const uint8_t *vsrc, uint8_t *dst,
                                 int width, int height, int lumStride,
@@ -504,9 +500,6 @@ static inline void yv12touyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
                       chromStride, dstStride, 2);
 }
 
-/**
- * Width should be a multiple of 16.
- */
 static inline void yuv422ptouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
                                    const uint8_t *vsrc, uint8_t *dst,
                                    int width, int height, int lumStride,
@@ -516,9 +509,6 @@ static inline void yuv422ptouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
                       chromStride, dstStride, 1);
 }
 
-/**
- * Width should be a multiple of 16.
- */
 static inline void yuv422ptoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
                                    const uint8_t *vsrc, uint8_t *dst,
                                    int width, int height, int lumStride,
@@ -710,8 +700,8 @@ static void extract_even2avg_c(const uint8_t *src0, const uint8_t *src1,
     src1  +=  count * 4;
     count  = -count;
     while (count < 0) {
-        dst0[count] = (src0[4 * count + 0] + src1[4 * count + 0]) >> 1;
-        dst1[count] = (src0[4 * count + 2] + src1[4 * count + 2]) >> 1;
+        dst0[count] = (src0[4 * count + 0] + src1[4 * count + 0] + 1) >> 1;
+        dst1[count] = (src0[4 * count + 2] + src1[4 * count + 2] + 1) >> 1;
         count++;
     }
 }
@@ -742,8 +732,8 @@ static void extract_odd2avg_c(const uint8_t *src0, const uint8_t *src1,
     src0++;
     src1++;
     while (count < 0) {
-        dst0[count] = (src0[4 * count + 0] + src1[4 * count + 0]) >> 1;
-        dst1[count] = (src0[4 * count + 2] + src1[4 * count + 2]) >> 1;
+        dst0[count] = (src0[4 * count + 0] + src1[4 * count + 0] + 1) >> 1;
+        dst1[count] = (src0[4 * count + 2] + src1[4 * count + 2] + 1) >> 1;
         count++;
     }
 }

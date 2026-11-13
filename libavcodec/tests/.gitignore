@@ -1,3 +1,4 @@
+/ac3
 /apv
 /av1_levels
 /avcodec
@@ -5,6 +6,7 @@
 /bitstream_be
 /bitstream_le
 /cabac
+/cavsdsp
 /celp_math
 /codec_desc
 /dct
@@ -17,5 +19,6 @@
 /mathops
 /mjpegenc_huffman
 /mpeg12framerate
+/packet_side_data_handle
 /rangecoder
 /snowenc

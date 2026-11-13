@@ -32,7 +32,6 @@
 #define BITSTREAM_READER_LE
 #include "acelp_vectors.h"
 #include "avcodec.h"
-#include "celp_filters.h"
 #include "codec_internal.h"
 #include "decode.h"
 #include "get_bits.h"
@@ -112,16 +111,11 @@ static const int cng_filt[4] = { 273, 998, 499, 333 };
 
 static const int cng_bseg[3] = { 2048, 18432, 231233 };
 
-static av_cold int g723_1_decode_init(AVCodecContext *avctx)
+static void g723_1_reset(AVCodecContext *avctx)
 {
     G723_1_Context *s = avctx->priv_data;
 
-    avctx->sample_fmt     = AV_SAMPLE_FMT_S16P;
-    if (avctx->ch_layout.nb_channels < 1 || avctx->ch_layout.nb_channels > 2) {
-        av_log(avctx, AV_LOG_ERROR, "Only mono and stereo are supported (requested channels: %d).\n",
-               avctx->ch_layout.nb_channels);
-        return AVERROR(EINVAL);
-    }
+    memset(s->ch, 0, sizeof(s->ch));
     for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
         G723_1_ChannelContext *p = &s->ch[ch];
 
@@ -131,8 +125,20 @@ static av_cold int g723_1_decode_init(AVCodecContext *avctx)
         memcpy(p->sid_lsp,  dc_lsp, LPC_ORDER * sizeof(*p->sid_lsp));
 
         p->cng_random_seed = CNG_RANDOM_SEED;
-        p->past_frame_type = SID_FRAME;
+        p->past_frame_type = ACTIVE_FRAME;
     }
+}
+
+static av_cold int g723_1_decode_init(AVCodecContext *avctx)
+{
+    avctx->sample_fmt     = AV_SAMPLE_FMT_S16P;
+    if (avctx->ch_layout.nb_channels < 1 || avctx->ch_layout.nb_channels > 2) {
+        av_log(avctx, AV_LOG_ERROR, "Only mono and stereo are supported (requested channels: %d).\n",
+               avctx->ch_layout.nb_channels);
+        return AVERROR(EINVAL);
+    }
+
+    g723_1_reset(avctx);
 
     return 0;
 }
@@ -577,31 +583,44 @@ static void residual_interp(int16_t *buf, int16_t *out, int lag,
     }
 }
 
-/**
- * Perform IIR filtering.
- *
- * @param fir_coef FIR coefficients
- * @param iir_coef IIR coefficients
- * @param src      source vector
- * @param dest     destination vector
- * @param width    width of the output, 16 bits(0) / 32 bits(1)
- */
-#define iir_filter(fir_coef, iir_coef, src, dest, width)\
-{\
-    int m, n;\
-    int res_shift = 16 & ~-(width);\
-    int in_shift  = 16 - res_shift;\
-\
-    for (m = 0; m < SUBFRAME_LEN; m++) {\
-        int64_t filter = 0;\
-        for (n = 1; n <= LPC_ORDER; n++) {\
-            filter -= (fir_coef)[n - 1] * (src)[m - n] -\
-                      (iir_coef)[n - 1] * ((dest)[m - n] >> in_shift);\
-        }\
-\
-        (dest)[m] = av_clipl_int32(((src)[m] * 65536) + (filter * 8) +\
-                                   (1 << 15)) >> res_shift;\
-    }\
+static void formant_filter(const int16_t *fir_coef, const int16_t *iir_coef,
+                           const int16_t *src, int *dest)
+{
+    int16_t rounded_buf[LPC_ORDER + SUBFRAME_LEN];
+    int16_t *rounded = rounded_buf + LPC_ORDER;
+    int fir_sum = 0, iir_sum = 0, src_max = 0, out_max = 0;
+
+    for (int n = 1; n <= LPC_ORDER; n++) {
+        fir_sum    += FFABS(fir_coef[n - 1]);
+        iir_sum    += FFABS(iir_coef[n - 1]);
+        rounded[-n] = av_sat_add32(dest[-n], 1 << 15) >> 16;
+        out_max     = FFMAX(out_max, FFABS(rounded[-n]));
+    }
+    for (int m = -LPC_ORDER; m < SUBFRAME_LEN; m++)
+        src_max = FFMAX(src_max, FFABS(src[m]));
+
+    for (int m = 0; m < SUBFRAME_LEN; m++) {
+        int sum = src[m] * (1 << 14);
+
+        /* The reference saturates after every product, which only matters
+         * if the absolute values of the terms can add up to 32 bits. */
+        if ((int64_t)src_max * ((1 << 14) + 2 * fir_sum) +
+            (int64_t)out_max * 2 * iir_sum <= INT32_MAX) {
+            for (int n = 1; n <= LPC_ORDER; n++)
+                sum -= 2 * (fir_coef[n - 1] * src[m - n]);
+            for (int n = 1; n <= LPC_ORDER; n++)
+                sum += 2 * (iir_coef[n - 1] * rounded[m - n]);
+        } else {
+            for (int n = 1; n <= LPC_ORDER; n++)
+                sum = av_sat_dsub32(sum, fir_coef[n - 1] * src[m - n]);
+            for (int n = 1; n <= LPC_ORDER; n++)
+                sum = av_sat_dadd32(sum, iir_coef[n - 1] * rounded[m - n]);
+        }
+
+        dest[m]    = av_clipl_int32((int64_t)sum * 4);
+        rounded[m] = av_sat_add32(dest[m], 1 << 15) >> 16;
+        out_max    = FFMAX(out_max, FFABS(rounded[m]));
+    }
 }
 
 /**
@@ -671,7 +690,7 @@ static void formant_postfilter(G723_1_ChannelContext *p, int16_t *lpc,
             filter_coef[1][k] = (-lpc[k] * postfilter_tbl[1][k] +
                                  (1 << 14)) >> 15;
         }
-        iir_filter(filter_coef[0], filter_coef[1], buf + i, filter_signal + i, 1);
+        formant_filter(filter_coef[0], filter_coef[1], buf + i, filter_signal + i);
         lpc += LPC_ORDER;
     }
 
@@ -695,15 +714,21 @@ static void formant_postfilter(G723_1_ChannelContext *p, int16_t *lpc,
         /* Compute reflection coefficient */
         temp = auto_corr[1] >> 16;
         if (temp) {
-            temp = (auto_corr[0] >> 2) / temp;
+            int r1 = auto_corr[0] >> 1;
+
+            temp = FFMIN(FFABS(r1) / (2 * temp), INT16_MAX);
+            if (r1 < 0)
+                temp = -temp;
         }
         p->reflection_coef = (3 * p->reflection_coef + temp + 2) >> 2;
         temp = -p->reflection_coef >> 1 & ~3;
 
         /* Compensation filter */
         for (j = 0; j < SUBFRAME_LEN; j++) {
-            dst[j] = av_sat_dadd32(signal_ptr[j],
-                                   (signal_ptr[j - 1] >> 16) * temp) >> 16;
+            int prev = av_sat_add32(signal_ptr[j - 1], 1 << 15) >> 16;
+
+            dst[j] = av_sat_add32(av_sat_dadd32(signal_ptr[j], prev * temp),
+                                  1 << 15) >> 16;
         }
 
         /* Compute normalized signal energy */
@@ -754,7 +779,7 @@ static int estimate_sid_gain(G723_1_ChannelContext *p)
         t = (p->sid_gain < 0) ? -1 : 0;
     }else
         t = p->sid_gain >> -shift;
-    x = av_clipl_int32(t * (int64_t)cng_filt[0] >> 16);
+    x = MULL2(t, cng_filt[0]);
 
     if (x >= cng_bseg[2])
         return 0x3F;
@@ -766,14 +791,14 @@ static int estimate_sid_gain(G723_1_ChannelContext *p)
         shift = 3;
         seg   = (x >= cng_bseg[0]);
     }
-    seg2 = FFMIN(seg, 3);
+    seg2 = FFMIN(seg + 1, 3);
 
     val     = 1 << shift;
     val_add = val >> 1;
     for (i = 0; i < shift; i++) {
         t = seg * 32 + (val << seg2);
         t *= t;
-        if (x >= t)
+        if (x >= 2 * t)
             val += val_add;
         else
             val -= val_add;
@@ -781,18 +806,18 @@ static int estimate_sid_gain(G723_1_ChannelContext *p)
     }
 
     t = seg * 32 + (val << seg2);
-    y = t * t - x;
+    y = 2 * t * t - x;
     if (y <= 0) {
         t = seg * 32 + (val + 1 << seg2);
-        t = t * t - x;
+        t = x - 2 * t * t;
         val = (seg2 - 1) * 16 + val;
-        if (t >= y)
+        if (y <= t)
             val++;
     } else {
         t = seg * 32 + (val - 1 << seg2);
-        t = t * t - x;
+        t = x - 2 * t * t;
         val = (seg2 - 1) * 16 + val;
-        if (t >= y)
+        if (y >= t)
             val--;
     }
 
@@ -924,6 +949,36 @@ static void generate_noise(G723_1_ChannelContext *p)
            PITCH_MAX * sizeof(*p->excitation));
 }
 
+static void lp_synthesis_filter(int16_t *out, const int16_t *lpc,
+                                const int16_t *in)
+{
+    int lpc_sum = 0, out_max = 0;
+
+    for (int i = 0; i < LPC_ORDER; i++) {
+        lpc_sum += FFABS(lpc[i]);
+        out_max  = FFMAX(out_max, FFABS(out[-1 - i]));
+    }
+
+    for (int n = 0; n < SUBFRAME_LEN; n++) {
+        int sum = in[n] * (1 << 13);
+
+        /* As in formant_filter(): the reference saturates after every
+         * product, which only matters if the terms can add up to 32 bits. */
+        if ((int64_t)FFABS(in[n]) * (1 << 13) +
+            (int64_t)out_max * 2 * lpc_sum <= INT32_MAX) {
+            for (int i = 0; i < LPC_ORDER; i++)
+                sum -= 2 * (lpc[i] * out[n - 1 - i]);
+        } else {
+            for (int i = 0; i < LPC_ORDER; i++)
+                sum = av_sat_dsub32(sum, lpc[i] * out[n - 1 - i]);
+        }
+
+        sum     = av_clipl_int32((int64_t)sum * 4);
+        out[n]  = av_sat_add32(sum, 1 << 15) >> 16;
+        out_max = FFMAX(out_max, FFABS(out[n]));
+    }
+}
+
 static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                int *got_frame_ptr, AVPacket *avpkt)
 {
@@ -938,7 +993,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int16_t lpc[SUBFRAMES * LPC_ORDER];
     int16_t acb_vector[SUBFRAME_LEN];
     int16_t *out;
-    int bad_frame = 0, i, j, ret;
+    int i, j, ret;
 
     if (buf_size < frame_size[dec_mode] * channels) {
         if (buf_size)
@@ -956,6 +1011,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     for (int ch = 0; ch < channels; ch++) {
         G723_1_ChannelContext *p = &s->ch[ch];
         int16_t *audio = p->audio;
+        int bad_frame = 0;
 
         if (unpack_bitstream(p, buf + ch * (buf_size / channels),
                              buf_size / channels) < 0) {
@@ -1030,6 +1086,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 /* Save the excitation for the next frame */
                 memcpy(p->prev_excitation, p->excitation + FRAME_LEN,
                        PITCH_MAX * sizeof(*p->excitation));
+                memcpy(p->sid_lsp, p->prev_lsp, LPC_ORDER * sizeof(*p->sid_lsp));
             } else {
                 p->interp_gain = (p->interp_gain * 3 + 2) >> 2;
                 if (p->erased_frames == 3) {
@@ -1038,8 +1095,8 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                            (FRAME_LEN + PITCH_MAX) * sizeof(*p->excitation));
                     memset(p->prev_excitation, 0,
                            PITCH_MAX * sizeof(*p->excitation));
-                    memset(frame->data[0], 0,
-                           (FRAME_LEN + LPC_ORDER) * sizeof(int16_t));
+                    memset(p->audio + LPC_ORDER, 0,
+                           FRAME_LEN * sizeof(*p->audio));
                 } else {
                     int16_t *buf = p->audio + LPC_ORDER;
 
@@ -1048,8 +1105,12 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                     p->interp_gain, &p->random_seed);
 
                     /* Save the excitation for the next frame */
-                    memcpy(p->prev_excitation, buf + (FRAME_LEN - PITCH_MAX),
-                           PITCH_MAX * sizeof(*p->excitation));
+                    if (p->interp_index)
+                        memcpy(p->prev_excitation, buf + (FRAME_LEN - PITCH_MAX),
+                               PITCH_MAX * sizeof(*p->excitation));
+                    else
+                        memset(p->prev_excitation, 0,
+                               PITCH_MAX * sizeof(*p->excitation));
                 }
             }
             p->cng_random_seed = CNG_RANDOM_SEED;
@@ -1058,7 +1119,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 p->sid_gain = sid_gain_to_lsp_index(p->subframe[0].amp_index);
                 ff_g723_1_inverse_quant(p->sid_lsp, p->prev_lsp, p->lsp_index, 0);
             } else if (p->past_frame_type == ACTIVE_FRAME) {
-                p->sid_gain = estimate_sid_gain(p);
+                p->sid_gain = sid_gain_to_lsp_index(estimate_sid_gain(p));
             }
 
             if (p->past_frame_type == ACTIVE_FRAME)
@@ -1075,9 +1136,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
         memcpy(p->audio, p->synth_mem, LPC_ORDER * sizeof(*p->audio));
         for (i = LPC_ORDER, j = 0; j < SUBFRAMES; i += SUBFRAME_LEN, j++)
-            ff_celp_lp_synthesis_filter(p->audio + i, &lpc[j * LPC_ORDER],
-                                        audio + i, SUBFRAME_LEN, LPC_ORDER,
-                                        0, 1, 1 << 12);
+            lp_synthesis_filter(p->audio + i, &lpc[j * LPC_ORDER], audio + i);
         memcpy(p->synth_mem, p->audio + FRAME_LEN, LPC_ORDER * sizeof(*p->audio));
 
         if (s->postfilter) {
@@ -1117,6 +1176,7 @@ const FFCodec ff_g723_1_decoder = {
     .priv_data_size = sizeof(G723_1_Context),
     .init           = g723_1_decode_init,
     FF_CODEC_DECODE_CB(g723_1_decode_frame),
+    .flush          = g723_1_reset,
     .p.capabilities = AV_CODEC_CAP_DR1,
     .p.priv_class   = &g723_1dec_class,
 };

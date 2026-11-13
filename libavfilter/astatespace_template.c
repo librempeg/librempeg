@@ -88,30 +88,30 @@ static void fn(update_blocks)(fn(StateContext) *st,
     case 1:
         switch (filter_type) {
         case highshelf:
-            b[0] = F(1.0) / (F(0.5) + fn(v1)(w * w / b[2], sigma));
+            b[0] = F(2.0) / (F(1.0) + fn(v1)(w * w / b[2], sigma));
             break;
         case lowshelf:
-            b[0] = F(1.0) / (F(0.5) + fn(v1)(w * w * b[2], sigma));
+            b[0] = F(2.0) / (F(1.0) + fn(v1)(w * w * b[2], sigma));
             break;
         default:
-            b[0] = F(1.0) / (F(0.5) + fn(v1)(w * w, sigma));
+            b[0] = F(2.0) / (F(1.0) + fn(v1)(w * w, sigma));
             break;
         }
         switch (filter_type) {
         case lowpass:
-            b[1] = F(0.5) + sigma;
+            b[1] = (F(1.0) + sigma) * F(0.5);
             break;
         case highshelf:
-            b[1] = F(1.0) / (F(0.5) + fn(v1)(w * w * b[2], sigma));
+            b[1] = (F(1.0) + fn(v1)(w * w * b[2], sigma)) * F(0.5);
             break;
         case lowshelf:
-            b[1] = F(1.0) / (F(0.5) + fn(v1)(w * w / b[2], sigma));
+            b[1] = (F(1.0) + fn(v1)(w * w / b[2], sigma)) * F(0.5);
             break;
         case allpass:
-            b[1] = F(0.5) - fn(v1)(w * w, sigma);
+            b[1] = (F(1.0) - fn(v1)(w * w, sigma)) * F(0.5);
             break;
         default:
-            b[1] = w;
+            b[1] = w * F(0.5);
             break;
         }
         break;
@@ -125,10 +125,10 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
                 const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
                 b[2] = b[1];
-                b[3] = F(0.5) + v - SQRT(v + k);
+                b[3] = (F(1.0) + v - SQRT(F(2.0) * (v + k))) * F(0.5);
             }
             break;
         case lowpass:
@@ -139,10 +139,10 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
                 const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * sigma_sq / b[1];
-                b[3] = F(0.5) + sigma_sq + F(M_SQRT2) * sigma;
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = sigma_sq / b[1];
+                b[3] = (F(1.0) + sigma) * (F(1.0 + sigma)) * F(0.5);
             }
             break;
         case highpass:
@@ -153,10 +153,10 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
                 const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * w_sq / b[1];
-                b[3] = w_sq;
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = w_sq / b[1];
+                b[3] = w_sq * F(0.5);
             }
             break;
         case bandpass:
@@ -167,10 +167,10 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
                 const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(4.0) * w * zeta * sigma / b[1];
-                b[3] = F(2.0) * w * zeta * (sigma + F(M_SQRT1_2));
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = F(2.0) * w * zeta * sigma / b[1];
+                b[3] = w * zeta * (F(1.0) + sigma);
             }
             break;
         case bandreject:
@@ -181,10 +181,10 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
                 const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * (w_sq - sigma_sq) / b[1];
-                b[3] = F(0.5) + w_sq - sigma_sq;
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = (w_sq - sigma_sq) / b[1];
+                b[3] = (F(1.0) + w_sq - sigma_sq) * F(0.5);
             }
             break;
         case lowshelf:
@@ -192,15 +192,15 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype w_sq = w * w;
                 const ftype sigma_sq = sigma * sigma;
                 const ftype zeta_sq = zeta * zeta;
-                const ftype v = fn(v2)(w_sq * SQRT(b[4]), zeta_sq, sigma_sq);
-                const ftype k = fn(k2)(w_sq * SQRT(b[4]), zeta_sq, sigma_sq);
+                const ftype v = fn(v2)(w_sq * b[4], zeta_sq, sigma_sq);
+                const ftype k = fn(k2)(w_sq * b[4], zeta_sq, sigma_sq);
                 const ftype v_a = fn(v2)(w_sq / b[4], zeta_sq, sigma_sq);
                 const ftype k_a = fn(k2)(w_sq / b[4], zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * v_a / b[1];
-                b[3] = F(0.5) + v_a + SQRT(v_a + k_a);
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = v_a / b[1];
+                b[3] = (F(1.0) + v_a + SQRT(F(2.0) * (v_a + k_a))) * F(0.5);
             }
             break;
         case highshelf:
@@ -208,15 +208,15 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype w_sq = w * w;
                 const ftype sigma_sq = sigma * sigma;
                 const ftype zeta_sq = zeta * zeta;
-                const ftype v = fn(v2)(w_sq / SQRT(b[4]), zeta_sq, sigma_sq);
-                const ftype k = fn(k2)(w_sq / SQRT(b[4]), zeta_sq, sigma_sq);
+                const ftype v = fn(v2)(w_sq / b[4], zeta_sq, sigma_sq);
+                const ftype k = fn(k2)(w_sq / b[4], zeta_sq, sigma_sq);
                 const ftype v_a = fn(v2)(w_sq * b[4], zeta_sq, sigma_sq);
                 const ftype k_a = fn(k2)(w_sq * b[4], zeta_sq, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * v_a / b[1];
-                b[3] = F(0.5) + v_a + SQRT(v_a + k_a);
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = v_a / b[1];
+                b[3] = (F(1.0) + v_a + SQRT(F(2.0) * (v_a + k_a))) * F(0.5);
             }
             break;
         case equalizer:
@@ -224,15 +224,16 @@ static void fn(update_blocks)(fn(StateContext) *st,
                 const ftype w_sq = w * w;
                 const ftype sigma_sq = sigma * sigma;
                 const ftype zeta_sq = zeta * zeta;
-                const ftype v = fn(v2)(w_sq, zeta_sq / b[4], sigma_sq);
-                const ftype k = fn(k2)(w_sq, zeta_sq / b[4], sigma_sq);
-                const ftype v_a = fn(v2)(w_sq, zeta_sq * b[4], sigma_sq);
-                const ftype k_a = fn(k2)(w_sq, zeta_sq * b[4], sigma_sq);
+                const ftype v = fn(v2)(w_sq, zeta_sq, sigma_sq);
+                const ftype k = fn(k2)(w_sq, zeta_sq, sigma_sq);
+                const ftype zeta_a = zeta * b[4];
+                const ftype v_a = fn(v2)(w_sq, zeta_a * zeta_a, sigma_sq);
+                const ftype k_a = fn(k2)(w_sq, zeta_a * zeta_a, sigma_sq);
 
-                b[0] = F(1.0) / (v + SQRT(v + k) + F(0.5));
-                b[1] = SQRT(v + v);
-                b[2] = F(2.0) * v_a / b[1];
-                b[3] = F(0.5) + v_a + SQRT(v_a + k_a);
+                b[0] = F(2.0) / (F(1.0) + v + SQRT(F(2.0) * (v + k)));
+                b[1] = SQRT(v);
+                b[2] = v_a / b[1];
+                b[3] = (F(1.0) + v_a + SQRT(F(2.0) * (v_a + k_a))) * F(0.5);
             }
             break;
         }
@@ -329,7 +330,7 @@ static void fn(highpass1)(void *st, const void *input, void *output, const int l
         const ftype theta = (x - z) * b[0];
         const ftype y = theta * b[1];
 
-        z = z + theta;
+        z += theta;
 
         dst[n] = y;
     }
@@ -353,7 +354,7 @@ static void fn(lowshelf1)(void *st, const void *input, void *output, const int l
         const ftype theta = (x - z) * b[0];
         const ftype y = theta * b[1] + z;
 
-        z = z + theta;
+        z += theta;
 
         dst[n] = y * b[2];
     }
@@ -377,7 +378,7 @@ static void fn(lowpass1)(void *st, const void *input, void *output, const int le
         const ftype theta = (x - z) * b[0];
         const ftype y = theta * b[1] + z;
 
-        z = z + theta;
+        z += theta;
 
         dst[n] = y;
     }
@@ -394,6 +395,7 @@ static void fn(lowshelf2)(void *st, const void *input, void *output, const int l
     fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     const ftype *b = stc->b;
+    const ftype gain = b[4] * b[4];
     ftype *z = stc->z;
     ftype z0 = z[0];
     ftype z1 = z[1];
@@ -405,7 +407,7 @@ static void fn(lowshelf2)(void *st, const void *input, void *output, const int l
 
         z0 = z0 + theta;
         z1 = -z1 - theta * b[1];
-        dst[n] = y * b[4];
+        dst[n] = y * gain;
     }
 
     z[0] = isnormal(z0) ? z0 : F(0.0);

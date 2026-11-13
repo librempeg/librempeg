@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2015 Henrik Gramner
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -45,6 +45,24 @@ static const uint32_t pixel_mask[3] = { 0xffffffff, 0x01ff01ff, 0x03ff03ff };
         }                                          \
     } while (0)
 
+/* 0/max stripes with period 3 in both directions take the centre filter's
+ * intermediate sums to their extremes; phase covers every column offset
+ * and both polarities */
+static void fill_stripes(uint8_t *buf0, uint8_t *buf1, int width, int bit_depth, int phase)
+{
+    int max = (1 << bit_depth) - 1;
+    for (int k = 0; k < BUF_SIZE / SIZEOF_PIXEL; k++) {
+        int x = k % width, y = k / width;
+        int v = ((y % 3 == 1) ^ ("010010"[(x + phase) % 6] - '0') ^ (phase >= 6)) ? max : 0;
+        if (bit_depth == 8) {
+            buf0[k] = buf1[k] = v;
+        } else {
+            AV_WN16A(buf0 + 2 * k, v);
+            AV_WN16A(buf1 + 2 * k, v);
+        }
+    }
+}
+
 #define src0 (buf0 + 3 * 2 * 16) /* h264qpel functions read data from negative src pointer offsets */
 #define src1 (buf1 + 3 * 2 * 16)
 
@@ -56,7 +74,7 @@ void checkasm_check_h264qpel(void)
     LOCAL_ALIGNED_16(uint8_t, dst1, [BUF_SIZE]);
     H264QpelContext h;
     int op, bit_depth, i, j;
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, const uint8_t *src, ptrdiff_t stride);
+    declare_func(void, uint8_t *dst, const uint8_t *src, ptrdiff_t stride);
 
     for (op = 0; op < 2; op++) {
         qpel_mc_func (*tab)[16] = op ? h.avg_h264_qpel_pixels_tab : h.put_h264_qpel_pixels_tab;
@@ -73,6 +91,15 @@ void checkasm_check_h264qpel(void)
                         call_new(dst1, src1, size * SIZEOF_PIXEL);
                         if (memcmp(buf0, buf1, BUF_SIZE) || memcmp(dst0, dst1, BUF_SIZE))
                             fail();
+                        for (int phase = 0; phase < 12; phase++) {
+                            fill_stripes(buf0, buf1, size, bit_depth, phase);
+                            call_ref(dst0, src0, size * SIZEOF_PIXEL);
+                            call_new(dst1, src1, size * SIZEOF_PIXEL);
+                            if (memcmp(buf0, buf1, BUF_SIZE) || memcmp(dst0, dst1, BUF_SIZE)) {
+                                fail();
+                                break;
+                            }
+                        }
                         bench_new(dst1, src1, size * SIZEOF_PIXEL);
                     }
             }

@@ -36,6 +36,7 @@
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
+#include "libavutil/pixdesc.h"
 #include "libavutil/reverse.h"
 #include "libavutil/stereo3d.h"
 #include "libavutil/timecode.h"
@@ -1078,6 +1079,19 @@ static void mpeg_decode_sequence_display_extension(Mpeg1Context *const s1,
         s->avctx->color_primaries = get_bits(gb, 8);
         s->avctx->color_trc       = get_bits(gb, 8);
         s->avctx->colorspace      = get_bits(gb, 8);
+
+        // Reserved and unassigned values carry no colour information
+        if (s->avctx->color_primaries == AVCOL_PRI_RESERVED0 ||
+            s->avctx->color_primaries == AVCOL_PRI_RESERVED  ||
+            !av_color_primaries_name(s->avctx->color_primaries))
+            s->avctx->color_primaries = AVCOL_PRI_UNSPECIFIED;
+        if (s->avctx->color_trc == AVCOL_TRC_RESERVED0 ||
+            s->avctx->color_trc == AVCOL_TRC_RESERVED  ||
+            !av_color_transfer_name(s->avctx->color_trc))
+            s->avctx->color_trc = AVCOL_TRC_UNSPECIFIED;
+        if (s->avctx->colorspace == AVCOL_SPC_RESERVED ||
+            !av_color_space_name(s->avctx->colorspace))
+            s->avctx->colorspace = AVCOL_SPC_UNSPECIFIED;
     }
     w = get_bits(gb, 14);
     skip_bits(gb, 1); // marker
@@ -2293,6 +2307,8 @@ static int decode_chunks(AVCodecContext *avctx, AVFrame *picture,
                 av_log(avctx, AV_LOG_WARNING, "ignoring picture start code in AVmp extradata\n");
                 break;
             }
+            if (buf == avctx->extradata)
+                return AVERROR_INVALIDDATA;
 
             if (s2->width <= 0 || s2->height <= 0) {
                 av_log(avctx, AV_LOG_ERROR, "Invalid frame dimensions %dx%d.\n",

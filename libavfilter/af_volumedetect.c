@@ -18,23 +18,47 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/avassert.h"
 #include "libavutil/ffmath.h"
 #include "libavutil/mem.h"
+#include "libavutil/opt.h"
 #include "audio.h"
 #include "avfilter.h"
 
 #define HISTOGRAM_SIZE 32769
 
 typedef struct VolDetectContext {
+    const AVClass *class;
+
     uint64_t histogram[HISTOGRAM_SIZE];
     float max;
     double sum2;
+    int eof;
+    int print_done;
+    int64_t eof_pts;
+
+    double max_volume;
+    double mean_volume;
 
     void (*update_histogram)(AVFilterContext *ctx, const AVFrame *in);
     void (*print_stats)(AVFilterContext *ctx);
 } VolDetectContext;
+
+#define OFFSET(x) offsetof(VolDetectContext, x)
+#define A AV_OPT_FLAG_AUDIO_PARAM
+#define FP AV_OPT_FLAG_FILTERING_PARAM
+#define X AV_OPT_FLAG_EXPORT
+#define R AV_OPT_FLAG_READONLY
+static const AVOption volumedetect_options[] = {
+    { "max_volume", "max volume (dB)", OFFSET(max_volume), AV_OPT_TYPE_DOUBLE, {.dbl = 0}, -DBL_MAX, DBL_MAX, A|FP|X|R },
+    { "mean_volume", "mean_volume (dB)", OFFSET(mean_volume), AV_OPT_TYPE_DOUBLE, {.dbl = 0}, -DBL_MAX, DBL_MAX, A|FP|X|R },
+    { NULL },
+};
+
+AVFILTER_DEFINE_CLASS(volumedetect);
 
 #define DEPTH 16
 #define PLANAR 0
@@ -139,21 +163,49 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static av_cold void uninit(AVFilterContext *ctx)
+static int activate(AVFilterContext *ctx)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
     VolDetectContext *s = ctx->priv;
+    AVFrame *in = NULL;
+    int ret, status;
 
-    if (s->print_stats)
-        s->print_stats(ctx);
+    ret = ff_outlink_get_status(outlink);
+    if (ret) {
+        ff_inlink_set_status(inlink, ret);
+
+        if (s->print_stats)
+            s->print_stats(ctx);
+
+        return 0;
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &s->eof_pts)) {
+        if (status == AVERROR_EOF)
+            s->eof = 1;
+    }
+
+    ret = ff_inlink_consume_frame(inlink, &in);
+    if (ret < 0)
+        return ret;
+    if (ret > 0)
+        return filter_frame(inlink, in);
+
+    if (s->eof) {
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
+
+        if (s->print_stats)
+            s->print_stats(ctx);
+
+        return 0;
+    }
+
+    if (!s->eof)
+        FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
-
-static const AVFilterPad volumedetect_inputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = filter_frame,
-    },
-};
 
 static const AVFilterPad volumedetect_outputs[] = {
     {
@@ -166,11 +218,12 @@ static const AVFilterPad volumedetect_outputs[] = {
 const FFFilter ff_af_volumedetect = {
     .p.name        = "volumedetect",
     .p.description = NULL_IF_CONFIG_SMALL("Detect audio volume."),
+    .p.priv_class  = &volumedetect_class,
     .priv_size     = sizeof(VolDetectContext),
-    .uninit        = uninit,
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
-    FILTER_INPUTS(volumedetect_inputs),
+    .activate      = activate,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(volumedetect_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16,
                       AV_SAMPLE_FMT_S16P,

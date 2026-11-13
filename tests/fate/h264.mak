@@ -193,6 +193,10 @@ FATE_H264_REINIT_TESTS := large_420_8-to-small_420_8                    \
                           small_422_9-to-small_420_9                    \
 
 FATE_H264  := $(FATE_H264:%=fate-h264-conformance-%)                    \
+              fate-h264-data-partitioning                               \
+              fate-h264-data-partitioning-ab                            \
+              fate-h264-data-partitioning-cip                           \
+              fate-h264-data-partitioning-cip-strict                    \
               fate-h264-intra-refresh-recovery                          \
               fate-h264-lossless                                        \
               fate-h264-3386                                            \
@@ -202,7 +206,8 @@ FATE_H264  := $(FATE_H264:%=fate-h264-conformance-%)                    \
 
 FATE_H264-$(call FRAMECRC, H264, H264, H264_PARSER SCALE_FILTER) += $(FATE_H264_REINIT_TESTS:%=fate-h264-reinit-%)
 FATE_H264-$(call FRAMECRC, H264, H264, H264_PARSER) += $(FATE_H264)
-FATE_H264-$(call FRAMEMD5, H264, H264, H264_PARSER) += fate-h264-extreme-plane-pred
+FATE_H264-$(call FRAMEMD5, H264, H264, H264_PARSER) += fate-h264-extreme-plane-pred \
+                                                  fate-h264-sps-reorder-transition
 FATE_H264-$(call FRAMEMD5, MOV,  H264) += fate-h264-crop-to-container
 FATE_H264-$(call DEMDEC,   H264, H264, H264_PARSER)   += fate-h264-encparams
 
@@ -242,10 +247,10 @@ FATE_H264-$(call REMUX, NUT, MOV_DEMUXER H264_REDUNDANT_PPS_BSF H264_DECODER SCA
 
 FATE_H264-$(call FRAMECRC, MATROSKA, H264) += fate-h264-direct-bff
 FATE_H264-$(call FRAMECRC, FLV, H264, SCALE_FILTER) += fate-h264-brokensps-2580
-FATE_H264-$(call FRAMECRC, MXF, H264, PCM_S24LE_DECODER SCALE_FILTER ARESAMPLE_FILTER) += fate-h264-xavc-4389
+FATE_H264-$(call FRAMECRC, MXF, H264, PCM_S24LE_DECODER SCALE_FILTER ASF2SF_FILTER) += fate-h264-xavc-4389
 FATE_H264-$(call FRAMECRC, MOV, H264) += fate-h264-attachment-631
-FATE_H264-$(call FRAMECRC, MPEGTS, H264, H264_PARSER MP3_DECODER SCALE_FILTER ARESAMPLE_FILTER) += fate-h264-skip-nokey
-FATE_H264-$(call FRAMECRC, MPEGTS, H264, H264_PARSER MP3_DECODER SCALE_FILTER ARESAMPLE_FILTER EXTRACT_EXTRADATA_BSF) += fate-h264-skip-nointra
+FATE_H264-$(call FRAMECRC, MPEGTS, H264, H264_PARSER MP3_DECODER SCALE_FILTER ASF2SF_FILTER) += fate-h264-skip-nokey
+FATE_H264-$(call FRAMECRC, MPEGTS, H264, H264_PARSER MP3_DECODER SCALE_FILTER ASF2SF_FILTER EXTRACT_EXTRADATA_BSF) += fate-h264-skip-nointra
 FATE_H264_FFPROBE-$(call DEMDEC, MATROSKA, H264) += fate-h264-dts_5frames
 FATE_H264_FFPROBE-$(call PARSERDEMDEC, H264, H264, H264) += fate-h264-afd
 
@@ -461,14 +466,23 @@ fate-h264-extradata-reload:                       CMD = framemd5 -i $(TARGET_SAM
 fate-h264-extreme-plane-pred:                     CMD = framemd5 -i $(TARGET_SAMPLES)/h264/extreme-plane-pred.h264
 fate-h264-interlace-crop:                         CMD = framecrc -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -frames:v 3
 fate-h264-brokensps-2580:                         CMD = framecrc -i $(TARGET_SAMPLES)/h264/brokensps.flv -vf format=yuv420p,scale=w=192:h=144 -sws_flags bitexact+bilinear
-fate-h264-xavc-4389:                              CMD = framecrc -i $(TARGET_SAMPLES)/h264/SonyXAVC_LongGOP_green_pixelation_early_Frames.MXF -pix_fmt yuv422p10le -vf scale -af aresample
+fate-h264-xavc-4389:                              CMD = framecrc -i $(TARGET_SAMPLES)/h264/SonyXAVC_LongGOP_green_pixelation_early_Frames.MXF -pix_fmt yuv422p10le -vf scale -af asf2sf
 fate-h264-attachment-631:                         CMD = framecrc -i $(TARGET_SAMPLES)/h264/attachment631-small.mp4 -an -max_error_rate 0.96
-fate-h264-skip-nokey:                             CMD = framecrc -skip_frame nokey -i $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts -vf scale -af aresample
-fate-h264-skip-nointra:                           CMD = framecrc -skip_frame nointra -i $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts -vf scale -af aresample
+fate-h264-skip-nokey:                             CMD = framecrc -skip_frame nokey -i $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts -vf scale -af asf2sf
+fate-h264-skip-nointra:                           CMD = framecrc -skip_frame nointra -i $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts -vf scale -af asf2sf
+# slice data partitioning: A+B+C, and with partition C legitimately absent
+fate-h264-data-partitioning:                      CMD = framecrc -i $(TARGET_SAMPLES)/h264/data_partitioning.h264
+fate-h264-data-partitioning-ab:                   CMD = framecrc -i $(TARGET_SAMPLES)/h264/data_partitioning_ab.h264
+# constrained_intra_pred_flag=1, which changes the nC derivation (9.2.1)
+fate-h264-data-partitioning-cip:                  CMD = framecrc -bug h264_dp_nnz -i $(TARGET_SAMPLES)/h264/data_partitioning_cip.h264
+# same stream read the way 9.2.1 is written instead of the way JM does it; that
+# desynchronises the residual, so pin the threads to keep concealment stable
+fate-h264-data-partitioning-cip-strict:           CMD = threads=1 framecrc -bug 0 -i $(TARGET_SAMPLES)/h264/data_partitioning_cip.h264
 fate-h264-intra-refresh-recovery:                 CMD = framecrc -i $(TARGET_SAMPLES)/h264/intra_refresh.h264 -frames:v 10
 fate-h264-invalid-ref-mod:                        CMD = framecrc -i $(TARGET_SAMPLES)/h264/h264refframeregression.mp4 -an -frames 10 -pix_fmt yuv420p10le -vf scale
 fate-h264-lossless:                               CMD = framecrc -i $(TARGET_SAMPLES)/h264/lossless.h264
 fate-h264-mixed-nal-coding:                       CMD = framecrc -i $(TARGET_SAMPLES)/h264/mixed-nal-coding.mp4
+fate-h264-sps-reorder-transition:                 CMD = framemd5 -strict strict -i $(TARGET_SAMPLES)/h264/sps-reorder-transition.h264
 fate-h264-ref-pic-mod-overflow:                   CMD = framecrc -i $(TARGET_SAMPLES)/h264/ref-pic-mod-overflow.h264
 fate-h264-twofields-packet:                       CMD = framecrc -i $(TARGET_SAMPLES)/h264/twofields_packet.mp4 -an -frames 30
 fate-h264-unescaped-extradata:                    CMD = framecrc -i $(TARGET_SAMPLES)/h264/unescaped_extradata.mp4 -an -frames 10
@@ -497,3 +511,8 @@ fate-h264-bsf-redundant-pps-side-data2: CMD = transcode mov $(TARGET_SAMPLES)/h2
 
 fate-h264-encparams: CMD = venc_data $(TARGET_SAMPLES)/h264-conformance/FRext/FRExt_MMCO4_Sony_B.264 0 1
 FATE_SAMPLES_DUMP_DATA += fate-h264-encparams
+
+# Progressive-source fields must not acquire an interlaced stream label.
+fate-h264-twofields-packet-probe: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -bitexact -v 0 -select_streams v \
+                                          -show_entries stream=field_order,avg_frame_rate \
+                                          $(TARGET_SAMPLES)/h264/twofields_packet.mp4

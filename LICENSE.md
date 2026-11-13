@@ -20,7 +20,6 @@ Specifically, the GPL parts of Librempeg are:
     - `compat/solaris/make_sunver.pl`
     - `doc/t2h.pm`
     - `doc/texi2pod.pl`
-    - `libswresample/tests/swresample.c`
     - `tests/checkasm/*`
     - `tests/tiny_ssim.c`
 - the following filters in libavfilter:
@@ -28,17 +27,14 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_blackframe.c`
     - `vf_boxblur.c`
     - `vf_colormatrix.c`
-    - `vf_cover_rect.c`
     - `vf_cropdetect.c`
     - `vf_delogo.c`
     - `vf_eq.c`
-    - `vf_find_rect.c`
     - `vf_fspp.c`
     - `vf_histeq.c`
     - `vf_hqdn3d.c`
     - `vf_kerndeint.c`
     - `vf_lensfun.c` (GPL version 3 or later)
-    - `vf_mcdeint.c`
     - `vf_mpdecimate.c`
     - `vf_nnedi.c`
     - `vf_owdenoise.c`
@@ -51,11 +47,9 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_sab.c`
     - `vf_signature.c`
     - `vf_smartblur.c`
-    - `vf_spp.c`
     - `vf_stereo3d.c`
     - `vf_super2xsai.c`
     - `vf_tinterlace.c`
-    - `vf_uspp.c`
     - `vf_vaguedenoiser.c`
     - `vsrc_mptestsrc.c`
 

@@ -27,16 +27,25 @@
 #include "audio.h"
 #include "filters.h"
 
+#define MAX_K 36
 #define MAX_NB_COEFFS 16
 
 typedef struct AFreqShift {
     const AVClass *class;
 
+    double tau;
+    double hyst;
+    double release;
     double shift;
     double old_shift;
     double level;
     int nb_coeffs;
     int old_nb_coeffs;
+
+    double ckd[MAX_K];
+    double skd[MAX_K];
+    float ckf[MAX_K];
+    float skf[MAX_K];
 
     double cd[MAX_NB_COEFFS * 2];
     float cf[MAX_NB_COEFFS * 2];
@@ -189,14 +198,18 @@ static int config_input(AVFilterLink *inlink)
         s->init_state = init_state_dblp;
         if (!strcmp(ctx->filter->name, "afreqshift"))
             s->filter_channel = ffilter_channel_dblp;
-        else
+        else if (!strcmp(ctx->filter->name, "aphaseshift"))
             s->filter_channel = pfilter_channel_dblp;
+        else
+            s->filter_channel = rfilter_channel_dblp;
     } else {
         s->init_state = init_state_fltp;
         if (!strcmp(ctx->filter->name, "afreqshift"))
             s->filter_channel = ffilter_channel_fltp;
-        else
+        else if (!strcmp(ctx->filter->name, "aphaseshift"))
             s->filter_channel = pfilter_channel_fltp;
+        else
+            s->filter_channel = rfilter_channel_fltp;
     }
 
     ret = s->init_state(ctx, inlink->ch_layout.nb_channels);
@@ -315,6 +328,31 @@ const FFFilter ff_af_aphaseshift = {
     .p.name          = "aphaseshift",
     .p.description   = NULL_IF_CONFIG_SMALL("Apply phase shifting to input audio."),
     .p.priv_class    = &aphaseshift_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                       AVFILTER_FLAG_SLICE_THREADS,
+    .priv_size       = sizeof(AFreqShift),
+    .uninit          = uninit,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_SAMPLEFMTS_ARRAY(sample_fmts),
+    .process_command = ff_filter_process_command,
+};
+
+static const AVOption aphaserotate_options[] = {
+    { "hyst", "set peak ratio", OFFSET(hyst), AV_OPT_TYPE_DOUBLE, {.dbl=0.99}, 0.0, 1.0, FLAGS },
+    { "tau", "set angle glide time", OFFSET(tau), AV_OPT_TYPE_DOUBLE, {.dbl=0.5}, 0.0, 1.0, FLAGS },
+    { "release", "set peak follower release", OFFSET(release), AV_OPT_TYPE_DOUBLE, {.dbl=0.3}, 0.0, 1.0, FLAGS },
+    { "level", "set output level",OFFSET(level), AV_OPT_TYPE_DOUBLE, {.dbl=1},  0.0, 1.0, FLAGS },
+    { "order", "set filter order",OFFSET(nb_coeffs), AV_OPT_TYPE_INT,{.i64=8},    1, MAX_NB_COEFFS, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(aphaserotate);
+
+const FFFilter ff_af_aphaserotate = {
+    .p.name          = "aphaserotate",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply phase rotation to input audio."),
+    .p.priv_class    = &aphaserotate_class,
     .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                        AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AFreqShift),

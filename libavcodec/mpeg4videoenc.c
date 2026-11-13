@@ -626,8 +626,6 @@ static void mpeg4_encode_mb(MPVEncContext *const s, int16_t block[][64],
                             break;
 
                         b_pic = pic->f->data[0] + offset;
-                        if (!pic->shared)
-                            b_pic += INPLACE_OFFSET;
 
                         if (x + 16 > s->c.width || y + 16 > s->c.height) {
                             int x1, y1;
@@ -863,10 +861,9 @@ static void mpeg4_encode_gop_header(MPVMainEncContext *const m)
     time = s->c.cur_pic.ptr->f->pts;
     if (m->reordered_input_picture[1])
         time = FFMIN(time, m->reordered_input_picture[1]->f->pts);
-    time = time * s->c.avctx->time_base.num;
-    s->c.last_time_base = FFUDIV(time, s->c.avctx->time_base.den);
+    seconds = av_rescale_rnd(time, s->c.avctx->time_base.num, s->c.avctx->time_base.den, AV_ROUND_DOWN);
+    s->c.last_time_base = seconds;
 
-    seconds = FFUDIV(time, s->c.avctx->time_base.den);
     minutes = FFUDIV(seconds, 60); seconds = FFUMOD(seconds, 60);
     hours   = FFUDIV(minutes, 60); minutes = FFUMOD(minutes, 60);
     hours   = FFUMOD(hours  , 24);
@@ -1367,6 +1364,7 @@ const FFCodec ff_mpeg4_encoder = {
     FF_CODEC_ENCODE_CB(ff_mpv_encode_picture),
     .close          = ff_mpv_encode_end,
     CODEC_PIXFMTS(AV_PIX_FMT_YUV420P),
+    CODEC_CHROMA_LOCS(AVCHROMA_LOC_LEFT),
     .color_ranges   = AVCOL_RANGE_MPEG,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
                       AV_CODEC_CAP_SLICE_THREADS |

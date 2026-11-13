@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2024 Zhao Zhili
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef AVCODEC_AARCH64_H26X_DSP_H
@@ -32,15 +32,25 @@ void ff_h26x_sao_band_filter_16x16_8_neon(uint8_t *_dst, const uint8_t *_src,
                                         ptrdiff_t stride_dst, ptrdiff_t stride_src,
                                         const int16_t *sao_offset_val, int sao_left_class,
                                         int width, int height);
-void ff_hevc_sao_edge_filter_16x16_8_neon(uint8_t *dst, const uint8_t *src, ptrdiff_t stride_dst,
-                                          const int16_t *sao_offset_val, int eo, int width, int height);
-void ff_hevc_sao_edge_filter_8x8_8_neon(uint8_t *dst, const uint8_t *src, ptrdiff_t stride_dst,
-                                        const int16_t *sao_offset_val, int eo, int width, int height);
+#define SAO_EDGE_FILTER_PROTO(codec, size, depth)                          \
+    void ff_##codec##_sao_edge_filter_##size##_##depth##_neon(             \
+        uint8_t *dst, const uint8_t *src, ptrdiff_t stride_dst,            \
+        const int16_t *sao_offset_val, int eo, int width, int height)
 
-void ff_vvc_sao_edge_filter_16x16_8_neon(uint8_t *dst, const uint8_t *src, ptrdiff_t stride_dst,
-                                         const int16_t *sao_offset_val, int eo, int width, int height);
-void ff_vvc_sao_edge_filter_8x8_8_neon(uint8_t *dst, const uint8_t *src, ptrdiff_t stride_dst,
-                                       const int16_t *sao_offset_val, int eo, int width, int height);
+SAO_EDGE_FILTER_PROTO(hevc, 16x16, 8);
+SAO_EDGE_FILTER_PROTO(hevc, 8x8,   8);
+SAO_EDGE_FILTER_PROTO(hevc, 16x16, 10);
+SAO_EDGE_FILTER_PROTO(hevc, 8x8,   10);
+SAO_EDGE_FILTER_PROTO(hevc, 16x16, 12);
+SAO_EDGE_FILTER_PROTO(hevc, 8x8,   12);
+SAO_EDGE_FILTER_PROTO(vvc,  16x16, 8);
+SAO_EDGE_FILTER_PROTO(vvc,  8x8,   8);
+SAO_EDGE_FILTER_PROTO(vvc,  16x16, 10);
+SAO_EDGE_FILTER_PROTO(vvc,  8x8,   10);
+SAO_EDGE_FILTER_PROTO(vvc,  16x16, 12);
+SAO_EDGE_FILTER_PROTO(vvc,  8x8,   12);
+
+#undef SAO_EDGE_FILTER_PROTO
 
 #define NEON8_FNPROTO_PARTIAL_6(fn, args, ext) \
     void ff_hevc_put_hevc_##fn##_h4_8_neon##ext args;  \

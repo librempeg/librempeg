@@ -41,7 +41,7 @@ static inline uint16_t nibble_mask(SwsCompMask mask)
 
 /**
  * SwsAArch64OpImplParams describes the parameters for an SwsUOpType
- * operation. It consists of simplified parameters from the SwsOp structure,
+ * operation. It consists of simplified parameters from the SwsUOp structure,
  * with the purpose of being straight-forward to implement and execute.
  */
 typedef struct SwsAArch64OpImplParams {
@@ -63,14 +63,49 @@ typedef struct SwsAArch64OpImplParams {
 #define LOOP_MASK(p, idx) LOOP(p->mask, idx)
 #define LOOP_MASK_BWD(p, idx) LOOP_BWD(p->mask, idx)
 
+/* Number of elements in each linear coefficient vector register. */
+static inline int linear_vreg_nelems(SwsPixelType type)
+{
+    return 16 / ff_sws_pixel_type_size(type);
+}
+
 /* Compute number of vector registers needed to store all coefficients. */
 static inline int linear_num_vregs(const SwsAArch64OpImplParams *params)
 {
     int count = 0;
-    for (int i = 0; i < 4 * 5; i++)
-        if (!(params->par.lin.zero & (1ULL << i)))
-            count++;
-    return (count + 3) / 4;
+    LOOP_MASK(params, i) {
+        for (int j = 0; j < 5; j++)
+            if (!(params->par.lin.zero & SWS_MASK(i, j)))
+                count++;
+    }
+    const int nelems = linear_vreg_nelems(params->type);
+    return (count + nelems - 1) / nelems;
+}
+
+/**
+ * Number of bytes of private data consumed by each kernel; must match what
+ * aarch64_setup() packs.
+ */
+static inline int aarch64_priv_size(const SwsAArch64OpImplParams *params)
+{
+    switch (params->uop) {
+    case SWS_UOP_READ_BIT:
+    case SWS_UOP_WRITE_BIT:
+    case SWS_UOP_CLEAR:
+    case SWS_UOP_ADD:
+    case SWS_UOP_MIN:
+    case SWS_UOP_MAX:
+        return 16; /* one full vector register */
+    case SWS_UOP_SCALE:
+        return ff_sws_pixel_type_size(params->type);
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
+        return 16 * linear_num_vregs(params); /* packed coefficients */
+    case SWS_UOP_DITHER:
+        return 8; /* pointer */
+    default:
+        return 0;
+    }
 }
 
 /**
@@ -82,8 +117,8 @@ static inline int linear_num_vregs(const SwsAArch64OpImplParams *params)
 #define offsetof_exec_out       32
 #define offsetof_exec_in_bump  128
 #define offsetof_exec_out_bump 160
-#define offsetof_impl_cont       0
-#define offsetof_impl_priv      16
-#define sizeof_impl             32
+#define offsetof_impl_func       0
+#define offsetof_impl_priv       8
+#define alignof_impl             8
 
 #endif /* SWSCALE_AARCH64_OPS_IMPL_H */

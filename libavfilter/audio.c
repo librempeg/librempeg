@@ -24,11 +24,11 @@
 #include "libavutil/common.h"
 #include "libavutil/cpu.h"
 #include "libavutil/eval.h"
+#include "libavutil/framepool.h"
 
 #include "audio.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "framepool.h"
 
 const AVFilterPad ff_audio_default_filterpad[1] = {
     {
@@ -62,7 +62,7 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
         graphi = NULL;
     }
 
-    frame = ff_frame_pool_get(&li->frame_pool, graphi);
+    frame = ff_frame_pool_get(&li->frame_pool, graphi->fifo_empty_frames, &graphi->fifo_lock);
     if (!frame)
         return NULL;
 

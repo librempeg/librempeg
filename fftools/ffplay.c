@@ -42,12 +42,12 @@
 #include "libavutil/samplefmt.h"
 #include "libavutil/time.h"
 #include "libavutil/bprint.h"
+#include "libavcodec/bsf.h"
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
-#include "libswresample/swresample.h"
 
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
@@ -179,6 +179,24 @@ typedef struct FrameQueue {
     PacketQueue *pktq;
 } FrameQueue;
 
+typedef struct StreamGroup {
+    AVStreamGroup *stg;
+    AVBitStreamFilterGraph *graph;
+    AVBitStreamFilterContext *sink;
+} StreamGroup;
+
+typedef struct Stream {
+    StreamGroup *group;
+    AVBitStreamFilterContext *filter;
+} Stream;
+
+typedef struct FormatContext {
+    Stream **streams;
+    int nb_streams;
+    StreamGroup **stream_groups;
+    int nb_stream_groups;
+} FormatContext;
+
 enum {
     AV_SYNC_AUDIO_MASTER, /* default choice */
     AV_SYNC_VIDEO_MASTER,
@@ -252,12 +270,11 @@ typedef struct VideoState {
     struct AudioParams audio_src;
     struct AudioParams audio_filter_src;
     struct AudioParams audio_tgt;
-    struct SwrContext *swr_ctx;
     int frame_drops_early;
     int frame_drops_late;
 
     enum ShowMode {
-        SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_NB
+        SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_PHASE, SHOW_MODE_NB
     } show_mode;
     int16_t sample_array[SAMPLE_ARRAY_SIZE];
     int sample_array_index;
@@ -361,6 +378,10 @@ static int is_full_screen;
 static int64_t audio_callback_time;
 
 #define FF_QUIT_EVENT    (SDL_USEREVENT + 2)
+
+static volatile sig_atomic_t received_sigterm = 0;
+static volatile int received_nb_signals = 0;
+static int exit_status = 0;
 
 static SDL_Window *window;
 static SDL_Renderer *renderer;
@@ -576,6 +597,7 @@ static int decoder_init(Decoder *d, AVCodecContext *avctx, PacketQueue *queue, S
     d->empty_queue_cond = empty_queue_cond;
     d->start_pts = AV_NOPTS_VALUE;
     d->pkt_serial = -1;
+    packet_queue_start(d->queue);
     return 0;
 }
 
@@ -1099,6 +1121,26 @@ static inline int compute_mod(int a, int b)
     return a < 0 ? a%b + b : a%b;
 }
 
+static inline AVComplexFloat get_bin(const AVComplexFloat *data, const int y)
+{
+    AVComplexFloat num, den, ret;
+    float beta;
+
+    num.re = 2.f * data[y].re;
+    num.im = 2.f * data[y].im;
+
+    den.re = data[y-1].re + data[y+1].re;
+    den.im = data[y-1].im + data[y+1].im;
+
+    beta = 0.5f * av_clipf((num.re * den.re + num.im * den.im) /
+                           (den.re * den.re + den.im * den.im + FLT_EPSILON), 0.f, 1.f);
+
+    ret.re = data[y].re - beta * den.re;
+    ret.im = data[y].im - beta * den.im;
+
+    return ret;
+}
+
 static void video_audio_display(VideoState *s)
 {
     int i, i_start, x, y1, y, ys, delay, n, nb_display_channels;
@@ -1215,31 +1257,42 @@ static void video_audio_display(VideoState *s)
                 data_in[ch] = s->real_data + 2 * nb_freq * ch;
                 data[ch] = s->rdft_data + nb_freq * ch;
                 i = i_start + ch;
+                int16_t *sample_array = s->sample_array;
                 for (x = 0; x < 2 * nb_freq; x++) {
-                    double w = (x-nb_freq) * (1.0 / nb_freq);
-                    data_in[ch][x] = s->sample_array[i] * (1.0 - w * w);
+                    data_in[ch][x] = sample_array[i];
                     i += channels;
                     if (i >= SAMPLE_ARRAY_SIZE)
                         i -= SAMPLE_ARRAY_SIZE;
                 }
                 s->rdft_fn(s->rdft, data[ch], data_in[ch], sizeof(float));
-                data[ch][0].im = data[ch][nb_freq].re;
-                data[ch][nb_freq].re = 0;
             }
             /* Least efficient way to do this, we should of course
              * directly access it but it is more than fast enough. */
             if (!SDL_LockTexture(s->vis_texture, &rect, (void **)&pixels, &pitch)) {
+                int show_phase = s->show_mode == SHOW_MODE_PHASE && nb_display_channels == 2;
                 pitch >>= 2;
                 pixels += pitch * s->height;
-                for (y = 0; y < s->height; y++) {
-                    double w = 1 / sqrt(nb_freq);
-                    int a = sqrt(w * sqrt(data[0][y].re * data[0][y].re + data[0][y].im * data[0][y].im));
-                    int b = (nb_display_channels == 2 ) ? sqrt(w * hypot(data[1][y].re, data[1][y].im))
-                                                        : a;
+                for (y = 1; y < s->height-1; y++) {
+                    AVComplexFloat aa = get_bin(data[0], y);
+                    AVComplexFloat bb = (nb_display_channels == 2) ? get_bin(data[1], y) : aa;
+
+                    int a = 0.2f*sqrtf(hypotf(aa.re, aa.im));
+                    int b = 0.2f*sqrtf(hypotf(bb.re, bb.im));
+
                     a = FFMIN(a, 255);
                     b = FFMIN(b, 255);
+                    int blue = (a+b) >> 1;
+                    if (show_phase) {
+                        /* phase(left) - phase(right) in units of pi */
+                        float phase = atan2f(aa.im * bb.re - aa.re * bb.im,
+                                             aa.re * bb.re + aa.im * bb.im) / M_PIf;
+                        int phase_shift = lrintf(phase * FFMIN(a, b));
+                        a    = FFMIN(a    - phase_shift / 2, 255);
+                        b    = FFMIN(b    - phase_shift / 2, 255);
+                        blue = FFMIN(blue + phase_shift,     255);
+                    }
                     pixels -= pitch;
-                    *pixels = (a << 16) + (b << 8) + ((a+b) >> 1);
+                    *pixels = (a << 16) + (b << 8) + blue;
                 }
                 SDL_UnlockTexture(s->vis_texture);
             }
@@ -1250,21 +1303,48 @@ static void video_audio_display(VideoState *s)
     }
 }
 
+static void uninit_bsf_graph(AVFormatContext *ic, int stream_index)
+{
+    FormatContext *ici = ic->opaque;
+    Stream *sti;
+    StreamGroup *stgi;
+
+    if (stream_index >= ici->nb_streams)
+        return;
+
+    sti = ici->streams[stream_index];
+    sti->filter = NULL;
+
+    stgi = sti->group;
+    if (stgi) {
+        av_bsf_graph_free(&stgi->graph);
+        stgi->sink = NULL;
+
+        for (int i = 0; i < stgi->stg->nb_entries; i++) {
+            ici->streams[stgi->stg->entries[i]->stream->index]->filter = NULL;
+            ici->streams[stgi->stg->entries[i]->stream->index]->group = NULL;
+        }
+    }
+    sti->group = stgi;
+}
+
 static void stream_component_close(VideoState *is, int stream_index)
 {
     AVFormatContext *ic = is->ic;
+
     AVCodecParameters *codecpar;
 
     if (stream_index < 0 || stream_index >= ic->nb_streams)
         return;
     codecpar = ic->streams[stream_index]->codecpar;
 
+    uninit_bsf_graph(ic, stream_index);
+
     switch (codecpar->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
         decoder_abort(&is->auddec, &is->sampq);
         SDL_CloseAudioDevice(audio_dev);
         decoder_destroy(&is->auddec);
-        swr_free(&is->swr_ctx);
         av_freep(&is->audio_buf1);
         is->audio_buf1_size = 0;
         is->audio_buf = NULL;
@@ -1322,6 +1402,17 @@ static void stream_close(VideoState *is)
     if (is->subtitle_stream >= 0)
         stream_component_close(is, is->subtitle_stream);
 
+    if (is->ic) {
+        FormatContext *ici = is->ic->opaque;
+        for (int i = 0; i < ici->nb_streams; i++)
+            av_freep(&ici->streams[i]);
+        av_freep(&ici->streams);
+        for (int i = 0; i < ici->nb_stream_groups; i++)
+            av_freep(&ici->stream_groups[i]);
+        av_freep(&ici->stream_groups);
+        av_freep(&is->ic->opaque);
+    }
+
     avformat_close_input(&is->ic);
 
     packet_queue_destroy(&is->videoq);
@@ -1368,12 +1459,14 @@ static void do_exit(VideoState *is)
         printf("\n");
     SDL_Quit();
     av_log(NULL, AV_LOG_QUIET, "%s", "");
-    exit(0);
+    exit(exit_status);
 }
 
 static void sigterm_handler(int sig)
 {
-    exit(123);
+    received_sigterm = sig;
+    if (++received_nb_signals > 3)
+        exit(123);
 }
 
 static void set_default_window_size(int width, int height, AVRational sar)
@@ -1979,7 +2072,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
                                 AV_OPT_TYPE_INT, sdl_supported_color_spaces)) < 0)
         goto fail;
 
-    if ((ret = av_opt_set_array(filt_out, "alphamodes", AV_OPT_SEARCH_CHILDREN,
+    if ((ret = av_opt_set_array(filt_out, "alpha_modes", AV_OPT_SEARCH_CHILDREN,
                                 0, FF_ARRAY_ELEMS(sdl_supported_alpha_modes),
                                 AV_OPT_TYPE_INT, sdl_supported_alpha_modes)) < 0)
         goto fail;
@@ -2056,8 +2149,6 @@ fail:
 static int configure_audio_filters(VideoState *is, const char *afilters, int force_output_format)
 {
     AVFilterContext *filt_asrc = NULL, *filt_asink = NULL;
-    char aresample_swr_opts[512] = "";
-    const AVDictionaryEntry *e = NULL;
     AVBPrint bp;
     char asrc_args[256];
     int ret;
@@ -2068,12 +2159,6 @@ static int configure_audio_filters(VideoState *is, const char *afilters, int for
     is->agraph->nb_threads = filter_nbthreads;
 
     av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
-
-    while ((e = av_dict_iterate(swr_opts, e)))
-        av_strlcatf(aresample_swr_opts, sizeof(aresample_swr_opts), "%s=%s:", e->key, e->value);
-    if (strlen(aresample_swr_opts))
-        aresample_swr_opts[strlen(aresample_swr_opts)-1] = '\0';
-    av_opt_set(is->agraph, "aresample_swr_opts", aresample_swr_opts, 0);
 
     av_channel_layout_describe_bprint(&is->audio_filter_src.ch_layout, &bp);
 
@@ -2205,7 +2290,6 @@ static int audio_thread(void *arg)
 
 static int decoder_start(Decoder *d, int (*fn)(void *), const char *thread_name, void* arg)
 {
-    packet_queue_start(d->queue);
     d->decoder_tid = SDL_CreateThread(fn, thread_name, arg);
     if (!d->decoder_tid) {
         av_log(NULL, AV_LOG_ERROR, "SDL_CreateThread(): %s\n", SDL_GetError());
@@ -2370,49 +2454,6 @@ static void update_sample_display(VideoState *is, short *samples, int samples_si
     }
 }
 
-/* return the wanted number of samples to get better sync if sync_type is video
- * or external master clock */
-static int synchronize_audio(VideoState *is, int nb_samples)
-{
-    int wanted_nb_samples = nb_samples;
-
-    /* if not master, then we try to remove or add samples to correct the clock */
-    if (get_master_sync_type(is) != AV_SYNC_AUDIO_MASTER) {
-        double diff, avg_diff;
-        int min_nb_samples, max_nb_samples;
-
-        diff = get_clock(&is->audclk) - get_master_clock(is);
-
-        if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD) {
-            is->audio_diff_cum = diff + is->audio_diff_avg_coef * is->audio_diff_cum;
-            if (is->audio_diff_avg_count < AUDIO_DIFF_AVG_NB) {
-                /* not enough measures to have a correct estimate */
-                is->audio_diff_avg_count++;
-            } else {
-                /* estimate the A-V difference */
-                avg_diff = is->audio_diff_cum * (1.0 - is->audio_diff_avg_coef);
-
-                if (fabs(avg_diff) >= is->audio_diff_threshold) {
-                    wanted_nb_samples = nb_samples + (int)(diff * is->audio_src.freq);
-                    min_nb_samples = ((nb_samples * (100 - SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-                    max_nb_samples = ((nb_samples * (100 + SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-                    wanted_nb_samples = av_clip(wanted_nb_samples, min_nb_samples, max_nb_samples);
-                }
-                av_log(NULL, AV_LOG_TRACE, "diff=%f adiff=%f sample_diff=%d apts=%0.3f %f\n",
-                        diff, avg_diff, wanted_nb_samples - nb_samples,
-                        is->audio_clock, is->audio_diff_threshold);
-            }
-        } else {
-            /* too big difference : may be initial PTS errors, so
-               reset A-V filter */
-            is->audio_diff_avg_count = 0;
-            is->audio_diff_cum       = 0;
-        }
-    }
-
-    return wanted_nb_samples;
-}
-
 /**
  * Decode one audio frame and return its uncompressed size.
  *
@@ -2424,7 +2465,6 @@ static int audio_decode_frame(VideoState *is)
 {
     int data_size, resampled_data_size;
     av_unused double audio_clock0;
-    int wanted_nb_samples;
     Frame *af;
 
     if (is->paused)
@@ -2447,65 +2487,7 @@ static int audio_decode_frame(VideoState *is)
                                            af->frame->nb_samples,
                                            af->frame->format, 1);
 
-    wanted_nb_samples = synchronize_audio(is, af->frame->nb_samples);
-
-    if (af->frame->format        != is->audio_src.fmt            ||
-        av_channel_layout_compare(&af->frame->ch_layout, &is->audio_src.ch_layout) ||
-        af->frame->sample_rate   != is->audio_src.freq           ||
-        (wanted_nb_samples       != af->frame->nb_samples && !is->swr_ctx)) {
-        int ret;
-        swr_free(&is->swr_ctx);
-        ret = swr_alloc_set_opts2(&is->swr_ctx,
-                            &is->audio_tgt.ch_layout, is->audio_tgt.fmt, is->audio_tgt.freq,
-                            &af->frame->ch_layout, af->frame->format, af->frame->sample_rate,
-                            0, NULL);
-        if (ret < 0 || swr_init(is->swr_ctx) < 0) {
-            av_log(NULL, AV_LOG_ERROR,
-                   "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
-                    af->frame->sample_rate, av_get_sample_fmt_name(af->frame->format), af->frame->ch_layout.nb_channels,
-                    is->audio_tgt.freq, av_get_sample_fmt_name(is->audio_tgt.fmt), is->audio_tgt.ch_layout.nb_channels);
-            swr_free(&is->swr_ctx);
-            return -1;
-        }
-        if (av_channel_layout_copy(&is->audio_src.ch_layout, &af->frame->ch_layout) < 0)
-            return -1;
-        is->audio_src.freq = af->frame->sample_rate;
-        is->audio_src.fmt = af->frame->format;
-    }
-
-    if (is->swr_ctx) {
-        const uint8_t **in = (const uint8_t **)af->frame->extended_data;
-        uint8_t **out = &is->audio_buf1;
-        int out_count = (int64_t)wanted_nb_samples * is->audio_tgt.freq / af->frame->sample_rate + 256;
-        int out_size  = av_samples_get_buffer_size(NULL, is->audio_tgt.ch_layout.nb_channels, out_count, is->audio_tgt.fmt, 0);
-        int len2;
-        if (out_size < 0) {
-            av_log(NULL, AV_LOG_ERROR, "av_samples_get_buffer_size() failed\n");
-            return -1;
-        }
-        if (wanted_nb_samples != af->frame->nb_samples) {
-            if (swr_set_compensation(is->swr_ctx, (wanted_nb_samples - af->frame->nb_samples) * is->audio_tgt.freq / af->frame->sample_rate,
-                                        wanted_nb_samples * is->audio_tgt.freq / af->frame->sample_rate) < 0) {
-                av_log(NULL, AV_LOG_ERROR, "swr_set_compensation() failed\n");
-                return -1;
-            }
-        }
-        av_fast_malloc(&is->audio_buf1, &is->audio_buf1_size, out_size);
-        if (!is->audio_buf1)
-            return AVERROR(ENOMEM);
-        len2 = swr_convert(is->swr_ctx, out, out_count, in, af->frame->nb_samples);
-        if (len2 < 0) {
-            av_log(NULL, AV_LOG_ERROR, "swr_convert() failed\n");
-            return -1;
-        }
-        if (len2 == out_count) {
-            av_log(NULL, AV_LOG_WARNING, "audio buffer is probably too small\n");
-            if (swr_init(is->swr_ctx) < 0)
-                swr_free(&is->swr_ctx);
-        }
-        is->audio_buf = is->audio_buf1;
-        resampled_data_size = len2 * is->audio_tgt.ch_layout.nb_channels * av_get_bytes_per_sample(is->audio_tgt.fmt);
-    } else {
+    {
         is->audio_buf = af->frame->data[0];
         resampled_data_size = data_size;
     }
@@ -2685,10 +2667,89 @@ static int create_hwaccel(AVBufferRef **device_ctx)
     return ret;
 }
 
+static int init_lcevc_graph(AVFormatContext *ic, int stream_index)
+{
+    FormatContext *ici = ic->opaque;
+    StreamGroup *stgi = ici->streams[stream_index]->group;
+    AVStreamGroup *stg = stgi->stg;
+    const AVBitStreamFilter *filter, *lcevc_filter = av_bsf_get_by_name("lcevc_merge");
+    AVBitStreamFilterContext *lcevc_merge;
+    int ret;
+
+    stgi->graph = av_bsf_graph_alloc();
+    if (!stgi->graph)
+        return AVERROR(ENOMEM);
+
+    const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
+    AVStream *base_st = ic->streams[stream_index];
+    AVStream *lcevc_st = stg->entries[lcevc->el_index]->stream;
+    Stream *lcevc_sti = ici->streams[lcevc_st->index];
+    Stream *base_sti = ici->streams[stream_index];
+
+    filter = av_bsf_get_by_name("source");
+    ret = av_bsf_graph_alloc_filter(&base_sti->filter, filter, "lcevc_merge_base", stgi->graph);
+    if (ret < 0)
+        return ret;
+    av_opt_set_q(base_sti->filter->priv_data, "time_base", base_st->time_base, 0);
+    ret = av_bsf_source_parameters_set(base_sti->filter, base_st->codecpar);
+    if (ret < 0)
+        return ret;
+
+    ret = av_bsf_graph_alloc_filter(&lcevc_sti->filter, filter, "lcevc_merge_enhancement", stgi->graph);
+    if (ret < 0)
+        return ret;
+    av_opt_set_q(lcevc_sti->filter->priv_data, "time_base", lcevc_st->time_base, 0);
+    ret = av_bsf_source_parameters_set(lcevc_sti->filter, lcevc_st->codecpar);
+    if (ret < 0)
+        return ret;
+
+    ret = av_bsf_graph_alloc_filter(&lcevc_merge, lcevc_filter, "lcevc_merge", stgi->graph);
+    if (ret < 0)
+        return ret;
+
+    filter = av_bsf_get_by_name("sink");
+    ret = av_bsf_graph_alloc_filter(&stgi->sink, filter, "lcevc_merge_sink", stgi->graph);
+    if (ret < 0)
+        return ret;
+
+    ret = av_bsf_init_dict(base_sti->filter, NULL);
+    if (ret < 0)
+         return ret;
+    ret = av_bsf_init_dict(lcevc_sti->filter, NULL);
+    if (ret < 0)
+        return ret;
+    ret = av_bsf_init_dict(lcevc_merge, NULL);
+    if (ret < 0)
+        return ret;
+    ret = av_bsf_init_dict(stgi->sink, NULL);
+    if (ret < 0)
+        return ret;
+
+    ret = av_bsf_link(base_sti->filter, 0, lcevc_merge, 0);
+    if (ret < 0)
+        return ret;
+    ret = av_bsf_link(lcevc_sti->filter, 0, lcevc_merge, 1);
+    if (ret < 0)
+        return ret;
+    ret = av_bsf_link(lcevc_merge, 0, stgi->sink, 0);
+    if (ret < 0)
+        return ret;
+
+    ret = av_bsf_graph_config(stgi->graph, NULL);
+    if (ret < 0)
+        return ret;
+
+    lcevc_st->discard = AVDISCARD_DEFAULT;
+    lcevc_sti->group = stgi;
+
+    return 0;
+}
+
 /* open a given stream. Return 0 if OK */
 static int stream_component_open(VideoState *is, int stream_index)
 {
     AVFormatContext *ic = is->ic;
+    FormatContext *ici = ic->opaque;
     AVCodecContext *avctx;
     const AVCodec *codec;
     const char *forced_codec_name = NULL;
@@ -2817,6 +2878,10 @@ static int stream_component_open(VideoState *is, int stream_index)
         is->video_stream = stream_index;
         is->video_st = ic->streams[stream_index];
 
+        if (ici->streams[stream_index]->group) {
+            if ((ret = init_lcevc_graph(ic, stream_index)) < 0)
+                goto fail;
+        }
         if ((ret = decoder_init(&is->viddec, avctx, &is->videoq, is->continue_read_thread)) < 0)
             goto fail;
         if ((ret = decoder_start(&is->viddec, video_thread, "video_decoder", is)) < 0)
@@ -2875,11 +2940,70 @@ static int is_realtime(AVFormatContext *s)
     return 0;
 }
 
+static int do_bsf_graph(AVFormatContext *ic, VideoState *is,
+                        Stream *sti, AVPacket *pkt)
+{
+    StreamGroup *stgi = sti->group;
+    AVBitStreamFilterContext *source = sti->filter;
+    int ret;
+
+    ret = av_bsf_source_add_packet(source, pkt, AV_BSF_SOURCE_FLAG_PUSH);
+    if (ret < 0) {
+        if (pkt)
+            av_packet_unref(pkt);
+        av_log(NULL, AV_LOG_ERROR, "Error submitting a packet for filtering: %s\n",
+               av_err2str(ret));
+        return ret;
+    }
+
+    while (1) {
+        ret = av_bsf_sink_get_packet(stgi->sink, pkt, 0);
+        if (ret == AVERROR(EAGAIN))
+            return 0;
+        else if (ret < 0) {
+            if (ret != AVERROR_EOF)
+                av_log(NULL, AV_LOG_ERROR,
+                       "Error applying bitstream filters to a packet: %s\n",
+                       av_err2str(ret));
+            return ret;
+        }
+        pkt->time_base = av_bsf_sink_get_time_base(stgi->sink);
+        packet_queue_put(&is->videoq, pkt);
+    }
+
+    return 0;
+}
+
+static int do_bsf_flush(AVFormatContext *ic, VideoState *is)
+{
+    FormatContext *ici = ic->opaque;
+    int ret;
+
+    for (unsigned i = 0; i < ic->nb_streams; i++) {
+        Stream *sti = ici->streams[i];
+        StreamGroup *stgi = sti->group;
+
+        if (!stgi || !stgi->graph)
+            continue;
+
+        ret = do_bsf_graph(ic, is, sti, NULL);
+        ret = (ret == AVERROR_EOF) ? 0 : (ret < 0) ? ret : AVERROR_BUG;
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Error flushing BSFs: %s\n",
+                   av_err2str(ret));
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
 /* this thread gets the stream from the disk or the network */
 static int read_thread(void *arg)
 {
     VideoState *is = arg;
     AVFormatContext *ic = NULL;
+    FormatContext *ici = NULL;
     int err, i, ret;
     int st_index[AVMEDIA_TYPE_NB];
     AVPacket *pkt = NULL;
@@ -2888,6 +3012,7 @@ static int read_thread(void *arg)
     int pkt_in_play_range = 0;
     const AVDictionaryEntry *t;
     SDL_mutex *wait_mutex = SDL_CreateMutex();
+    AVDictionary *format_options = NULL;
     int scan_all_pmts_set = 0;
     int64_t pkt_ts;
 
@@ -2912,23 +3037,32 @@ static int read_thread(void *arg)
         ret = AVERROR(ENOMEM);
         goto fail;
     }
+    ic->opaque = av_mallocz(sizeof(FormatContext));
+    if (!ic->opaque) {
+        av_log(NULL, AV_LOG_FATAL, "Could not allocate internal context.\n");
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
     ic->interrupt_callback.callback = decode_interrupt_cb;
     ic->interrupt_callback.opaque = is;
-    if (!av_dict_get(format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
-        av_dict_set(&format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
+    ic->seek_flags |= AVSEEK_FLAG_PREROLL;
+    if ((ret = av_dict_copy(&format_options, format_opts, 0)) < 0)
+        goto fail;
+    if (!av_dict_get(format_options, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
+        av_dict_set(&format_options, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
-    err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
+    err = avformat_open_input(&ic, is->filename, is->iformat, &format_options);
     if (err < 0) {
         print_error(is->filename, err);
         ret = -1;
         goto fail;
     }
     if (scan_all_pmts_set)
-        av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
-    remove_avoptions(&format_opts, codec_opts);
+        av_dict_set(&format_options, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
+    remove_avoptions(&format_options, codec_opts);
 
-    ret = check_avoptions(format_opts);
+    ret = check_avoptions(format_options);
     if (ret < 0)
         goto fail;
     is->ic = ic;
@@ -2997,9 +3131,23 @@ static int read_thread(void *arg)
         av_dump_format(ic, 0, is->filename, 0);
     }
 
+    ici = ic->opaque;
+    ici->streams = av_calloc(ic->nb_streams, sizeof(*ici->streams));
+    if (!ici->streams) {
+        av_log(NULL, AV_LOG_FATAL, "Could not allocate internal streams context.\n");
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    ici->nb_streams = ic->nb_streams;
     for (i = 0; i < ic->nb_streams; i++) {
         AVStream *st = ic->streams[i];
         enum AVMediaType type = st->codecpar->codec_type;
+        ici->streams[i] = av_mallocz(sizeof(Stream));
+        if (!ici->streams[i]) {
+            av_log(NULL, AV_LOG_FATAL, "Could not allocate internal stream context.\n");
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
         st->discard = AVDISCARD_ALL;
         if (type >= 0 && wanted_stream_spec[type] && st_index[type] == -1)
             if (avformat_match_stream_specifier(ic, st, wanted_stream_spec[type]) > 0)
@@ -3007,6 +3155,42 @@ static int read_thread(void *arg)
         // Clear all pre-existing metadata update flags to avoid printing
         // initial metadata as update.
         st->event_flags &= ~AVSTREAM_EVENT_FLAG_METADATA_UPDATED;
+    }
+    ici->stream_groups = av_calloc(ic->nb_stream_groups, sizeof(*ici->stream_groups));
+    if (!ici->stream_groups) {
+        av_log(NULL, AV_LOG_FATAL, "Could not allocate internal stream groups context.\n");
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    ici->nb_stream_groups = ic->nb_stream_groups;
+    for (i = 0; i < ic->nb_stream_groups; i++) {
+        AVStreamGroup *stg = ic->stream_groups[i];
+
+        ici->stream_groups[i] = av_mallocz(sizeof(*ici->stream_groups[i]));
+        if (!ici->stream_groups[i]) {
+            av_log(NULL, AV_LOG_FATAL, "Could not allocate internal stream group.\n");
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        ici->stream_groups[i]->stg = stg;
+
+        if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
+            continue;
+        if (!av_bsf_get_by_name("lcevc_merge") || stg->nb_entries != 2)
+            continue;
+        for (int j = 0; j < stg->nb_entries; j++) {
+            AVStreamGroupEntry *entry = stg->entries[j];
+            if (entry->type != AV_STREAM_GROUP_ENTRY_STREAM) {
+                ret = AVERROR_BUG;
+                goto fail;
+            }
+        }
+
+        const AVStreamGroupLayeredVideo *lcevc = stg->params.layered_video;
+        const AVStream *base_st = ic->streams[stg->entries[!lcevc->el_index]->stream->index];
+        Stream *base_sti = ici->streams[base_st->index];
+
+        base_sti->group = ici->stream_groups[i];
     }
     ic->event_flags &= ~AVFMT_EVENT_FLAG_METADATA_UPDATED;
     for (i = 0; i < AVMEDIA_TYPE_NB; i++) {
@@ -3106,8 +3290,14 @@ static int read_thread(void *arg)
                     packet_queue_flush(&is->audioq);
                 if (is->subtitle_stream >= 0)
                     packet_queue_flush(&is->subtitleq);
-                if (is->video_stream >= 0)
+                if (is->video_stream >= 0) {
                     packet_queue_flush(&is->videoq);
+                    uninit_bsf_graph(is->ic, is->video_stream);
+                    if (ici->streams[is->video_stream]->group) {
+                        if ((ret = init_lcevc_graph(is->ic, is->video_stream)) < 0)
+                            goto fail;
+                    }
+                }
                 if (is->seek_flags & AVSEEK_FLAG_BYTE) {
                    set_clock(&is->extclk, NAN, 0);
                 } else {
@@ -3155,8 +3345,12 @@ static int read_thread(void *arg)
         ret = av_read_frame(ic, pkt);
         if (ret < 0) {
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof) {
-                if (is->video_stream >= 0)
+                if (is->video_stream >= 0) {
+                    ret = do_bsf_flush(ic, is);
+                    if (ret < 0)
+                        goto fail;
                     packet_queue_put_nullpacket(&is->videoq, pkt, is->video_stream);
+                }
                 if (is->audio_stream >= 0)
                     packet_queue_put_nullpacket(&is->audioq, pkt, is->audio_stream);
                 if (is->subtitle_stream >= 0)
@@ -3209,18 +3403,35 @@ static int read_thread(void *arg)
             packet_queue_put(&is->audioq, pkt);
         } else if (pkt->stream_index == is->video_stream && pkt_in_play_range
                    && !(is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC)) {
-            packet_queue_put(&is->videoq, pkt);
+            Stream *sti = ici->streams[is->video_stream];
+            StreamGroup *stgi = sti->group;
+            if (stgi && stgi->graph) {
+                ret = do_bsf_graph(ic, is, sti, pkt);
+                if (ret < 0)
+                    goto fail;
+            } else
+                packet_queue_put(&is->videoq, pkt);
         } else if (pkt->stream_index == is->subtitle_stream && pkt_in_play_range) {
             packet_queue_put(&is->subtitleq, pkt);
         } else {
+            Stream *sti = ici->streams[pkt->stream_index];
+            StreamGroup *stgi = sti->group;
+            if (stgi && stgi->graph) {
+                ret = do_bsf_graph(ic, is, sti, pkt);
+                if (ret < 0)
+                    goto fail;
+            }
             av_packet_unref(pkt);
         }
     }
 
     ret = 0;
  fail:
-    if (ic && !is->ic)
+    if (ic && !is->ic) {
+        av_freep(&ic->opaque);
         avformat_close_input(&ic);
+    }
+    av_dict_free(&format_options);
 
     av_packet_free(&pkt);
     if (ret != 0) {
@@ -3288,9 +3499,7 @@ static VideoState *stream_open(const char *filename,
                 goto fail;
         }
     }
-    startup_volume = av_clip(startup_volume, 0, 100);
-    startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
-    is->audio_volume = startup_volume;
+    is->audio_volume = SDL_MIX_MAXVOLUME * av_clip(startup_volume, 0, 100) / 100;
     is->muted = 0;
     is->av_sync_type = av_sync_type;
     is->read_tid     = SDL_CreateThread(read_thread, "read_thread", is);
@@ -3404,6 +3613,10 @@ static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
     double remaining_time = 0.0;
     SDL_PumpEvents();
     while (!SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
+        if (received_sigterm) {
+            exit_status = 123;
+            do_exit(is);
+        }
         if (!cursor_hidden && av_gettime_relative() - cursor_last_shown > CURSOR_HIDE_DELAY) {
             SDL_ShowCursor(0);
             cursor_hidden = 1;
@@ -3695,7 +3908,8 @@ static int opt_show_mode(void *optctx, const char *opt, const char *arg)
 {
     show_mode = !strcmp(arg, "video") ? SHOW_MODE_VIDEO :
                 !strcmp(arg, "waves") ? SHOW_MODE_WAVES :
-                !strcmp(arg, "rdft" ) ? SHOW_MODE_RDFT  : SHOW_MODE_NONE;
+                !strcmp(arg, "rdft" ) ? SHOW_MODE_RDFT  :
+                !strcmp(arg, "phase") ? SHOW_MODE_PHASE : SHOW_MODE_NONE;
 
     if (show_mode == SHOW_MODE_NONE) {
         double num;
@@ -3791,7 +4005,7 @@ static const OptionDef options[] = {
     { "vf",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
     { "af",                 OPT_TYPE_STRING,          0, { &afilters }, "set audio filters", "filter_graph" },
     { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
-    { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
+    { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT, 3 = phase)", "mode" },
     { "i",                  OPT_TYPE_BOOL,            0, { &dummy}, "read specified file", "input_file"},
     { "codec",              OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
     { "acodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &audio_codec_name }, "force audio decoder",    "decoder_name" },

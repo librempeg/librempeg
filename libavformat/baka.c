@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct BakaDemuxContext {
     int64_t data_end;
@@ -62,7 +63,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
     st->codecpar->sample_rate = 44100;
     st->codecpar->ch_layout.nb_channels = 2;
-    st->codecpar->block_align = 2 * 2 * 512;
+    st->codecpar->block_align = 2 * 2;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -144,13 +145,19 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     BakaDemuxContext *bc = s->priv_data;
     AVStream *st = s->streams[0];
-    int block_align = st->codecpar->block_align;
-    int64_t pos = avio_tell(s->pb);
+    AVIOContext *pb = s->pb;
 
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    int64_t pos = avio_tell(pb);
     if (pos >= bc->data_end)
         return AVERROR_EOF;
 
-    return av_get_packet(s->pb, pkt, FFMIN(block_align, bc->data_end - pos));
+    int size = ff_pcm_default_packet_size(st->codecpar);
+    size = FFMIN(size, bc->data_end - pos);
+
+    return av_get_packet(pb, pkt, size);
 }
 
 const FFInputFormat ff_baka_demuxer = {

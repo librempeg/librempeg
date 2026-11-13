@@ -1,12 +1,12 @@
 /*
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -170,6 +170,7 @@ static void check_chrConvertRange(int from)
         int src_shift = bit_depth <= 14 ? 15 - bit_depth : 19 - bit_depth;
         int mpeg_min = 16 << (bit_depth - 8);
         int mpeg_max = 240 << (bit_depth - 8);
+        int chr_center = 128 << (bit_depth - 8);
         int jpeg_max = (1 << bit_depth) - 1;
         sws->src_format = pix_fmt;
         sws->dst_format = pix_fmt;
@@ -186,12 +187,14 @@ static void check_chrConvertRange(int from)
                         dstU1_32[1] = dstU0_32[1] = mpeg_max << src_shift;
                     }
                     dstU1_32[2] = dstU0_32[2] = -1;
+                    dstU1_32[3] = dstU0_32[3] = chr_center << src_shift;
                 } else {
                     if (!from) {
                         dstU1[0] = dstU0[0] = mpeg_min << src_shift;
                         dstU1[1] = dstU0[1] = mpeg_max << src_shift;
                     }
                     dstU1[2] = dstU0[2] = -1;
+                    dstU1[3] = dstU0[3] = chr_center << src_shift;
                 }
                 call_ref(dstU0, dstV0, width,
                          c->chrConvertRange_coeff, c->chrConvertRange_offset);

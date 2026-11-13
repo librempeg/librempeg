@@ -1,14 +1,14 @@
 /*
  * Copyright (c) Lynne
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -46,8 +46,8 @@ static void check_chroma_mc(void)
     DECLARE_ALIGNED_16(uint8_t, dst0)[16 * 18 * 2];
     DECLARE_ALIGNED_16(uint8_t, dst1)[16 * 18 * 2];
 
-    declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *dst, const uint8_t *src,
-                      ptrdiff_t stride, int h, int x, int y);
+    declare_func(void, uint8_t *dst, const uint8_t *src,
+                 ptrdiff_t stride, int h, int x, int y);
 
     for (int bit_depth = 8; bit_depth <= 10; bit_depth++) {
         ff_h264chroma_init(&h, bit_depth);

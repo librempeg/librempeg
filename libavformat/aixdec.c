@@ -24,7 +24,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int aix_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('A','I','X','F') ||
         AV_RB32(p->buf +  8) != 0x01000014 ||
@@ -34,7 +34,7 @@ static int aix_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int aix_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned nb_streams, first_offset, nb_segments;
@@ -85,7 +85,7 @@ static int aix_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int aix_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     unsigned size, index, duration, chunk;
@@ -137,7 +137,7 @@ const FFInputFormat ff_aix_demuxer = {
     .p.long_name = NULL_IF_CONFIG_SMALL("CRI AIX"),
     .p.extensions= "aix",
     .p.flags     = AVFMT_GENERIC_INDEX,
-    .read_probe  = aix_probe,
-    .read_header = aix_read_header,
-    .read_packet = aix_read_packet,
+    .read_probe  = read_probe,
+    .read_header = read_header,
+    .read_packet = read_packet,
 };

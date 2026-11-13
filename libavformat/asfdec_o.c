@@ -672,6 +672,8 @@ static int asf_read_stream_properties(AVFormatContext *s, const GUIDParseTable *
                 asf_st->virtual_chunk_len = avio_rl16(pb);
                 if (!asf_st->virtual_chunk_len || !asf_st->virtual_pkt_len)
                     return AVERROR_INVALIDDATA;
+                if (asf_st->virtual_pkt_len % asf_st->virtual_chunk_len)
+                    asf_st->span = 1;
                 avio_skip(pb, err_data_len - 5);
             } else
                 avio_skip(pb, err_data_len - 1);
@@ -841,7 +843,7 @@ static int asf_read_simple_index(AVFormatContext *s, const GUIDParseTable *g)
     int64_t offset;
     uint64_t size = avio_rl64(pb);
 
-    if (size < 24)
+    if (size < 24 || size > INT64_MAX)
         return AVERROR_INVALIDDATA;
 
     // simple index objects should be ordered by stream number, this loop tries to find
@@ -1077,6 +1079,11 @@ static int asf_read_multiple_payload(AVFormatContext *s, AVPacket *pkt,
             ff_asfcrypt_dec(s->key, p, ret);
         avio_skip(pb, skip);
         asf_pkt->size_left -= pay_len;
+        if (ret < pay_len) {
+            av_shrink_packet(asf_pkt->avpkt, p - asf_pkt->avpkt->data + ret);
+            asf_pkt->data_size = asf_pkt->avpkt->size;
+            asf_pkt->size_left = 0;
+        }
         asf->nb_mult_left--;
     }
 
@@ -1128,6 +1135,11 @@ static int asf_read_single_payload(AVFormatContext *s, ASFPacket *asf_pkt)
         return ret;
     if (s->key && s->keylen == 20)
             ff_asfcrypt_dec(s->key, p, ret);
+    if (ret < size) {
+        av_shrink_packet(asf_pkt->avpkt, p - asf_pkt->avpkt->data + ret);
+        asf_pkt->data_size = asf_pkt->avpkt->size;
+        asf_pkt->size_left = 0;
+    }
     if (asf->packet_size_internal)
         avio_skip(pb, asf->packet_size - asf->packet_size_internal);
     avio_skip(pb, asf->pad_len); // skip padding
@@ -1225,7 +1237,7 @@ static int asf_read_packet_header(AVFormatContext *s)
 
     asf->packet_offset = avio_tell(pb);
     if (asf->packet_offset > INT64_MAX/2)
-        asf->packet_offset = 0;
+        return AVERROR_INVALIDDATA;
     error_flags = avio_r8(pb); // read Error Correction Flags
     if (error_flags & ASF_PACKET_FLAG_ERROR_CORRECTION_PRESENT) {
         if (!(error_flags & ASF_ERROR_CORRECTION_LENGTH_TYPE)) {
@@ -1269,17 +1281,9 @@ static int asf_deinterleave(AVFormatContext *s, ASFPacket *asf_pkt, int st_num)
         return AVERROR(ENOMEM);
     memset(data + asf_pkt->data_size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 
-    while (asf_pkt->data_size >= asf_st->span * pkt_len + pos) {
-        if (pos >= asf_pkt->data_size) {
-            break;
-        }
-        for (l = 0; l < pkt_len; l++) {
-            if (pos >= asf_pkt->data_size) {
-                break;
-            }
+    while (asf_pkt->data_size - pos >= asf_st->span * pkt_len) {
+        for (l = 0; l < nchunks; l++) {
             for (j = 0; j < asf_st->span; j++) {
-                if ((pos + chunk_len) >= asf_pkt->data_size)
-                    break;
                 memcpy(data + pos,
                        p + (j * nchunks + l) * chunk_len,
                        chunk_len);
@@ -1287,9 +1291,8 @@ static int asf_deinterleave(AVFormatContext *s, ASFPacket *asf_pkt, int st_num)
             }
         }
         p += asf_st->span * pkt_len;
-        if (p > asf_pkt->avpkt->data + asf_pkt->data_size)
-            break;
     }
+    memcpy(data + pos, p, asf_pkt->data_size - pos);
     av_packet_unref(asf_pkt->avpkt);
     ret = av_packet_from_data(asf_pkt->avpkt, data, asf_pkt->data_size);
     if (ret < 0)
@@ -1309,7 +1312,8 @@ static int asf_read_packet(AVFormatContext *s, AVPacket *pkt)
         return AVERROR_EOF;
     while (!pb->eof_reached) {
         if (asf->state == PARSE_PACKET_HEADER) {
-            asf_read_packet_header(s);
+            if ((ret = asf_read_packet_header(s)) < 0)
+                return ret;
             if (pb->eof_reached)
                 break;
             if (!asf->nb_mult_left)

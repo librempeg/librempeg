@@ -824,8 +824,8 @@ static int generate_codebook(RoqEncContext *enc,
     int *codebook = enc->tmp_codebook_buf;
     int *closest_cb = enc->closest_cb;
 
-    ret = avpriv_elbg_do(&enc->elbg, points, 6 * c_size, inputCount, codebook,
-                         cbsize, 1, closest_cb, &enc->randctx, 0);
+    ret = ff_elbg_do(&enc->elbg, points, 6 * c_size, inputCount, codebook,
+                     cbsize, 1, closest_cb, &enc->randctx, 0);
     if (ret < 0)
         return ret;
 
@@ -961,7 +961,7 @@ static av_cold int roq_encode_end(AVCodecContext *avctx)
     av_freep(&enc->this_motion8);
     av_freep(&enc->last_motion8);
 
-    avpriv_elbg_free(&enc->elbg);
+    ff_elbg_free(&enc->elbg);
 
     return 0;
 }

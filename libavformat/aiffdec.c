@@ -182,7 +182,7 @@ static int get_aiff_header(AVFormatContext *s, int64_t size,
         case AV_CODEC_ID_ADPCM_G726LE:
             par->bits_per_coded_sample = 5;
             av_fallthrough;
-        case AV_CODEC_ID_ADPCM_IMA_WS:
+        case AV_CODEC_ID_ADPCM_IMA_DVI:
         case AV_CODEC_ID_ADPCM_G722:
         case AV_CODEC_ID_MACE6:
         case AV_CODEC_ID_CBD2_DPCM:
@@ -283,6 +283,7 @@ static int aiff_read_header(AVFormatContext *s)
         if (size < 0)
             return size;
 
+        const int padding = size & 1;
         filesize -= size + 8;
 
         switch (tag) {
@@ -414,7 +415,7 @@ static int aiff_read_header(AVFormatContext *s)
         }
 
         /* Skip required padding byte for odd-sized chunks. */
-        if (size & 1) {
+        if (padding) {
             filesize--;
             avio_skip(pb, 1);
         }

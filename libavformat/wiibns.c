@@ -54,42 +54,28 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int64_t start_offset, info_offset = -1, data_offset = -1, offset, duration, bns_offset;
+    int64_t start_offset, info_offset = -1, data_offset = -1, offset, duration, bns_offset = 0;
     int ret, rate, nb_channels, chunk_count, loop_flag;
     uint32_t loop_start, chunk_id, data_size;
     AVIOContext *pb = s->pb;
     AVStream *st;
 
-    chunk_id = avio_rb32(pb);
-    if (chunk_id == MKBETAG('I','M','D','5')) {
-        avio_skip(pb, 28);
-        chunk_id = avio_rb32(pb);
+    avio_seek(pb, 64, SEEK_SET);
+    if (avio_rb32(pb) == MKBETAG('I','M','E','T')) {
+        bns_offset = avio_rb32(pb);
+        avio_seek(pb, bns_offset + 84, SEEK_SET);
+        bns_offset += avio_rb32(pb);
     }
-    if (chunk_id == MKBETAG('B','N','S',' ')) {
-        bns_offset = avio_tell(pb) - 4;
-        chunk_id = avio_rb32(pb);
-        if (chunk_id != 0xFEFF0100u)
-            return AVERROR_INVALIDDATA;
-    } else {
-        avio_skip(pb, 60);
-        chunk_id = avio_rb32(pb);
-        if (chunk_id != MKBETAG('I','M','E','T'))
-            return AVERROR_INVALIDDATA;
-        avio_seek(pb, avio_rb32(pb), SEEK_SET);
-        avio_skip(pb, 12);
-        avio_skip(pb, avio_rb32(pb));
-        chunk_id = avio_rb32(pb);
-        if (chunk_id == MKBETAG('I','M','D','5')) {
-            avio_skip(pb, 28);
-            chunk_id = avio_rb32(pb);
-        }
-        if (chunk_id != MKBETAG('B','N','S',' '))
-            return AVERROR_INVALIDDATA;
-        bns_offset = avio_tell(pb) - 4;
-        chunk_id = avio_rb32(pb);
-        if (chunk_id != 0xFEFF0100u)
-            return AVERROR_INVALIDDATA;
-    }
+
+    avio_seek(pb, bns_offset, SEEK_SET);
+    if (avio_rb32(pb) == MKBETAG('I','M','D','5'))
+        bns_offset += 32;
+
+    avio_seek(pb, bns_offset, SEEK_SET);
+    if (avio_rb32(pb) != MKBETAG('B','N','S',' '))
+        return AVERROR_INVALIDDATA;
+    if (avio_rb32(pb) != 0xFEFF0100u)
+        return AVERROR_INVALIDDATA;
 
     avio_skip(pb, 6);
     chunk_count = avio_rb16(pb);

@@ -221,11 +221,15 @@ static int thp_read_packet(AVFormatContext *s,
             audio_size = avio_rb32(pb);
 
         if (thp->has_video) {
-            ret = av_get_packet(pb, pkt, size);
-            if (ret < 0)
-                return ret;
-            if (ret != size)
-                return AVERROR_INVALIDDATA;
+            if (size > 0) {
+                ret = av_get_packet(pb, pkt, size);
+                if (ret < 0)
+                    return ret;
+                if (ret != size)
+                    return AVERROR_INVALIDDATA;
+            } else if (audio_size == 0 && thp->has_audio) {
+                audio_size = thp->next_frame - avio_tell(pb);
+            }
 
             if (audio_size > 0) {
                 ret = av_get_packet(pb, thp->audio_pkt, audio_size);

@@ -75,6 +75,8 @@ static int naxat_asd_probe(const AVProbeData *p)
     if (AV_RL16(p->buf + 8) != 1)
         score -= 40;
     // channels
+    if (AV_RL16(p->buf + 10) == 0)
+        return 0;
     if (AV_RL16(p->buf + 10) <= 2)
         score += 10;
     // sample rate;
@@ -134,6 +136,8 @@ static int naxat_asd_bnk_probe(const AVProbeData *p)
     if (AV_RL16(p->buf) != 0x1001)
         return 0;
     // channels
+    if (AV_RL16(p->buf + 2) == 0)
+        return 0;
     if (AV_RL16(p->buf + 2) <= 2)
         score += 10;
     // sample rate
@@ -246,7 +250,8 @@ static int naxat_asd_bnk_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= ast->start_offset && pos < ast->end_offset) {
-            block_size = FFMIN(ast->end_offset - pos, st->codecpar->block_align);
+            block_size = ff_pcm_default_packet_size(st->codecpar);
+            block_size = FFMIN(ast->end_offset - pos, block_size);
 
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;

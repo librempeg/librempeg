@@ -82,7 +82,16 @@ void ff_free_stream_group(AVStreamGroup **pstg)
     if (!stg)
         return;
 
+#if FF_API_STREAM_GROUP_ENTRIES
+FF_DISABLE_DEPRECATION_WARNINGS
     av_freep(&stg->streams);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+    for (int i = 0; i < stg->nb_entries; i++)
+        av_freep(&stg->entries[i]);
+    av_freep(&stg->entries);
+    av_packet_side_data_free(&stg->coded_side_data,
+                             &stg->nb_coded_side_data);
     av_dict_free(&stg->metadata);
     av_freep(&stg->priv_data);
     switch (stg->type) {
@@ -97,15 +106,22 @@ void ff_free_stream_group(AVStreamGroup **pstg)
     case AV_STREAM_GROUP_PARAMS_TILE_GRID:
         av_opt_free(stg->params.tile_grid);
         av_freep(&stg->params.tile_grid->offsets);
+#if FF_API_STREAM_GROUP_ENTRIES
+FF_DISABLE_DEPRECATION_WARNINGS
         av_packet_side_data_free(&stg->params.tile_grid->coded_side_data,
                                  &stg->params.tile_grid->nb_coded_side_data);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
         av_freep(&stg->params.tile_grid);
         break;
     case AV_STREAM_GROUP_PARAMS_TREF:
         av_opt_free(stg->params.tref);
         av_freep(&stg->params.tref);
         break;
+    case AV_STREAM_GROUP_PARAMS_LCEVC:
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
+    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
+    case AV_STREAM_GROUP_PARAMS_ALPHA:
         av_opt_free(stg->params.layered_video);
         av_freep(&stg->params.layered_video);
         break;
@@ -266,22 +282,32 @@ const char *avformat_stream_group_name(enum AVStreamGroupParamsType type)
     case AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT:        return "IAMF Audio Element";
     case AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION:     return "IAMF Mix Presentation";
     case AV_STREAM_GROUP_PARAMS_TILE_GRID:                 return "Tile Grid";
+    case AV_STREAM_GROUP_PARAMS_LCEVC:                     return "LCEVC (Split video and enhancement)";
     case AV_STREAM_GROUP_PARAMS_TREF:                      return "Track Reference";
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:              return "Dolby Vision (Split base and enhancement layer)";
+    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:                  return "Gain Map (Split base rendition and gain map)";
+    case AV_STREAM_GROUP_PARAMS_ALPHA:                     return "Alpha (Split color and alpha channels)";
     }
     return NULL;
 }
 
 AVProgram *av_new_program(AVFormatContext *ac, int id)
 {
+    FFFormatContext *const si = ffformatcontext(ac);
     AVProgram *program = NULL;
     int ret;
 
     av_log(ac, AV_LOG_TRACE, "new_program: id=0x%04x\n", id);
 
-    for (unsigned i = 0; i < ac->nb_programs; i++)
-        if (ac->programs[i]->id == id)
-            program = ac->programs[i];
+    if (!ac->nb_programs) {
+        si->program_ids_monotonic = 1;
+    } else if (!si->program_ids_monotonic || ac->programs[ac->nb_programs - 1]->id >= id) {
+        for (unsigned i = 0; i < ac->nb_programs; i++)
+            if (ac->programs[i]->id == id)
+                program = ac->programs[i];
+        if (!program)
+            si->program_ids_monotonic = 0;
+    }
 
     if (!program) {
         program = av_mallocz(sizeof(*program));
@@ -519,7 +545,10 @@ int av_find_best_stream(AVFormatContext *ic, enum AVMediaType type,
         int real_stream_index = program ? program[i] : i;
         AVStream *st          = ic->streams[real_stream_index];
         AVCodecParameters *par = st->codecpar;
+        const AVCodecDescriptor *desc = avcodec_descriptor_get(par->codec_id);
         if (par->codec_type != type)
+            continue;
+        if (desc && (desc->props & AV_CODEC_PROP_ENHANCEMENT))
             continue;
         if (wanted_stream_nb >= 0 && real_stream_index != wanted_stream_nb)
             continue;
@@ -630,8 +659,10 @@ static int match_stream_specifier(const AVFormatContext *s, const AVStream *st,
                 }
                 if (group_idx < 0 || group_idx >= s->nb_stream_groups)
                     return AVERROR(EINVAL);
-                for (unsigned j = 0; j < s->stream_groups[group_idx]->nb_streams; j++) {
-                    if (st->index == s->stream_groups[group_idx]->streams[j]->index) {
+                for (unsigned j = 0; j < s->stream_groups[group_idx]->nb_entries; j++) {
+                    if (s->stream_groups[group_idx]->entries[j]->type != AV_STREAM_GROUP_ENTRY_STREAM)
+                        continue;
+                    if (st->index == s->stream_groups[group_idx]->entries[j]->stream->index) {
                         found = 1;
                         if (g)
                             *g = s->stream_groups[group_idx];
@@ -760,9 +791,11 @@ int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
         return (index == st->index);
 
     /* If we requested a matching stream index, we have to ensure st is that. */
-    nb_streams = g ? g->nb_streams : (p ? p->nb_stream_indexes : s->nb_streams);
+    nb_streams = g ? g->nb_entries : (p ? p->nb_stream_indexes : s->nb_streams);
     for (int i = 0; i < nb_streams && index >= 0; i++) {
-        unsigned idx = g ? g->streams[i]->index : (p ? p->stream_index[i] : i);
+        if (g && g->entries[i]->type != AV_STREAM_GROUP_ENTRY_STREAM)
+            continue;
+        unsigned idx = g ? g->entries[i]->stream->index : (p ? p->stream_index[i] : i);
         const AVStream *candidate = s->streams[idx];
         ret = match_stream_specifier(s, candidate, spec, NULL, NULL, NULL);
         if (ret < 0)

@@ -300,18 +300,12 @@ void ff_opus_psy_celt_frame_init(OpusPsyContext *s, CeltFrame *f, int index)
     for (i = 0; i < steps_per_frame; i++)
         silence &= s->steps[index * steps_per_frame + i]->silence;
 
-    /* If we reach EOF with fewer collected psy steps than this packet wants
-     * to encode, the slots beyond buffered_steps were zeroed by the previous
-     * postencode_update and contain no valid analysis data. Encoding garbage
-     * with the full rate budget can overrun the range coder buffer (rng_bytes
-     * exceeds the per-frame size passed to ff_opus_rc_enc_end), so force a
-     * silent packet instead. */
-    if (s->eof && step_offset >= s->buffered_steps)
-        silence = 1;
-
     f->silence = silence;
     if (f->silence) {
-        f->framebits = 0; /* Otherwise the silence flag eats up 16(!) bits */
+        /* Explicitly signal silence in a 2 byte frame, like libopus does.
+         * A zero length frame would instead signal a lost frame to decoders,
+         * which conceal it by extrapolating the preceding audio. */
+        f->framebits = 16;
         f->intensity_stereo = f->end_band; /* Read by postencode_update for avg_is_band */
         return;
     }
@@ -546,14 +540,16 @@ void ff_opus_psy_postencode_update(OpusPsyContext *s, CeltFrame *f)
 
     for (i = 0; i < s->p.frames; i++) {
         s->avg_is_band += f[i].intensity_stereo;
-        if (f[i].framebits > 0)
+        if (!f[i].silence && f[i].framebits > 0)
             s->lambda *= ideal_fbits / f[i].framebits;
     }
 
     s->avg_is_band /= (s->p.frames + 1);
 
     s->steps_to_process = 0;
-    s->buffered_steps -= steps_out;
+    /* At EOF, one more frame than there are psy steps is encoded to flush
+     * the last frame's MDCT overlap */
+    s->buffered_steps = FFMAX(s->buffered_steps - steps_out, 0);
     s->total_packets_out += s->p.frames;
     s->inflection_points_count = 0;
 }
