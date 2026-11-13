@@ -145,8 +145,10 @@ void ff_ipu_set_inst_to_exec_from_start(AVCodecContext *avctx, IPUBlockCommand c
 
 void ff_ipu_close_block_inst_comm(AVCodecContext *avctx);
 
+#if 0
 int IPUInstructionQueue_QueuedInst = 0;
 int IPUInstructionQueue_TotalInst = 0;
+#endif
 
 /**
  * IPUInstructionQueueType
@@ -213,6 +215,8 @@ void ff_ipu_execute_queued_cmd(IPUInstructionQueueType iq_type, IPUInstructionQu
 #endif
 
 size_t ff_ipu_calc_priv_data_skip_to_ipu_iec_ctx(AVCodecContext *avctx);
+
+int ff_ipu_new_inst_queue(IPUInstructionQueueContext *queue_store);
 
 void ff_ipu_close_ipu_context(AVCodecContext *avctx);
 

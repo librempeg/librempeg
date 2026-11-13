@@ -2805,12 +2805,14 @@ static int ipu_get_macroblock_type(IPUContext *s, int x, int y)
             return mb_type;
         default:
             // D-picture seemingly not implemented.
+            // no other macroblock type known either.
             return AVERROR_INVALIDDATA;
     }
 
     return 0;
 }
 
+#if 0
 static int ipu_set_picture_type(IPUContext *s)
 {
     IPUInstructionExecutionContext *ie = &s->ie;
@@ -2947,6 +2949,7 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
 
     return 0;
 }
+#endif
 
 static int ipu_decode_frame1(AVCodecContext *avctx, AVFrame *frame)
 {
@@ -3097,6 +3100,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         has_ipu_ctrl_byte = 1;
     }
 
+    #if 0
     if (avpkt->side_data && (avpkt->side_data_elems == 1)) {
         if (avpkt->side_data->data &&
             avpkt->side_data->type == AV_PKT_DATA_NEW_EXTRADATA &&
@@ -3107,7 +3111,9 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     } else {
         has_iq = 0;
     }
+    #endif
 
+    #if 0
     if (has_ie && has_iq) {
         ff_ipu_ctrl_byte_signal(m->avctx, has_ipu_ctrl_byte);
         ff_ipu_iq_comms_signal(m->avctx, has_iq);
@@ -3117,6 +3123,10 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         if ((ret = ipu_decode_frame1(m->avctx, frame)) < 0)
             return ret;
     }
+    #endif
+
+    if ((ret = ipu_decode_frame1(m->avctx, frame)) < 0)
+        return ret;
 
     *got_frame = 1;
 

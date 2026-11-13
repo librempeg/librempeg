@@ -330,7 +330,17 @@ static void erase_this_string(char **target)
         av_freep(target);
 }
 
-static int square_ps2fmv_probe_try_standalone_v1_dat(const AVProbeData *p)
+static int erase_from_string(char **string, char *erase_target)
+{
+    return 0;
+}
+
+static int convert_string_to_lowercase(char **string)
+{
+    return 0;
+}
+
+static int probe_try_standalone_v1_dat(const AVProbeData *p)
 {
     int ret = 0;
 
@@ -373,7 +383,7 @@ static int square_ps2fmv_probe_try_standalone_v1_dat(const AVProbeData *p)
     return ret;
 }
 
-static int square_ps2fmv_probe_try_dat_sz_sz(const AVProbeData *p)
+static int probe_try_dat_sz_sz(const AVProbeData *p)
 {
     int ret = 0;
     unsigned char im_byte, nim_byte;
@@ -471,7 +481,7 @@ static int square_ps2fmv_probe_try_dat_sz_sz(const AVProbeData *p)
     return ret;
 }
 
-static int square_ps2fmv_probe_try_dat_sz_dat(const AVProbeData *p)
+static int probe_try_dat_sz_dat(const AVProbeData *p)
 {
     int ret = 0;
     unsigned long int config1, config2;
@@ -527,11 +537,11 @@ static int square_ps2fmv_probe_try_dat_sz_dat(const AVProbeData *p)
     return ret;
 }
 
-static int square_ps2fmv_read_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (!(square_ps2fmv_probe_try_standalone_v1_dat(p))) {
-        if (!(square_ps2fmv_probe_try_dat_sz_dat(p))) {
-            if (!(square_ps2fmv_probe_try_dat_sz_sz(p))) {
+    if (!(probe_try_standalone_v1_dat(p))) {
+        if (!(probe_try_dat_sz_dat(p))) {
+            if (!(probe_try_dat_sz_sz(p))) {
                 return 0;
             } else
                 goto goto_score;
@@ -545,7 +555,7 @@ goto_score:
     return AVPROBE_SCORE_MAX;
 }
 
-static int square_ps2fmv_rh_try_standalone_v1_dat(AVFormatContext *s)
+static int header_try_standalone_v1_dat(AVFormatContext *s)
 {
     SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -579,9 +589,10 @@ static int square_ps2fmv_rh_try_standalone_v1_dat(AVFormatContext *s)
     return 1;
 }
 
-static int square_ps2fmv_rh_try_dat_sz_sz(AVFormatContext *s)
+static int header_try_dat_sz_sz(AVFormatContext *s)
 {
     SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
+    SquarePS2FMVDATSZDemuxContext *dat_sz = &ps2fmv->dat_sz;
     AVIOContext *pb = s->pb;
     unsigned char im_byte, nim_byte;
     int intra_matrix = 0, non_intra_matrix = 0;
@@ -677,12 +688,12 @@ static int square_ps2fmv_rh_try_dat_sz_sz(AVFormatContext *s)
         return 0;
 
     if ((intra_matrix == 64) && (non_intra_matrix == 64))
-        ps2fmv->dat_sz.intra_quant_twomatrix = 1;
+        dat_sz->intra_quant_twomatrix = 1;
 
     return 1;
 }
 
-static int square_ps2fmv_rh_try_dat_sz_dat(AVFormatContext *s)
+static int header_try_dat_sz_dat(AVFormatContext *s)
 {
     SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -739,7 +750,7 @@ static int square_ps2fmv_rh_try_dat_sz_dat(AVFormatContext *s)
     return 1;
 }
 
-static int square_ps2fmv_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -750,11 +761,11 @@ static int square_ps2fmv_read_header(AVFormatContext *s)
 
     /* (todo) again, only the standalone v1 dat format is parsed here. */
 
-    if (!(square_ps2fmv_rh_try_standalone_v1_dat(s))) {
+    if (!(header_try_standalone_v1_dat(s))) {
         avio_seek(pb, 0, SEEK_SET);
-        if (!(square_ps2fmv_rh_try_dat_sz_dat(s))) {
+        if (!(header_try_dat_sz_dat(s))) {
             avio_seek(pb, 0, SEEK_SET);
-            if (!(square_ps2fmv_rh_try_dat_sz_sz(s))) {
+            if (!(header_try_dat_sz_sz(s))) {
                 return AVERROR_INVALIDDATA;
             } else
                 goto goto_parse;
@@ -838,22 +849,36 @@ goto_parse:
             ret = append_this_string(&pair_url, &dot_sz);
             if (ret < 0)
                 return ret;
+
+            if ((avio_open(&dat_sz->sz, pair_url, AVIO_FLAG_READ)) < 0) {
+                erase_from_string(&pair_url, dot_sz);
+                convert_string_to_lowercase(&dot_sz);
+
+                ret = append_this_string(&pair_url, &dot_sz);
+                if (ret < 0)
+                    return ret;
+
+                ret = avio_open(&dat_sz->sz, pair_url, AVIO_FLAG_READ);
+                if (ret < 0)
+                    return ret;
+            }
         } else if (ps2fmv->dat_sz_is_sz == 3) {
             char *dot_dat = (char*)".DAT";
             ret = append_this_string(&pair_url, &dot_dat);
             if (ret < 0)
                 return ret;
-        }
-    
-        if ((avio_open(&dat_sz->dat, pair_url, AVIO_FLAG_READ)) < 0) {
-            erase_this_string(&pair_url);
 
-            
-            // (todo) convert basename to lowercase first.
-            if (ps2fmv->dat_sz_is_dat == 11) {
-                char *dot_sz = (char*)".sz";
-            } else if (ps2fmv->dat_sz_is_sz == 3) {
-                char *dot_dat = (char*)".dat";
+            if ((avio_open(&dat_sz->dat, pair_url, AVIO_FLAG_READ)) < 0) {
+                erase_from_string(&pair_url, dot_dat);
+                convert_string_to_lowercase(&dot_dat);
+
+                ret = append_this_string(&pair_url, &dot_dat);
+                if (ret < 0)
+                    return ret;
+
+                ret = avio_open(&dat_sz->dat, pair_url, AVIO_FLAG_READ);
+                if (ret < 0)
+                    return ret;
             }
         }
 
@@ -1068,7 +1093,7 @@ static int square_ps2fmv_read_sz_packet(AVFormatContext *s, AVPacket *pkt)
     return 0;
 }
 
-static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -1076,7 +1101,9 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     int ret;
     int cannot_process_this_block;
 
+    #if 0
     IPUInstructionQueue_QueuedInst = 0;
+    #endif
 
     if (ps2fmv->is_standalone_v1_dat == 10)
     {
@@ -1190,7 +1217,7 @@ const FFInputFormat ff_square_ps2fmv_demuxer = {
     .p.long_name = NULL_IF_CONFIG_SMALL("SquareSoft->SquareEnix PS2 FMV"),
     .p.flags = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(SquarePS2FMVDemuxContext),
-    .read_probe = square_ps2fmv_read_probe,
-    .read_header = square_ps2fmv_read_header,
-    .read_packet = square_ps2fmv_read_packet,
+    .read_probe = read_probe,
+    .read_header = read_header,
+    .read_packet = read_packet,
 };
