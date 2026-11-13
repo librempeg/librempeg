@@ -24,10 +24,11 @@
 
 #include <stdint.h>
 
-typedef struct WavPackV2Header {
+typedef struct WavPackV3Header {
     uint16_t version;  //< bitstream version
     uint16_t minbits;  //< minimum bit depth needed for lossy coding
-    uint16_t flags;    //< WavPack 3 (de/en)coding flags
+    uint16_t flags;    //< WavPack v3 (de/en)coding flags
+    uint16_t shift;    //< WavPack v3 shift number
 } WavPackV2Header;
 
 #endif /* AVCODEC_WAVPACK_OLD_H */

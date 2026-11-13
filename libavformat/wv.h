@@ -35,8 +35,8 @@ typedef struct WvHeader {
     uint32_t blocksize;     //< size of the block data (excluding the header)
     uint16_t version;       //< bitstream version
     uint16_t bits;          //< minimum bit depth needed for lossy coding
-    uint16_t v3_flags;      //< WavPack 3 (de/en)coding flags
-    uint16_t v3_shift;      //< WavPack 3 shift
+    uint16_t v3_flags;      //< WavPack v3 (de/en)coding flags
+    uint16_t v3_shift;      //< WavPack v3 shift number
     uint32_t total_samples; //< total number of samples in the stream
     uint32_t block_idx;     //< index of the first sample in this block
     uint32_t samples;       //< number of samples in this block
