@@ -814,6 +814,7 @@ extern const FFOutputFormat ff_wtv_muxer;
 extern const FFInputFormat  ff_wv_demuxer;
 extern const FFOutputFormat ff_wv_muxer;
 extern const FFInputFormat  ff_wv6_demuxer;
+extern const FFInputFormat  ff_wv64_demuxer;
 extern const FFInputFormat  ff_wve_demuxer;
 extern const FFInputFormat  ff_xa2_demuxer;
 extern const FFInputFormat  ff_xa30_demuxer;

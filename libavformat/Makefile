@@ -936,6 +936,7 @@ OBJS-$(CONFIG_WTV_MUXER)                 += wtvenc.o wtv_common.o \
                                             asf.o
 OBJS-$(CONFIG_WV_DEMUXER)                += wvdec.o wv.o apetag.o img2.o
 OBJS-$(CONFIG_WV6_DEMUXER)               += wv6.o pcm.o
+OBJS-$(CONFIG_WV64_DEMUXER)              += wv64.o pcm.o
 OBJS-$(CONFIG_WVE_DEMUXER)               += wvedec.o pcm.o
 OBJS-$(CONFIG_WV_MUXER)                  += wvenc.o wv.o apetag.o img2.o
 OBJS-$(CONFIG_XA2_DEMUXER)               += xa2.o pcm.o
