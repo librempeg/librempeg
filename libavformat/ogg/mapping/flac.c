@@ -23,9 +23,10 @@
 #include "libavcodec/avcodec.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/flac.h"
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
 
 #define OGG_FLAC_METADATA_TYPE_STREAMINFO 0x7F
 #define OGG_FLAC_MAGIC "\177FLAC"
@@ -76,7 +77,7 @@ flac_header (AVFormatContext * s, int idx)
 
         avpriv_set_pts_info(st, 64, 1, samplerate);
     } else if (mdt == FLAC_METADATA_TYPE_VORBIS_COMMENT) {
-        ff_vorbis_stream_comment(s, st, os->buf + os->pstart + 4, os->psize - 4);
+        ff_vorbis_comment_read_stream(s, st, os->buf + os->pstart + 4, os->psize - 4);
     }
 
     return 1;

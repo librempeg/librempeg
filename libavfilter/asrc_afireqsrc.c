@@ -247,7 +247,7 @@ static const AVFilterPad afireqsrc_outputs[] = {
 
 const FFFilter ff_asrc_afireqsrc = {
     .p.name        = "afireqsrc",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a FIR equalizer coefficients audio stream."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a Finite Impulse Response equalizer coefficients audio stream."),
     .p.priv_class  = &afireqsrc_class,
     .uninit        = uninit,
     .activate      = activate,

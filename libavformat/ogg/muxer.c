@@ -31,12 +31,12 @@
 #include "libavcodec/xiph.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/flac.h"
-#include "avformat.h"
-#include "avio_internal.h"
-#include "internal.h"
-#include "mux.h"
-#include "version.h"
-#include "vorbiscomment.h"
+#include "libavformat/avformat.h"
+#include "libavformat/avio_internal.h"
+#include "libavformat/internal.h"
+#include "libavformat/mux.h"
+#include "libavformat/version.h"
+#include "libavformat/vorbis/comment.h"
 
 #define MAX_PAGE_SIZE 65025
 
@@ -304,9 +304,9 @@ static uint8_t *ogg_write_vorbiscomment(int64_t offset, int bitexact,
     int64_t size;
     uint8_t *p;
 
-    ff_metadata_conv(m, ff_vorbiscomment_metadata_conv, NULL);
+    ff_metadata_conv(m, ff_vorbis_comment_metadata_conv, NULL);
 
-    size = ff_vorbiscomment_length(*m, vendor, chapters, nb_chapters);
+    size = ff_vorbis_comment_length(*m, vendor, chapters, nb_chapters);
     if (size < 0)
         return NULL;
     size += offset + framing_bit;
@@ -317,7 +317,7 @@ static uint8_t *ogg_write_vorbiscomment(int64_t offset, int bitexact,
         return NULL;
 
     ffio_init_write_context(&pb, p + offset, size - offset);
-    ff_vorbiscomment_write(&pb.pub, *m, vendor, chapters, nb_chapters);
+    ff_vorbis_comment_write(&pb.pub, *m, vendor, chapters, nb_chapters);
     if (framing_bit)
         avio_w8(&pb.pub, 1);
 

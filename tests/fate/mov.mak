@@ -412,6 +412,9 @@ fate-mov-pcm-remux: REF = 389df40a487ac8397ba20bda472434d7
 
 FATE_MOV_FFMPEG-$(call TRANSCODE, RAWVIDEO, MOV, TESTSRC_FILTER SETPTS_FILTER) += fate-mov-vfr
 fate-mov-vfr: CMD = md5 -filter_complex testsrc=size=2x2:duration=1,setpts=N*N:strip_fps=1 -c rawvideo -fflags +bitexact -f mov
+
+FATE_MOV_FFMPEG-$(call TRANSCODE, DFPWM, MOV, LAVFI_INDEV SINE_FILTER ATRIM_FILTER PCM_S16LE_DECODER ARESAMPLE_FILTER) += fate-mov-dfpwm-last-packet
+fate-mov-dfpwm-last-packet: CMD = transcode lavfi "sine=r=48000,atrim=end_sample=85" mov "-auto_conversion_filters -c:a dfpwm -movie_timescale 48000" "-c copy"
 fate-mov-vfr: CMP = oneline
 fate-mov-vfr: REF = 1558b4a9398d8635783c93f84eb5a60d
 
@@ -609,6 +612,15 @@ fate-mov-stereo3d-sbs-mp4: tests/data/vsynth1.yuv
 fate-mov-stereo3d-sbs-mp4: CMD = transcode rawvideo $(TARGET_PATH)/tests/data/vsynth1.yuv mp4 \
   "-c:v mpeg4 -qscale:v 10 -stereo3d:v sbsl -strict unofficial -frames:v 2" \
   "-c:v copy" "-show_entries stream_side_data_list" "" "" "-s 352x288 -pix_fmt yuv420p"
+
+# chpl titles are limited to 255 bytes; truncation must not split a UTF-8
+# character. 3gp is used because MP4/MOV read the chapter track, not chpl.
+tests/data/chpl-utf8.ffmeta: TAG = COPY
+tests/data/chpl-utf8.ffmeta: $(SRC_PATH)/tests/chpl-utf8.ffmeta | tests/data
+	$(M)cp $< $@
+fate-mov-chpl-utf8: tests/data/chpl-utf8.ffmeta
+FATE_MOV_FFMPEG_FFPROBE-$(call ALLYES, COLOR_FILTER MPEG4_ENCODER FFMETADATA_DEMUXER TGP_MUXER MOV_DEMUXER FILE_PROTOCOL) += fate-mov-chpl-utf8
+fate-mov-chpl-utf8: CMD = run_with_temp "$(FFMPEG) -nostdin -v error -filter_complex color=c=black:s=2x2:r=1 -f ffmetadata -i $(TARGET_PATH)/tests/data/chpl-utf8.ffmeta -map_chapters 0 -frames:v 1 -c:v mpeg4 -threads 1 -flags +bitexact -fflags +bitexact -f 3gp -y" "ffprobe$(PROGSSUF)$(EXESUF) -loglevel error -bitexact -show_chapters" 3gp
 
 FATE_FFMPEG += $(FATE_MOV_FFMPEG-yes)
 FATE_FFMPEG_FFPROBE += $(FATE_MOV_FFMPEG_FFPROBE-yes)

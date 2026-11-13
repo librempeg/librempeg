@@ -44,10 +44,12 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int rate, fps, flags, version, ret;
+    int rate, fps, flags, version, ret, channels = 0, audio_streams = 0;
     AVIOContext *pb = s->pb;
-    AVStream *vst = avformat_new_stream(s, NULL);
     int64_t start_offset;
+    AVStream *vst;
+
+    vst = avformat_new_stream(s, NULL);
     if (!vst)
         return AVERROR(ENOMEM);
 
@@ -70,23 +72,36 @@ static int read_header(AVFormatContext *s)
     avpriv_set_pts_info(vst, 64, 256, fps);
     flags = avio_rl32(pb);
     if (flags & 4) {
-        start_offset += 10;
-        avio_skip(pb, 6);
-        rate = avio_rl32(pb);
-        if (rate <= 0)
+        avio_skip(pb, 4);
+        audio_streams = avio_rl16(pb);
+        if (audio_streams > 255)
             return AVERROR_INVALIDDATA;
 
-        AVStream *ast = avformat_new_stream(s, NULL);
-        if (!ast)
-            return AVERROR(ENOMEM);
+        for (int n = 0; n < audio_streams; n++) {
+            rate = avio_rl32(pb);
+            if (rate <= 0)
+                return AVERROR_INVALIDDATA;
 
-        ast->start_time = 0;
-        ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-        ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_SSI;
-        ast->codecpar->sample_rate = rate;
-        ast->codecpar->ch_layout.nb_channels = 2;
+            avio_skip(pb, 2);
+            channels = avio_r8(pb);
+            avio_skip(pb, 1);
+            if (channels <= 0)
+                return AVERROR_INVALIDDATA;
 
-        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+            AVStream *ast = avformat_new_stream(s, NULL);
+            if (!ast)
+                return AVERROR(ENOMEM);
+
+            ast->start_time = 0;
+            ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+            ast->codecpar->codec_id = (channels == 1) ? AV_CODEC_ID_ADPCM_IMA : AV_CODEC_ID_ADPCM_IMA_SSI;
+            ast->codecpar->sample_rate = rate;
+            ast->codecpar->ch_layout.nb_channels = channels;
+
+            avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+        }
+
+        start_offset += 2 + 8 * audio_streams;
     }
 
     avio_seek(pb, start_offset, SEEK_SET);
@@ -114,10 +129,25 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         return FFERROR_REDO;
 
     switch (type) {
-    case MKBETAG('F','M','A','\0'):
+    case MKBETAG('F','M','A','\x00'):
+    case MKBETAG('F','M','A','\x01'):
+    case MKBETAG('F','M','A','\x02'):
+    case MKBETAG('F','M','A','\x03'):
+    case MKBETAG('F','M','A','\x04'):
+    case MKBETAG('F','M','A','\x05'):
+    case MKBETAG('F','M','A','\x06'):
+    case MKBETAG('F','M','A','\x07'):
+    case MKBETAG('F','M','A','\x08'):
+    case MKBETAG('F','M','A','\x09'):
+    case MKBETAG('F','M','A','\x0a'):
+    case MKBETAG('F','M','A','\x0b'):
+    case MKBETAG('F','M','A','\x0c'):
+    case MKBETAG('F','M','A','\x0d'):
+    case MKBETAG('F','M','A','\x0e'):
+    case MKBETAG('F','M','A','\x0f'):
         if (s->nb_streams == 1)
             return AVERROR_INVALIDDATA;
-        index = 1;
+        index = 1 + (type & 0xff);
         key = 1;
         break;
     case MKBETAG('F','M','V','k'):

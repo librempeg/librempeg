@@ -26,9 +26,10 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
 
 struct speex_params {
     int packet_size;
@@ -95,7 +96,7 @@ static int speex_header(AVFormatContext *s, int idx) {
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     } else
-        ff_vorbis_stream_comment(s, st, p, os->psize);
+        ff_vorbis_comment_read_stream(s, st, p, os->psize);
 
     spxp->seq++;
     return 1;

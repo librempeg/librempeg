@@ -26,9 +26,10 @@
 #include "libavutil/attributes.h"
 #include "libavutil/mem.h"
 #include "libavcodec/get_bits.h"
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
 
 typedef struct TheoraParams {
     int gpshift;
@@ -117,7 +118,7 @@ static int theora_header(AVFormatContext *s, int idx)
     }
     break;
     case 0x81:
-        ff_vorbis_stream_comment(s, st, os->buf + os->pstart + 7, os->psize - 7);
+        ff_vorbis_comment_read_stream(s, st, os->buf + os->pstart + 7, os->psize - 7);
         av_fallthrough;
     case 0x82:
         if (!thp->version)

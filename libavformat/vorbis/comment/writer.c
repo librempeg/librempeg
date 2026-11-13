@@ -19,11 +19,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "avio.h"
-#include "avio_internal.h"
-#include "avformat.h"
-#include "metadata.h"
-#include "vorbiscomment.h"
+#include "libavformat/avio.h"
+#include "libavformat/avio_internal.h"
+#include "libavformat/avformat.h"
+#include "libavformat/metadata.h"
+#include "libavformat/vorbis/comment.h"
 #include "libavutil/dict.h"
 
 /**
@@ -31,7 +31,7 @@
  * from Ogg Vorbis I format specification: comment field and header specification
  * http://xiph.org/vorbis/doc/v-comment.html
  */
-const AVMetadataConv ff_vorbiscomment_metadata_conv[] = {
+const AVMetadataConv ff_vorbis_comment_metadata_conv[] = {
     { "ALBUMARTIST",  "album_artist"  },
     { "TRACKNUMBER",  "track"         },
     { "DISCNUMBER",   "disc"          },
@@ -41,8 +41,8 @@ const AVMetadataConv ff_vorbiscomment_metadata_conv[] = {
     { 0 }
 };
 
-int ff_vorbiscomment_length(const AVDictionary *m, const char *vendor_string,
-                            AVChapter **chapters, unsigned int nb_chapters)
+int ff_vorbis_comment_length(const AVDictionary *m, const char *vendor_string,
+                             AVChapter **chapters, unsigned int nb_chapters)
 {
     AVIOContext *avio_buf;
     int ret, len;
@@ -51,7 +51,7 @@ int ff_vorbiscomment_length(const AVDictionary *m, const char *vendor_string,
     if (ret < 0)
         return ret;
 
-    ret = ff_vorbiscomment_write(avio_buf, m, vendor_string, chapters, nb_chapters);
+    ret = ff_vorbis_comment_write(avio_buf, m, vendor_string, chapters, nb_chapters);
     len = ffio_close_null_buf(avio_buf);
     if (ret < 0)
         return ret;
@@ -59,9 +59,9 @@ int ff_vorbiscomment_length(const AVDictionary *m, const char *vendor_string,
     return len;
 }
 
-int ff_vorbiscomment_write(AVIOContext *pb, const AVDictionary *dict,
-                           const char *vendor_string,
-                           AVChapter **chapters, unsigned int nb_chapters)
+int ff_vorbis_comment_write(AVIOContext *pb, const AVDictionary *dict,
+                            const char *vendor_string,
+                            AVChapter **chapters, unsigned int nb_chapters)
 {
     size_t vendor_string_length = strlen(vendor_string);
     int cm_count = 0;

@@ -378,7 +378,7 @@ AVFILTER_DEFINE_CLASS(loudequal);
 
 FFFilter ff_asrc_loudequal = {
     .p.name        = "loudequal",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate loudness compensation FIR coefficients."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate loudness compensation Finite Impulse Response coefficients."),
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,

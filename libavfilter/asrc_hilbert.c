@@ -169,7 +169,7 @@ static const AVFilterPad hilbert_outputs[] = {
 
 const FFFilter ff_asrc_hilbert = {
     .p.name        = "hilbert",
-    .p.description = NULL_IF_CONFIG_SMALL("Generate a Hilbert transform FIR coefficients."),
+    .p.description = NULL_IF_CONFIG_SMALL("Generate a Hilbert transform Finite Impulse Response coefficients."),
     .p.priv_class  = &hilbert_class,
     .init          = init,
     .uninit        = uninit,

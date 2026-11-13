@@ -28,10 +28,11 @@
 
 #include "libavcodec/bytestream.h"
 
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
-#include "riff.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
+#include "libavformat/riff.h"
 
 static int
 ogm_header(AVFormatContext *s, int idx)
@@ -121,7 +122,7 @@ ogm_header(AVFormatContext *s, int idx)
     } else if (bytestream2_peek_byte(&p) == 3) {
         bytestream2_skip(&p, 7);
         if (bytestream2_get_bytes_left(&p) > 1)
-            ff_vorbis_stream_comment(s, st, p.buffer, bytestream2_get_bytes_left(&p) - 1);
+            ff_vorbis_comment_read_stream(s, st, p.buffer, bytestream2_get_bytes_left(&p) - 1);
     }
 
     return 1;

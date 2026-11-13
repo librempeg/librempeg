@@ -5190,6 +5190,8 @@ static int mov_write_chpl_tag(AVIOContext *pb, AVFormatContext *s)
 
         if ((t = av_dict_get(c->metadata, "title", NULL, 0))) {
             int len = FFMIN(strlen(t->value), 255);
+            while (len > 252 && (t->value[len] & 0xC0) == 0x80)
+                len--;
             avio_w8(pb, len);
             avio_write(pb, t->value, len);
         } else
@@ -7510,7 +7512,10 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     sd = av_packet_side_data_get(pkt->side_data, pkt->side_data_elems, AV_PKT_DATA_SKIP_SAMPLES);
     if (sd && sd->size >= 10 && trk->par->frame_size) {
-        duration = FFMAX(av_rescale_q(trk->par->frame_size, (AVRational){ 1, trk->par->sample_rate },
+        int coded_samples = av_get_audio_frame_duration2(trk->par, pkt->size);
+        if (coded_samples <= 0)
+            coded_samples = trk->par->frame_size;
+        duration = FFMAX(av_rescale_q(coded_samples, (AVRational){ 1, trk->par->sample_rate },
                                       trk->st->time_base), pkt->duration);
         if (mov->use_editlist)
             pkt->duration = duration;

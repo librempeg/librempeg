@@ -23,9 +23,10 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
 
 struct oggopus_private {
     int need_comments;
@@ -101,7 +102,7 @@ static int opus_header(AVFormatContext *avf, int idx)
     if (priv->need_comments) {
         if (os->psize < 8 || memcmp(packet, "OpusTags", 8))
             return AVERROR_INVALIDDATA;
-        ff_vorbis_stream_comment(avf, st, packet + 8, os->psize - 8);
+        ff_vorbis_comment_read_stream(avf, st, packet + 8, os->psize - 8);
         priv->need_comments--;
         return 1;
     }

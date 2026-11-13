@@ -1865,12 +1865,17 @@ typedef struct AVFormatContext {
      */
     unsigned int correct_ts_overflow;
 
+#if FF_API_SEEK2ANY
     /**
      * Force seeking to any (also non key) frames.
      * - encoding: unused
      * - decoding: Set by user
+     *
+     * @deprecated use AVSEEK_FLAG_ANY in seek_flags
      */
+    attribute_deprecated
     int seek2any;
+#endif
 
     /**
      * Flush the I/O context after each packet.
@@ -2056,6 +2061,14 @@ typedef struct AVFormatContext {
      * - demuxing: Set by user
      */
     int recursion_limit;
+
+    /**
+     * Flags added to the flags of every avformat_seek_file(): AVSEEK_FLAG_ANY
+     * and AVSEEK_FLAG_PREROLL.
+     * - encoding: unused
+     * - decoding: Set by user
+     */
+    int seek_flags;
 } AVFormatContext;
 
 /**
@@ -2543,6 +2556,9 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt);
  *                     is specified, in AV_TIME_BASE units.
  * @param flags        flags which select direction and seeking mode
  *
+ * With AVSEEK_FLAG_PREROLL set, timestamp moves back by the audio pre-roll,
+ * which is discarded after the seek, as with avformat_seek_file().
+ *
  * @return >= 0 on success
  */
 int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
@@ -2564,21 +2580,24 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
  * keyframes (this may not be supported by all demuxers).
  * If flags contain AVSEEK_FLAG_BACKWARD, it is ignored.
  *
- * A seek by timestamp moves ts back by the largest
+ * If flags or AVFormatContext.seek_flags contain AVSEEK_FLAG_PREROLL, a seek
+ * by timestamp moves ts back by the largest
  * AVCodecParameters.seek_preroll of the audio streams that are not discarded,
  * whatever stream_index is, so that the decoders get their declared pre-roll
- * before ts. The target stays within min_ts and after the start of the
- * stream, so less room may be left. max_ts moves back as much, unless it is
- * INT64_MAX. If that seek fails, the seek is done to ts. This also applies to
- * av_seek_frame() with a demuxer that only implements this function.
+ * before ts. This is meant for a caller that decodes: the seek may land one
+ * keyframe earlier, which a caller that copies the packets would keep. The
+ * target stays within min_ts and after the start of the stream, so less room
+ * may be left. max_ts moves back as much, unless it is INT64_MAX. If that
+ * seek fails, the seek is done to ts.
  *
  * The first packet read after a seek from an audio stream carries
- * AV_PKT_DATA_SKIP_SAMPLES side data to discard the larger of the rest of the
- * priming (AVCodecParameters.initial_padding) and the seek pre-roll. The
- * discard supplies the stream's declared pre-roll; recovery beyond that
- * allowance depends on the codec and bitstream. Only the priming is discarded
- * on the first packet of the stream, and no pre-roll after the priming of a
- * stream whose start the seek targets.
+ * AV_PKT_DATA_SKIP_SAMPLES side data to discard the rest of the priming
+ * (AVCodecParameters.initial_padding) if the seek landed inside it. With
+ * AVSEEK_FLAG_PREROLL, it discards at least the seek pre-roll. The discard
+ * supplies the stream's declared pre-roll; recovery beyond that allowance
+ * depends on the codec and bitstream. Only the priming is discarded on the
+ * first packet of the stream, and no pre-roll after the priming of a stream
+ * whose start the seek targets.
  *
  * @param s            media file handle
  * @param stream_index index of the stream which is used as time base reference
@@ -2731,6 +2750,7 @@ void avformat_close_input(AVFormatContext **s);
 #define AVSEEK_FLAG_BYTE     2 ///< seeking based on position in bytes
 #define AVSEEK_FLAG_ANY      4 ///< seek to any frame, even non-keyframes
 #define AVSEEK_FLAG_FRAME    8 ///< seeking based on frame number
+#define AVSEEK_FLAG_PREROLL 16 ///< move the target back by the audio pre-roll, see avformat_seek_file()
 
 /**
  * @addtogroup lavf_encoding
