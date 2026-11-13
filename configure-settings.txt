@@ -1,1 +1,0 @@
-./configure --disable-encoders --disable-decoders --enable-decoder=ipu --disable-hwaccels --disable-muxers --disable-demuxers --enable-demuxer=square_ps2fmv --disable-parsers --enable-parser=ipu --disable-bsfs --disable-protocols --enable-protocol=async,fd,file,pipe,subfile --disable-filters --enable-filter=loop,scale --disable-bzlib --disable-lzma --disable-zlib --disable-asm
