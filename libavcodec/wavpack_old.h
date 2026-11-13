@@ -26,7 +26,7 @@
 
 typedef struct WavPackV2Header {
     uint16_t version;  //< bitstream version
-    uint16_t minbits;     //< minimum bit depth needed for lossy coding
+    uint16_t minbits;  //< minimum bit depth needed for lossy coding
     uint16_t v3_flags; //< WavPack 3 (de/en)coding flags
 } WavPackV2Header;
 

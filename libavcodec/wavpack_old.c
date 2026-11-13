@@ -21,7 +21,6 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
-#include "libavutil/threadprogress.h"
 
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
@@ -34,7 +33,6 @@
 
 typedef struct WavpackOldContext {
     AVCodecContext *avctx;
-
     WavPackV2Header hdr;
 } WavpackOldContext;
 
@@ -44,10 +42,23 @@ static av_cold int wavpack_old_decode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
+    if ((avctx->extradata) && (avctx->extradata_size >= 2))
+        s->hdr.version = AV_RL16(avctx->extradata);
+
     return 0;
 }
 
 static av_cold int wavpack_old_decode_close(AVCodecContext *avctx)
+{
+    WavpackOldContext *s = avctx->priv_data;
+
+    s->avctx = avctx;
+
+    return 0;
+}
+
+static av_cold int wavpack_old_decode_frame(AVCodecContext *avctx, AVFrame *frame,
+              int *got_frame_ptr, AVPacket *avpkt)
 {
     return 0;
 }
@@ -60,7 +71,7 @@ const FFCodec ff_wavpack_old_decoder = {
     .priv_data_size = sizeof(WavpackOldContext),
     .init           = wavpack_old_decode_init,
     .close          = wavpack_old_decode_close,
-    //FF_CODEC_DECODE_CB(wavpack_decode_frame),
+    FF_CODEC_DECODE_CB(wavpack_old_decode_frame),
     //.flush          = wavpack_decode_flush,
     .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
