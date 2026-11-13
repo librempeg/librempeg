@@ -39,21 +39,22 @@ typedef struct WavpackOldContext {
 static av_cold int wavpack_old_decode_init(AVCodecContext *avctx)
 {
     WavpackOldContext *s = avctx->priv_data;
+    WavPackV2Header *hdr = &s->hdr;
 
     s->avctx = avctx;
 
-    if ((avctx->extradata) && (avctx->extradata_size >= 2))
-        s->hdr.version = AV_RL16(avctx->extradata);
+    if ((avctx->extradata) && (avctx->extradata_size >= 2)) {
+        hdr->version = AV_RL16(avctx->extradata);
+        if ((hdr->version < 1) && (hdr->version > 3))
+            return AVERROR_INVALIDDATA;
+    } else
+        return AVERROR_INVALIDDATA;
 
     return 0;
 }
 
 static av_cold int wavpack_old_decode_close(AVCodecContext *avctx)
 {
-    WavpackOldContext *s = avctx->priv_data;
-
-    s->avctx = avctx;
-
     return 0;
 }
 

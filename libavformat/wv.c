@@ -53,8 +53,7 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
         wv->bits = AV_RL16(data + 10);
         if (wv->version == 3) {
             wv->v3_flags = AV_RL16(data + 12);
-            if ((wv->v3_flags & 0xfff0) != 0)
-                return AVERROR_INVALIDDATA;
+            wv->v3_shift = AV_RL16(data + 14);
             /* (todo) rest of the version 3 fields */
             if (AV_RL32(data + 24))
                 return AVERROR_INVALIDDATA;
