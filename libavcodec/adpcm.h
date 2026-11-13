@@ -43,6 +43,8 @@ typedef struct ADPCMChannelStatus {
     int coeff1;
     int coeff2;
     int idelta;
+
+    int16_t v[8];
 } ADPCMChannelStatus;
 
 int16_t ff_adpcm_argo_expand_nibble(ADPCMChannelStatus *cs, int nibble, int shift, int flag);

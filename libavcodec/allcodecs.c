@@ -806,6 +806,7 @@ extern const FFCodec ff_adpcm_thp_encoder;
 extern const FFCodec ff_adpcm_thp_le_decoder;
 extern const FFCodec ff_adpcm_thp_le_encoder;
 extern const FFCodec ff_adpcm_vima_decoder;
+extern const FFCodec ff_adpcm_wv64_decoder;
 extern const FFCodec ff_adpcm_xa8_decoder;
 extern const FFCodec ff_adpcm_xa_decoder;
 extern const FFCodec ff_adpcm_xa_encoder;

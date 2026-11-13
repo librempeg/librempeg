@@ -442,10 +442,12 @@ static const int16_t rhetorex_index[8] = {
 
 typedef struct ADPCMDecodeContext {
     ADPCMChannelStatus status[16];
-    int table[14][16];
+    int table[14][64];
     int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
     int block_size;                 /**< Block size for THP codecs */
+    int predictor;
+    int order;
 } ADPCMDecodeContext;
 
 static void adpcm_flush(AVCodecContext *avctx);
@@ -514,6 +516,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
     case AV_CODEC_ID_ADPCM_NDSP_SI1:
+    case AV_CODEC_ID_ADPCM_WV64:
         max_channels = 14;
         break;
     case AV_CODEC_ID_ADPCM_MTA2:
@@ -607,6 +610,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NXAP:
     case AV_CODEC_ID_ADPCM_CKMK:
     case AV_CODEC_ID_ADPCM_MS_MONO:
+    case AV_CODEC_ID_ADPCM_WV64:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -651,6 +655,21 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         }
         if (avctx->extradata_size > 32 * avctx->ch_layout.nb_channels)
             c->start_skip = avctx->extradata[32 * avctx->ch_layout.nb_channels];
+        break;
+    case AV_CODEC_ID_ADPCM_WV64:
+        if (!avctx->extradata || avctx->extradata_size < 72 + 16 * avctx->ch_layout.nb_channels)
+            return AVERROR_INVALIDDATA;
+
+        c->predictor = avctx->extradata[0];
+        c->order = avctx->extradata[1];
+
+        if (c->predictor * c->order > 8)
+            return AVERROR_INVALIDDATA;
+
+        for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+            for (int n = 0; n < 64; n++)
+                c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + 72 + ch * 128 + n * 2), 16);
+        }
         break;
     default:
         break;
@@ -1984,6 +2003,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_BRR:
+    case AV_CODEC_ID_ADPCM_WV64:
         nb_samples = buf_size / (9 * ch) * 16;
         break;
     case AV_CODEC_ID_ADPCM_IMA_REF:
@@ -3911,6 +3931,69 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             left -= nbs;
         }
         ) /* End of CASE */
+    CASE(ADPCM_WV64,
+        const int order = c->order;
+        int blocks;
+
+        if (avpkt->size >= avctx->block_align && avctx->block_align > channels) {
+            blocks = avpkt->size / avctx->block_align;
+        } else {
+            blocks = 1;
+        }
+
+        for (int m = 0; m < blocks; m++) {
+            for (int channel = 0; channel < channels; channel++) {
+                const int *codebook = c->table[channel];
+                int16_t *v = c->status[channel].v;
+                int control, scaling, index;
+
+                samples = samples_p[channel] + m * 16;
+                control = bytestream2_get_byteu(&gb);
+                scaling = control >> 4;
+                index = control & 15;
+
+                if (index >= c->predictor)
+                    return AVERROR_INVALIDDATA;
+
+                const int *predictor = codebook + order * index * 8;
+                for (int vector = 0; vector < 2; vector++) {
+                    int32_t accumulator[8] = { 0 };
+
+                    for (int k = 0; k < order; k++) {
+                        int sample = v[8 - order + k];
+
+                        for (int i = 0; i < 8; i++)
+                            accumulator[i] += sample * predictor[k * 8 + i];
+                    }
+
+                    int residuals[8];
+                    for (int i = 0; i < 4; i++) {
+                        int byte = bytestream2_get_byte(&gb);
+
+                        residuals[2*i+0] = sign_extend(byte >> 4, 4);
+                        residuals[2*i+1] = sign_extend(byte & 15, 4);
+                    }
+
+                    const int *p = &predictor[(order-1) * 8];
+                    for (int k = 0; k < 8; k++) {
+                        int residual = residuals[k] << scaling;
+
+                        accumulator[k] += residual << 11;
+                        for (int i = 0; i < 7 - k; i++)
+                            accumulator[k + 1 + i] += residual * p[i];
+                    }
+
+                    for (int i = 0; i < 8; i++) {
+                        int sample = av_clip_int16(accumulator[i] >> 11);
+
+                        *samples++ = sample;
+                        v[i] = sample;
+                    }
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     CASE(ADPCM_AFC,
         int blocks;
 
@@ -4979,6 +5062,7 @@ ADPCM_DECODER(ADPCM_SWF,         sample_fmts_s16,  adpcm_swf,         "ADPCM Sho
 ADPCM_DECODER(ADPCM_TANTALUS,    sample_fmts_s16p, adpcm_tantalus,    "ADPCM Tantalus")
 ADPCM_DECODER(ADPCM_THP_LE,      sample_fmts_s16p, adpcm_thp_le,      "ADPCM Nintendo THP (little-endian)")
 ADPCM_DECODER(ADPCM_THP,         sample_fmts_s16p, adpcm_thp,         "ADPCM Nintendo THP")
+ADPCM_DECODER(ADPCM_WV64,        sample_fmts_s16p, adpcm_wv64,        "ADPCM WV64")
 ADPCM_DECODER(ADPCM_XA,          sample_fmts_s16p, adpcm_xa,          "ADPCM CDROM XA")
 ADPCM_DECODER(ADPCM_XA8,         sample_fmts_s16p, adpcm_xa8,         "ADPCM CDROM XA 8-bit")
 ADPCM_DECODER(ADPCM_XMD,         sample_fmts_s16p, adpcm_xmd,         "ADPCM Konami XMD")
