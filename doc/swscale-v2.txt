@@ -46,13 +46,13 @@ The basic idea is to split logic between three major components:
    the resulting output is always identical, no matter how many layers of
    optimization we add.
 
-   This code lives in libswscale/ops.c
+   This code lives in libswscale/ops_optimizer.c
 
 3. The compiler. Once we have a sequence of operations as output by the
    optimizer, we "compile" this down to a callable function. This is then
    applied by the dispatch wrapper by striping it over the input image.
 
-   See libswscale/ops_backend.c for the reference backend, or
+   See libswscale/uops_backend.c for the reference backend, or
    libswscale/x86/ops.c for a more complex SIMD example.
 
 This overall approach has a considerable number of benefits:
@@ -198,8 +198,8 @@ As a result, we arrive at a design where we first divide the image into small
 chunks, or "blocks", and then dispatch the "chain" of kernels on each chunk in
 sequence. Each kernel processes a fixed number of pixels, with the overall
 entry point taking care of looping. Remaining pixels (the "tail") are handled
-generically by the backend-invariant dispatch code (located in ops.c), using a
-partial memcpy into a suitably sized temporary buffer.
+generically by the backend-invariant dispatch code (located in ops_dispatch.c),
+using a partial memcpy into a suitably sized temporary buffer.
 
 To minimize the per-kernel function call overhead, we use a "continuation
 passing style" for chaining kernels. Each operation computes its result and
