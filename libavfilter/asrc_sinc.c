@@ -46,9 +46,6 @@ typedef struct SincContext {
     int64_t pts;
 
     int sample_size;
-
-    AVTXContext *tx, *itx;
-    av_tx_fn tx_fn, itx_fn;
 } SincContext;
 
 static int activate(AVFilterContext *ctx)
@@ -132,8 +129,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     SincContext *s = ctx->priv;
 
     av_freep(&s->coeffs);
-    av_tx_uninit(&s->tx);
-    av_tx_uninit(&s->itx);
 }
 
 static const AVFilterPad sinc_outputs[] = {

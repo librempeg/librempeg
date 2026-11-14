@@ -16,7 +16,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#undef FABS
 #undef FEXP
 #undef FCOS
 #undef FSIN
@@ -24,14 +23,14 @@
 #undef SQRT
 #undef FPOW
 #undef CEIL
-#undef ATAN2
 #undef FMINV
+#undef HYPOT
+#undef LRINT
 #undef ftype
 #undef ctype
 #undef TX_TYPE
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
-#define FABS fabsf
 #define FEXP expf
 #define FCOS cosf
 #define FSIN sinf
@@ -39,14 +38,14 @@
 #define FPOW powf
 #define CEIL ceilf
 #define SQRT sqrtf
-#define ATAN2 atan2f
 #define FMINV FLT_MIN
+#define HYPOT hypotf
+#define LRINT lrintf
 #define ftype float
 #define ctype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SAMPLE_FORMAT flt
 #else
-#define FABS fabs
 #define FEXP exp
 #define FCOS cos
 #define FSIN sin
@@ -54,8 +53,9 @@
 #define FPOW pow
 #define CEIL ceil
 #define SQRT sqrt
-#define ATAN2 atan2
 #define FMINV DBL_MIN
+#define HYPOT hypot
+#define LRINT lrint
 #define ftype double
 #define ctype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
@@ -168,133 +168,101 @@ static void fn(gain)(ftype *h, int n, const ftype g, const ftype G)
         h[i] *= G;
 }
 
-#define SQR(a) ((a) * (a))
-
-static ftype fn(safe_log)(ftype x)
+static ctype fn(cexp)(const ctype z)
 {
-    av_assert0(x >= F(0.0));
-    if (x > FMINV)
-        return FLOG(x);
-    return FLOG(FMINV);
+    ftype x = z.re, y = z.im;
+    ftype c, s;
+
+    c = FCOS(y);
+    s = FSIN(y);
+
+    ftype ex = FEXP(x);
+    return (ctype){ ex * c, ex * s };
 }
 
-static int fn(fir_to_phase)(AVFilterContext *ctx, ftype **h, int *len, int *post_len, ftype phase)
+static int fn(fir_to_phase)(const AVFilterContext *ctx, ftype *dst, const ftype *src, const int nb_taps, const ftype phase)
 {
-    SincContext *s = ctx->priv;
-    ftype *pi_wraps, *work, phase1 = (phase > F(50.0) ? F(100.0) - phase : phase) / F(50.0);
-    int work_len, begin, end, imp_peak = 0, peak = 0, ret;
-    ftype imp_sum = 0, peak_imp_sum = 0, scale = F(1.0), iscale;
-    ftype prev_angle2 = 0, cum_2pi = 0, prev_angle1 = 0, cum_1pi = 0;
+    const ftype a = F(1.0) - (F(1.0) + phase) * F(0.5);
+    const int oversample = 4;
+    const int fft_size = oversample << av_ceil_log2(nb_taps);
+    const int fft_mid = fft_size/2;
+    AVTXContext *tx_ctx = NULL, *itx_ctx;
+    const ftype threshold = FMINV;
+    const ftype logt = FLOG(threshold);
+    const ftype iscale = F(1.0) / fft_size;
+    const ftype scale = F(1.0);
+    av_tx_fn tx_fn, itx_fn;
+    ctype *fft_out = NULL;
+    ftype *fft_in = NULL;
+    int ret;
 
-    work_len = 4 << av_ceil_log2(*len);
-
-    /* The first part is for work (+2 for (UN)PACK), the latter for pi_wraps. */
-    work = av_calloc((work_len + 2) + ((work_len + 2) / 2), sizeof(ftype));
-    if (!work)
-        return AVERROR(ENOMEM);
-    pi_wraps = &work[work_len + 2];
-
-    memcpy(work, *h, *len * sizeof(*work));
-
-    iscale = F(1.0) / work_len;
-
-    av_tx_uninit(&s->tx);
-    av_tx_uninit(&s->itx);
-    ret = av_tx_init(&s->tx,  &s->tx_fn,  TX_TYPE, 0, work_len, &scale, AV_TX_INPLACE);
+    ret = av_tx_init(&tx_ctx, &tx_fn, TX_TYPE, 0, fft_size, &scale, 0);
     if (ret < 0)
-        goto fail;
-    ret = av_tx_init(&s->itx, &s->itx_fn, TX_TYPE, 1, work_len, &iscale, AV_TX_INPLACE);
+        return ret;
+
+    ret = av_tx_init(&itx_ctx, &itx_fn, TX_TYPE, 1, fft_size, &iscale, 0);
     if (ret < 0)
         goto fail;
 
-    s->tx_fn(s->tx, work, work, sizeof(ftype));   /* Cepstral: */
-
-    for (int i = 0; i <= work_len; i += 2) {
-        ftype angle = ATAN2(work[i + 1], work[i]);
-        ftype detect = 2 * M_PI;
-        ftype delta = angle - prev_angle2;
-        ftype adjust = detect * ((delta < -detect * F(0.7)) - (delta > detect * F(0.7)));
-
-        prev_angle2 = angle;
-        cum_2pi += adjust;
-        angle += cum_2pi;
-        detect = M_PI;
-        delta = angle - prev_angle1;
-        adjust = detect * ((delta < -detect * F(0.7)) - (delta > detect * F(0.7)));
-        prev_angle1 = angle;
-        cum_1pi += FABS(adjust);        /* fabs for when 2pi and 1pi have combined */
-        pi_wraps[i >> 1] = cum_1pi;
-
-        work[i] = fn(safe_log)(SQRT(SQR(work[i]) + SQR(work[i + 1])));
-        work[i + 1] = F(0.0);
+    fft_in = av_calloc(fft_size, sizeof(*fft_in));
+    if (!fft_in) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
     }
 
-    s->itx_fn(s->itx, work, work, sizeof(ctype));
-
-    for (int i = 1; i < work_len/2; i++) { /* Window to reject acausal components */
-        work[i] *= F(2.0);
-        work[i + work_len/2] = F(0.0);
-    }
-    s->tx_fn(s->tx, work, work, sizeof(ftype));
-
-    for (int i = 2; i < work_len; i += 2)   /* Interpolate between linear & min phase */
-        work[i + 1] = phase1 * i / work_len * pi_wraps[work_len >> 1] + (F(1.0) - phase1) * (work[i + 1] + pi_wraps[i >> 1]) - pi_wraps[i >> 1];
-
-    work[0] = FEXP(work[0]);
-    work[1] = F(0.0);
-    for (int i = 2; i < work_len; i += 2) {
-        ftype x = FEXP(work[i]);
-
-        work[i    ] = x * FCOS(work[i + 1]);
-        work[i + 1] = x * FSIN(work[i + 1]);
-    }
-    work[work_len] = FEXP(work[work_len]);
-    work[work_len+1] = F(0.0);
-
-    s->itx_fn(s->itx, work, work, sizeof(ctype));
-
-    /* Find peak pos. */
-    for (int i = 0; i <= lrintf(pi_wraps[work_len >> 1] / M_PI); i++) {
-        imp_sum += work[i];
-        if (FABS(imp_sum) > FABS(peak_imp_sum)) {
-            peak_imp_sum = imp_sum;
-            peak = i;
-        }
-        if (work[i] > work[imp_peak])   /* For debug check only */
-            imp_peak = i;
+    fft_out = av_calloc(fft_mid+1, sizeof(*fft_out));
+    if (!fft_out) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
     }
 
-    while (peak && FABS(work[peak - 1]) > FABS(work[peak]) && (work[peak - 1] * work[peak] > 0)) {
-        peak--;
+    for (int i = 0; i < nb_taps; i++)
+        fft_in[i] = src[i];
+
+    tx_fn(tx_ctx, fft_out, fft_in, sizeof(*fft_in));
+
+    for (int i = 0; i < fft_mid+1; i++) {
+        const ftype mag = HYPOT(fft_out[i].re, fft_out[i].im);
+
+        fft_out[i].re = mag < threshold ? logt : FLOG(mag);
+        fft_out[i].im = F(0.0);
     }
 
-    if (phase == F(0.0)) {
-        begin = 0;
-    } else if (phase == F(100.0)) {
-        begin = peak - *len / 2;
-    } else {
-        begin = (F(0.997) - (2 - phase1) * F(0.22)) * *len + F(0.5);
-        end = (F(0.997) + (0 - phase1) * F(0.22)) * *len + F(0.5);
-        begin = peak - (begin & ~3);
-        end = peak + 1 + ((end + 3) & ~3);
-        *len = end - begin;
-        *h = av_realloc_f(*h, *len, sizeof(**h));
-        if (!*h) {
-            ret = AVERROR(ENOMEM);
-            goto fail;
-        }
+    itx_fn(itx_ctx, fft_in, fft_out, sizeof(*fft_out));
+
+    for (int i = 1; i < fft_mid; i++)
+        fft_in[i] *= F(2.0) * a;
+    for (int i = fft_mid+1; i < fft_size; i++)
+        fft_in[i] *= F(2.0) * (F(1.0) - a);
+
+    tx_fn(tx_ctx, fft_out, fft_in, sizeof(*fft_in));
+
+    for (int i = 0; i < fft_mid+1; i++) {
+        const ftype re = fft_out[i].re;
+        const ftype im = fft_out[i].im;
+        ctype v;
+
+        v.re = re;
+        v.im = im;
+
+        fft_out[i] = fn(cexp)(v);
     }
 
-    for (int i = 0; i < *len; i++)
-        (*h)[i] = work[(begin + (phase > F(50.0) ? *len - 1 - i : i) + work_len) & (work_len - 1)];
-    *post_len = phase > F(50.0) ? peak - begin : begin + *len - (peak + 1);
+    itx_fn(itx_ctx, fft_in, fft_out, sizeof(*fft_out));
 
-    av_log(ctx, AV_LOG_DEBUG, "%d nPI=%g peak-sum@%i=%g (val@%i=%g); len=%i post=%i (%g%%)\n",
-           work_len, pi_wraps[work_len >> 1] / M_PI, peak, peak_imp_sum, imp_peak,
-           work[imp_peak], *len, *post_len, F(100.0) - F(100.0) * *post_len / (*len - 1));
+    int shift = LRINT((F(1.0) - a) * (nb_taps - 1));
+    for (int i = 0; i < nb_taps; i++) {
+        const int idx = (i - shift) % fft_size;
+
+        dst[i] = fft_in[(idx < 0) ? idx + fft_size : idx];
+    }
 
 fail:
-    av_free(work);
+    av_freep(&fft_out);
+    av_freep(&fft_in);
+
+    av_tx_uninit(&itx_ctx);
+    av_tx_uninit(&tx_ctx);
 
     return ret;
 }
@@ -304,8 +272,8 @@ static int fn(generate)(AVFilterContext *ctx)
     SincContext *s = ctx->priv;
     ftype Fn = s->sample_rate * F(0.5);
     ftype *h[2], *coeffs;
-    ftype g = s->gain;
-    int ret = 0, n, post_peak, longer;
+    const ftype g = s->gain;
+    int ret = 0, n, longer;
 
     if (s->Fc0 >= Fn || s->Fc1 >= Fn) {
         av_log(ctx, AV_LOG_ERROR,
@@ -340,11 +308,9 @@ static int fn(generate)(AVFilterContext *ctx)
     }
 
     if (s->phase != F(50.0)) {
-        ret = fn(fir_to_phase)(ctx, &h[longer], &n, &post_peak, s->phase);
+        ret = fn(fir_to_phase)(ctx, h[longer], h[longer], n, s->phase * F(0.02) - F(1.0));
         if (ret < 0)
             goto fail;
-    } else {
-        post_peak = n >> 1;
     }
 
     s->n = 1 << av_ceil_log2(n);
@@ -359,8 +325,6 @@ static int fn(generate)(AVFilterContext *ctx)
 
 fail:
     av_free(h[longer]);
-    av_tx_uninit(&s->tx);
-    av_tx_uninit(&s->itx);
 
     return ret;
 }
