@@ -92,8 +92,6 @@ static int push_frame(AVFilterLink *outlink)
     AVFrame *outsamplesref;
     int n_out;
 
-    if (ff_filter_disabled(ctx))
-        return 0;
     n_out = s->packet_size;
 
     if (s->whole_len >= 0 && s->pad_len < 0) {
@@ -108,6 +106,11 @@ static int push_frame(AVFilterLink *outlink)
 
     if (!n_out)
         return AVERROR_EOF;
+
+    if (ff_filter_disabled(ctx)) {
+        ff_filter_set_ready(ctx, 10);
+        return 0;
+    }
 
     outsamplesref = ff_get_audio_buffer(outlink, n_out);
     if (!outsamplesref)
