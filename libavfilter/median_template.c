@@ -54,9 +54,6 @@ static void fn(filter_plane)(AVFilterContext *ctx, const uint8_t *ssrc, int src_
     MedianContext *s = ctx->priv;
     htype *ccoarse = s->coarse[jobnr];
     htype *cfine = s->fine[jobnr];
-    htype *coarse = s->coarse_tmp[jobnr];
-    htype *fine = s->fine_tmp[jobnr];
-    htype *luc = s->luc_tmp[jobnr];
     const int radius = s->radius;
     const int radiusV = s->radiusV;
     const int t = s->t;
@@ -64,6 +61,11 @@ static void fn(filter_plane)(AVFilterContext *ctx, const uint8_t *ssrc, int src_
     pixel *dst = (pixel *)ddst;
     const pixel *srcp;
     const pixel *p;
+#if DEPTH == 16
+    htype *coarse = s->row_coarse[jobnr];
+    htype (*fine)[BINS] = (htype (*)[BINS])s->row_fine[jobnr];
+    htype *luc = s->row_luc[jobnr];
+#endif
 
     src_linesize /= sizeof(pixel);
     dst_linesize /= sizeof(pixel);
@@ -91,9 +93,15 @@ static void fn(filter_plane)(AVFilterContext *ctx, const uint8_t *ssrc, int src_
     srcp = src;
 
     for (int i = slice_h_start; i < slice_h_end; i++) {
+#if DEPTH == 16
         memset(coarse, 0, BINS * sizeof(*coarse));
-        memset(fine, 0, BINS * BINS * sizeof(*fine));
+        memset(fine, 0, BINS * BINS * sizeof(**fine));
         memset(luc, 0, BINS * sizeof(*luc));
+#else
+        htype coarse[BINS] = { 0 };
+        htype fine[BINS][BINS] = { { 0 } };
+        htype luc[BINS] = { 0 };
+#endif
 
         p = srcp + src_linesize * FFMAX(0, i - radiusV - 1);
         for (int j = 0; j < width; j++) {
@@ -111,7 +119,7 @@ static void fn(filter_plane)(AVFilterContext *ctx, const uint8_t *ssrc, int src_
         for (int j = 0; j < radius; j++)
             s->hadd(coarse, &ccoarse[BINS * j], BINS);
         for (int k = 0; k < BINS; k++)
-            s->hmuladd(&fine[BINS * k], &cfine[BINS * width * k], 2 * radius + 1, BINS);
+            s->hmuladd(&fine[k][0], &cfine[BINS * width * k], 2 * radius + 1, BINS);
 
         for (int j = 0; j < width; j++) {
             int sum = 0, k, b;
@@ -129,23 +137,23 @@ static void fn(filter_plane)(AVFilterContext *ctx, const uint8_t *ssrc, int src_
             av_assert0(k < BINS);
 
             if (luc[k] <= j - radius) {
-                memset(&fine[BINS * k], 0, BINS * sizeof(htype));
+                memset(&fine[k], 0, BINS * sizeof(htype));
                 for (luc[k] = j - radius; luc[k] < FFMIN(j + radius + 1, width); luc[k]++)
-                    s->hadd(&fine[BINS * k], &cfine[BINS * (width * k + luc[k])], BINS);
+                    s->hadd(fine[k], &cfine[BINS * (width * k + luc[k])], BINS);
                 if (luc[k] < j + radius + 1) {
-                    s->hmuladd(&fine[BINS * k], &cfine[BINS * (width * k + width - 1)], j + radius + 1 - width, BINS);
+                    s->hmuladd(&fine[k][0], &cfine[BINS * (width * k + width - 1)], j + radius + 1 - width, BINS);
                     luc[k] = j + radius + 1;
                 }
             } else {
                 for (; luc[k] < j + radius + 1; luc[k]++) {
-                    s->hsub(&fine[BINS * k], &cfine[BINS * (width * k + FFMAX(luc[k] - 2 * radius - 1, 0))], BINS);
-                    s->hadd(&fine[BINS * k], &cfine[BINS * (width * k + FFMIN(luc[k], width - 1))], BINS);
+                    s->hsub(fine[k], &cfine[BINS * (width * k + FFMAX(luc[k] - 2 * radius - 1, 0))], BINS);
+                    s->hadd(fine[k], &cfine[BINS * (width * k + FFMIN(luc[k], width - 1))], BINS);
                 }
             }
 
             s->hsub(coarse, &ccoarse[BINS * FFMAX(j - radius, 0)], BINS);
 
-            segment = &fine[BINS * k];
+            segment = fine[k];
             for (b = 0; b < BINS; b++) {
                 sum += segment[b];
                 if (sum > t) {
