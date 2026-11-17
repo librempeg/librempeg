@@ -269,7 +269,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
     for (int i = MAX_STATES-1; i >= 0; i--) {
         const int cur_max_size = max_size >> i;
-        int cur_max_period = max_period >> i;
+        const int cur_max_period = max_period >> i;
         int ns = cur_max_period;
         int ne = 0;
 
@@ -316,7 +316,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n <= ne; n++) {
             if (rptrx[n] >= rptrx[n-1] &&
                 rptrx[n] >= rptrx[n+1]) {
-                const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
+                const ftype score = rptrx[n];
 
                 if (score >= best_score) {
                     best_score = score;
@@ -427,7 +427,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 
     for (int i = MAX_STATES-1; i >= 0; i--) {
         const int cur_max_size = max_size >> i;
-        int cur_max_period = max_period >> i;
+        const int cur_max_period = max_period >> i;
         int ns = cur_max_period;
         int ne = 0;
 
@@ -474,7 +474,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n <= ne; n++) {
             if (rptrx[n] >= rptrx[n-1] &&
                 rptrx[n] >= rptrx[n+1]) {
-                const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
+                const ftype score = rptrx[n];
 
                 if (score >= best_score) {
                     best_score = score;
