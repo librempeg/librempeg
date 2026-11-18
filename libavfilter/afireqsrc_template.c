@@ -152,6 +152,8 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioFIRSourceContext *s = ctx->priv;
+    const ftype percentage = s->percentage * F(0.01);
+    const ftype sgn = s->invert ? F(-1.0) : F(1.0);
     int fft_size, fft_mid, ret;
     ftype scale, factor;
     ftype *magnitude;
@@ -219,8 +221,11 @@ static av_cold int fn(config_output)(AVFilterLink *outlink)
 
     fn(eq_interp)(complexf, freq, magnitude, s->nb_freq, s->interp, s->nb_taps, factor);
 
-    for (int i = 0; i < fft_mid+1; i++)
-        complexf[i].re = FEXP10(complexf[i].re / F(20.0));
+    for (int i = 0; i < fft_mid+1; i++) {
+        const ftype mag = sgn * percentage * complexf[i].re;
+
+        complexf[i].re = FEXP10(mag / F(20.0));
+    }
 
     if (s->phase != F(0.0)) {
         const ftype a = F(1.0) - (F(1.0) + s->phase) * F(0.5);

@@ -53,6 +53,8 @@ typedef struct AudioFIRSourceContext {
     int preset;
     int interp;
     float phase;
+    int invert;
+    double percentage;
 
     int64_t pts;
 
@@ -142,6 +144,10 @@ static const AVOption afireqsrc_options[] = {
     { "smooth", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SMOOTH}, 0, 0, FLAGS, .unit = "interp" },
     { "phase","set the phase", OFFSET(phase), AV_OPT_TYPE_FLOAT, {.dbl=-1}, -1, 1, FLAGS, .unit = "phase" },
     { "h",    "set the phase", OFFSET(phase), AV_OPT_TYPE_FLOAT, {.dbl=-1}, -1, 1, FLAGS, .unit = "phase" },
+    { "invert", "set the equalizer magnitude inversion", OFFSET(invert), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
+    { "v",      "set the equalizer magnitude inversion", OFFSET(invert), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
+    { "percentage", "set the magnitude percentage", OFFSET(percentage), AV_OPT_TYPE_DOUBLE, {.dbl=100}, 0, 100, FLAGS },
+    { "e",          "set the magnitude percentage", OFFSET(percentage), AV_OPT_TYPE_DOUBLE, {.dbl=100}, 0, 100, FLAGS },
     {NULL}
 };
 
