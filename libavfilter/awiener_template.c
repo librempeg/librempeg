@@ -16,6 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#undef CLIP
 #undef FEXP
 #undef FLOG
 #undef FCOS
@@ -26,6 +27,7 @@
 #undef TX_TYPE
 #undef EPS
 #if DEPTH == 32
+#define CLIP av_clipf
 #define FEXP expf
 #define FLOG logf
 #define FCOS cosf
@@ -36,6 +38,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define EPS FLT_EPSILON
 #else
+#define CLIP av_clipd
 #define FEXP exp
 #define FLOG log
 #define FCOS cos
@@ -60,7 +63,7 @@ typedef struct fn(StateContext) {
     ftype *in_buffer;
     ftype *in_frame;
     ftype *out_dist_frame;
-    ctype *spectrum_buf;
+    ctype *spectrum_buf[2];
     ftype *windowed_frame;
 
     AVTXContext *tx_ctx, *itx_ctx;
@@ -82,7 +85,7 @@ static int fn(init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
 
     scale = F(1.0) / s->rdft_size;
-    iscale = F(1.0 / 1.5);
+    iscale = F(1.0 / 2.0);
 
     st = s->st;
     for (int ch = 0; ch < s->channels; ch++) {
@@ -97,11 +100,12 @@ static int fn(init)(AVFilterContext *ctx)
         stc->in_buffer      = av_calloc(s->rdft_size, sizeof(*stc->in_buffer));
         stc->in_frame       = av_calloc(s->rdft_size, sizeof(*stc->in_frame));
         stc->out_dist_frame = av_calloc(s->rdft_size, sizeof(*stc->out_dist_frame));
-        stc->spectrum_buf   = av_calloc(s->rdft_size/2+1, sizeof(*stc->spectrum_buf));
+        stc->spectrum_buf[0]= av_calloc(s->rdft_size/2+1, sizeof(*stc->spectrum_buf[0]));
+        stc->spectrum_buf[1]= av_calloc(s->rdft_size/2+1, sizeof(*stc->spectrum_buf[1]));
         stc->windowed_frame = av_calloc(s->rdft_size, sizeof(*stc->windowed_frame));
         if (!stc->in_buffer || !stc->in_frame || !stc->ss[0] || !stc->ss[1] ||
             !stc->out_dist_frame || !stc->windowed_frame ||
-            !stc->wiener_frame || !stc->spectrum_buf || !stc->sbb)
+            !stc->wiener_frame || !stc->spectrum_buf[0] || !stc->spectrum_buf[1] || !stc->sbb)
             return AVERROR(ENOMEM);
 
         ret = av_tx_init(&stc->tx_ctx, &stc->tx_fn, TX_TYPE, 0, s->rdft_size, &scale, 0);
@@ -132,7 +136,8 @@ static void fn(uninit)(AVFilterContext *ctx)
         av_freep(&stc->in_buffer);
         av_freep(&stc->in_frame);
         av_freep(&stc->out_dist_frame);
-        av_freep(&stc->spectrum_buf);
+        av_freep(&stc->spectrum_buf[0]);
+        av_freep(&stc->spectrum_buf[1]);
         av_freep(&stc->windowed_frame);
 
         av_tx_uninit(&stc->tx_ctx);
@@ -164,7 +169,7 @@ static void fn(apply_window)(AudioWienerContext *s, const ftype *in_frame,
             out_frame[i] += in_frame[i] * window[i];
     } else {
         for (int i = 0; i < rdft_size; i++)
-            out_frame[i] = in_frame[i] * window[i];
+            out_frame[i] = in_frame[i];
     }
 }
 
@@ -197,11 +202,36 @@ static ftype fn(spectral_flatness)(const ctype *const spectral, int size)
     return num / den;
 }
 
+static ctype fn(get_bin)(const ctype *data, const int n, const int N)
+{
+    if (n == 0 || n == N-1) {
+        return data[n];
+    } else {
+        ctype num, den, ret;
+        ftype beta;
+
+        num.re = F(2.0) * data[n].re;
+        num.im = F(2.0) * data[n].im;
+
+        den.re = data[n-1].re + data[n+1].re;
+        den.im = data[n-1].im + data[n+1].im;
+
+        beta = F(0.5) * CLIP((num.re * den.re + num.im * den.im) /
+                             (den.re * den.re + den.im * den.im + EPS), F(0.0), F(1.0));
+
+        ret.re = data[n].re - beta * den.re;
+        ret.im = data[n].im - beta * den.im;
+
+        return ret;
+    }
+}
+
 static void fn(feed)(AVFilterContext *ctx, int ch,
                      const ftype *in_samples, ftype *out_samples,
                      ftype *in_frame, ftype *out_dist_frame,
                      ftype *windowed_frame, ftype *wiener_frame,
-                     ctype *spectrum_buf, ctype *ss0, ctype *ss1, ftype *sbb,
+                     ctype *spectrum_buf, ctype *tspectrum_buf,
+                     ctype *ss0, ctype *ss1, ftype *sbb,
                      const int nb_samples)
 {
     AudioWienerContext *s = ctx->priv;
@@ -226,7 +256,10 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
     fn(apply_window)(s, in_frame, windowed_frame, 0);
 
-    stc->tx_fn(stc->tx_ctx, spectrum_buf, windowed_frame, sizeof(ftype));
+    stc->tx_fn(stc->tx_ctx, tspectrum_buf, windowed_frame, sizeof(ftype));
+
+    for (int n = 0; n < nb_coeffs; n++)
+        spectrum_buf[n] = fn(get_bin)(tspectrum_buf, n, nb_coeffs);
 
     if (s->capture >= 0) {
         capture = s->capture;
@@ -272,8 +305,8 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
         new.re = g_tsnr * spectrum_buf[n].re;
         new.im = g_tsnr * spectrum_buf[n].im;
 
-        spectrum_buf[n].re = new.re * reduction + keep * spectrum_buf[n].re;
-        spectrum_buf[n].im = new.im * reduction + keep * spectrum_buf[n].im;
+        spectrum_buf[n].re = new.re * reduction + keep * tspectrum_buf[n].re;
+        spectrum_buf[n].im = new.im * reduction + keep * tspectrum_buf[n].im;
     }
 
     stc->itx_fn(stc->itx_ctx, wiener_frame, spectrum_buf, sizeof(ctype));
@@ -310,7 +343,8 @@ static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, i
                  stc->out_dist_frame,
                  stc->windowed_frame,
                  stc->wiener_frame,
-                 stc->spectrum_buf,
+                 stc->spectrum_buf[0],
+                 stc->spectrum_buf[1],
                  stc->ss[0], stc->ss[1],
                  stc->sbb, out_nb_samples);
     }
@@ -337,7 +371,8 @@ static int fn(wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
                  stc->out_dist_frame,
                  stc->windowed_frame,
                  stc->wiener_frame,
-                 stc->spectrum_buf,
+                 stc->spectrum_buf[0],
+                 stc->spectrum_buf[1],
                  stc->ss[0], stc->ss[1],
                  stc->sbb, out_nb_samples);
     }
