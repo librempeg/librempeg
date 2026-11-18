@@ -252,7 +252,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
         }
 
         for (int n = 0; n < nb_coeffs; n++) {
-            ftype g = FMAX(FFMAX(p_sn[n]-beta*p_n[n], F(0.0))/(p_sn[n] + EPS), gmin);
+            ftype g = FMAX(FMAX(p_sn[n]-beta*p_n[n], F(0.0))/(p_sn[n] + EPS), gmin);
 
             out[n].re = in[n].re * g;
             out[n].im = in[n].im * g;
