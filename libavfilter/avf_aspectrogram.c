@@ -1640,7 +1640,7 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (s->outpicref && ff_inlink_queued_samples(inlink) > 0) {
+    if (s->outpicref) {
         AVFrame *fin;
 
         ret = ff_inlink_consume_samples(inlink, s->hop_size, s->hop_size, &fin);
@@ -1664,8 +1664,18 @@ static int activate(AVFilterContext *ctx)
             ff_graph_frame_free(ctx, &fin);
             if (ret <= 0)
                 return ret;
+
+            ff_filter_set_ready(ctx, 10);
         }
     }
+
+    if (ff_inlink_queued_samples(inlink) >= s->hop_size) {
+        ff_filter_set_ready(ctx, 10);
+        return 0;
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts))
+        s->eof = status == AVERROR_EOF;
 
     if (s->eof && s->sliding == FULLFRAME &&
         s->xpos > 0 && s->outpicref) {
@@ -1695,19 +1705,8 @@ static int activate(AVFilterContext *ctx)
         return 0;
     }
 
-    if (!s->eof && ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        s->eof = status == AVERROR_EOF;
-        ff_filter_set_ready(ctx, 100);
-        return 0;
-    }
-
     if (s->eof) {
         ff_outlink_set_status(outlink, AVERROR_EOF, s->pts);
-        return 0;
-    }
-
-    if (ff_inlink_queued_samples(inlink) >= s->hop_size) {
-        ff_filter_set_ready(ctx, 10);
         return 0;
     }
 
