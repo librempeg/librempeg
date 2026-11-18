@@ -1,3 +1,4 @@
+APITESTPROGS-$(CONFIG_AMR_PARSER) += api-amr-parser
 APITESTPROGS-$(call ENCDEC, FLAC, FLAC) += api-flac
 APITESTPROGS-$(call DEMDEC, H264, H264) += api-h264
 APITESTPROGS-$(call DEMDEC, H264, H264) += api-h264-slice
