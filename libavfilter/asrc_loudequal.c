@@ -76,7 +76,7 @@ typedef struct LoudEqualContext {
     float db_diff_curve[31];
 
     AVComplexFloat *spline;
-    AVComplexFloat *kernel;
+    float *kernel;
 
     AVTXContext    *itx_ctx;
     av_tx_fn        itx_fn;
@@ -232,8 +232,6 @@ static void eq_interp(AVComplexFloat *complexf,
 
                 complexf[i].re = g;
                 complexf[i].im = 0;
-                complexf[minterp * 2 - i - 1].re = g;
-                complexf[minterp * 2 - i - 1].im = 0;
 
                 break;
             }
@@ -244,9 +242,9 @@ static void eq_interp(AVComplexFloat *complexf,
 static av_cold int init(AVFilterContext *ctx)
 {
     LoudEqualContext *s = ctx->priv;
-    const int M = 1 << av_ceil_log2(s->nb_taps);
-    float factor, reference_db_diff, scale = 1.f;
-    int freq_idx = 0, L = M * 2, ret;
+    const int L = 1 << av_ceil_log2(s->nb_taps+1);
+    float factor, reference_db_diff, scale;
+    int freq_idx = 0, ret;
 
     gen_inter_curves(ctx);
     gen_curves(ctx, s->attenuated, s->attenuated_curve);
@@ -262,11 +260,12 @@ static av_cold int init(AVFilterContext *ctx)
 
     reference_db_diff = s->db_diff_curve[freq_idx];
 
-    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, AV_TX_FLOAT_FFT, 1, L, &scale, 0);
+    scale = 1.f / L;
+    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, AV_TX_FLOAT_RDFT, 1, L, &scale, 0);
     if (ret < 0)
         return ret;
 
-    s->spline = av_calloc(L, sizeof(*s->spline));
+    s->spline = av_calloc(L/2+1, sizeof(*s->spline));
     s->kernel = av_calloc(L, sizeof(*s->kernel));
     if (!s->spline || !s->kernel)
         return AVERROR(ENOMEM);
@@ -274,7 +273,7 @@ static av_cold int init(AVFilterContext *ctx)
     factor = FFMIN(s->sample_rate * 0.5f, iso_freq[FF_ARRAY_ELEMS(iso_freq) - 1]) / (float)s->nb_taps;
     eq_interp(s->spline, iso_freq, s->db_diff_curve, FF_ARRAY_ELEMS(iso_freq), s->interp, s->nb_taps, factor);
 
-    for (int i = 0; i < L; i++)
+    for (int i = 0; i < L/2+1; i++)
         s->spline[i].re = ff_exp10f((reference_db_diff - s->spline[i].re) / 20.f);
 
     s->itx_fn(s->itx_ctx, s->kernel, s->spline, sizeof(*s->kernel));
@@ -284,8 +283,8 @@ static av_cold int init(AVFilterContext *ctx)
 
         s->spline[0].re = 0.f;
         for (int i = 0; i < mid; i++) {
-            s->spline[mid-i].re = s->kernel[i].re / L;
-            s->spline[mid+i].re = s->kernel[i].re / L;
+            s->spline[mid-i].re = s->kernel[i];
+            s->spline[mid+i].re = s->kernel[i];
         }
         s->spline[s->nb_taps-1].re = 0.f;
     }
