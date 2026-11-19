@@ -21,6 +21,7 @@
  * Loudness compensation FIR coefficients audio source
  */
 
+#include <float.h>
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -37,7 +38,8 @@
 enum {
     INTERP_LINEAR,
     INTERP_CUBIC,
-    INTERP_SPLINE,
+    INTERP_COSINE,
+    INTERP_SMOOTH,
     NB_INTERP
 };
 
@@ -100,7 +102,8 @@ static const AVOption loudequal_options[] = {
     { "i",     "set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_INTERP-1, FLAGS, .unit = "interp" },
     { "linear", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_LINEAR}, 0, 0, FLAGS, .unit = "interp" },
     { "cubic",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_CUBIC},  0, 0, FLAGS, .unit = "interp" },
-    { "spline", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SPLINE}, 0, 0, FLAGS, .unit = "interp" },
+    { "cosine", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_COSINE}, 0, 0, FLAGS, .unit = "interp" },
+    { "smooth", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SMOOTH}, 0, 0, FLAGS, .unit = "interp" },
     { NULL }
 };
 
@@ -230,15 +233,22 @@ static void eq_interp(AVComplexFloat *complexf,
 
                         g = a * x3 + b * x2 + c * x1 + d;
                     }
-                } else if (interp == INTERP_SPLINE) {
-                    const float d = freq[j+1] - freq[j];
-                    const float u = (x - freq[j]) / d;
-                    const float c0 = magnitude[j];
-                    const float c1 = 1/2.f*(magnitude[j+1]-magnitude[j-1]);
-                    const float c2 = magnitude[j-1] - 5/2.f*magnitude[j] + 2*magnitude[j+1] - 1/2.f*magnitude[j+2];
-                    const float c3 = 1/2.f*(magnitude[j+2]-magnitude[j-1]) + 3/2.f*(magnitude[j]-magnitude[j+1]);
+                } else if (interp == INTERP_COSINE) {
+                    const float fx = (x < freq[j]) ? freq[j] : x;
+                    const float t = logf((fx + FLT_MIN) / (freq[j] + FLT_MIN)) / logf(freq[j+1] / (freq[j] + FLT_MIN));
+                    const float w = 0.5f * (1.f - cosf(M_PIf * t));
+                    const float g0 = magnitude[j];
+                    const float g1 = magnitude[j+1];
 
-                    g = ((c3 * u + c2) * u + c1) * u + c0;
+                    g = g0 + (g1 - g0) * w;
+                } else if (interp == INTERP_SMOOTH) {
+                    const float fx = (x < freq[j]) ? freq[j] : x;
+                    const float t = logf((fx + FLT_MIN) / (freq[j] + FLT_MIN)) / logf(freq[j+1] / (freq[j] + FLT_MIN));
+                    const float w = t * t * (3.f - 2.f * t);
+                    const float g0 = magnitude[j];
+                    const float g1 = magnitude[j+1];
+
+                    g = g0 + (g1 - g0) * w;
                 }
 
                 complexf[i].re = g;
