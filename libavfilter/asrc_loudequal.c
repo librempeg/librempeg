@@ -136,8 +136,19 @@ static void gen_inter_curves(AVFilterContext *ctx)
 static void gen_curves(AVFilterContext *ctx, const float phon, float *out)
 {
     LoudEqualContext *s = ctx->priv;
+    const float rounded_phon = roundf(phon * 10.f) / 10.f;
+
+    for (int n = 0; n < FF_ARRAY_ELEMS(iso_phons); n++) {
+        if (rounded_phon == iso_phons[n]) {
+            for (int i = 0; i < FF_ARRAY_ELEMS(iso_curves[0]); i++)
+                out[i] = iso_curves[n][i];
+
+            return;
+        }
+    }
+
     const float lower_phon = floorf(phon / 10.f) * 10.f;
-    const float upper_phon = ceilf(phon / 10.f) * 10.f;
+    const float upper_phon = fminf(lower_phon + 10.f, 100.f);
     const float *lower_curve;
     const float *upper_curve;
     float weight;
@@ -158,7 +169,7 @@ static void gen_curves(AVFilterContext *ctx, const float phon, float *out)
             upper_curve = s->inter_curves[i];
     }
 
-    weight = (phon - lower_phon) / 10.f;
+    weight = (rounded_phon - lower_phon) / 10.f;
     for (int i = 0; i < FF_ARRAY_ELEMS(iso_curves[0]); i++)
         out[i] = lower_curve[i] * (1.f - weight) + upper_curve[i] * weight;
 }
@@ -178,7 +189,7 @@ static void eq_interp(AVComplexFloat *complexf,
 
                 if (interp == INTERP_LINEAR) {
                     const float d  = freq[j+1] - freq[j];
-                    const float d0 = x - freq[j];
+                    const float d0 = fmaxf(x - freq[j], 0.f);
                     const float d1 = freq[j+1] - x;
                     const float g0 = magnitude[j];
                     const float g1 = magnitude[j+1];
@@ -259,6 +270,8 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     reference_db_diff = s->db_diff_curve[freq_idx];
+    for (int i = 0; i < FF_ARRAY_ELEMS(iso_freq); i++)
+        s->db_diff_curve[i] -= reference_db_diff;
 
     scale = 1.f / L;
     ret = av_tx_init(&s->itx_ctx, &s->itx_fn, AV_TX_FLOAT_RDFT, 1, L, &scale, 0);
@@ -274,19 +287,18 @@ static av_cold int init(AVFilterContext *ctx)
     eq_interp(s->spline, iso_freq, s->db_diff_curve, FF_ARRAY_ELEMS(iso_freq), s->interp, s->nb_taps, factor);
 
     for (int i = 0; i < L/2+1; i++)
-        s->spline[i].re = ff_exp10f((reference_db_diff - s->spline[i].re) / 20.f);
+        s->spline[i].re = ff_exp10f(s->spline[i].re / 20.f);
 
     s->itx_fn(s->itx_ctx, s->kernel, s->spline, sizeof(*s->kernel));
 
     {
         const int mid = s->nb_taps/2;
 
-        s->spline[0].re = 0.f;
+        memset(s->spline, 0, (L/2+1) * sizeof(*s->spline));
         for (int i = 0; i < mid; i++) {
             s->spline[mid-i].re = s->kernel[i];
             s->spline[mid+i].re = s->kernel[i];
         }
-        s->spline[s->nb_taps-1].re = 0.f;
     }
 
     av_tx_uninit(&s->itx_ctx);
