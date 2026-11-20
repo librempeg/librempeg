@@ -548,7 +548,7 @@ static int opus_decode_subpacket(OpusStreamContext *s, const uint8_t *buf)
         if (buf) {
             int64_t cur_samplerate;
             av_opt_get_int(s->src, "sample_rate", AV_OPT_SEARCH_CHILDREN, &cur_samplerate);
-            flush_needed = (s->packet.mode == OPUS_MODE_CELT) || (cur_samplerate != s->silk_samplerate);
+            flush_needed = (s->packet.mode == OPUS_MODE_CELT) && (cur_samplerate != s->silk_samplerate);
         } else {
             flush_needed = !!s->delayed_samples;
         }
