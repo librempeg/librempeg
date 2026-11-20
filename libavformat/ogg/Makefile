@@ -6,6 +6,7 @@ clean::
 
 OBJS-$(CONFIG_OGG_DEMUXER) +=  \
     ogg/demuxer.o              \
+    ogg/mapping/celt.o         \
     ogg/mapping/dirac.o        \
     ogg/mapping/flac.o         \
     ogg/mapping/ogm.o          \

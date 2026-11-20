@@ -23,9 +23,10 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
-#include "avformat.h"
-#include "internal.h"
-#include "oggdec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/internal.h"
+#include "libavformat/ogg/mapping.h"
+#include "libavformat/vorbis/comment.h"
 
 /* CELT-over-Ogg streams use at most a couple of vorbiscomment "extra" headers. */
 #define CELT_MAX_EXTRA_HEADERS 16
@@ -91,7 +92,7 @@ static int celt_header(AVFormatContext *s, int idx)
     } else if (priv && priv->extra_headers_left) {
         /* Extra headers (vorbiscomment) */
 
-        ff_vorbis_stream_comment(s, st, p, os->psize);
+        ff_vorbis_comment_read_stream(s, st, p, os->psize);
         priv->extra_headers_left--;
         return 1;
     } else {
