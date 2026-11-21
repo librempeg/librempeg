@@ -45,7 +45,6 @@
 #include "video.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "window_func.h"
 
 enum DisplayMode  { COMBINED, SEPARATE, NB_MODES };
 enum DataMode     { D_MAGNITUDE, D_PHASE, D_UPHASE, NB_DMODES };
@@ -79,20 +78,7 @@ typedef struct ASpectrogramContext {
     int start, stop;            ///< zoom mode
     int data;
     int xpos;                   ///< x position (current column)
-    AVTXContext **rdft;         ///< Real Discrete Fourier Transform context
-    AVTXContext **fft;          ///< Fast Fourier Transform context
-    AVTXContext **ifft;         ///< Inverse Fast Fourier Transform context
-    av_tx_fn rtx_fn;
-    av_tx_fn tx_fn;
-    av_tx_fn itx_fn;
     int fft_size;               ///< number of coeffs (FFT window size)
-    float **rdft_in;            ///< input RDFT coeffs
-    AVComplexFloat **fft_in;    ///< input FFT coeffs
-    AVComplexFloat **fft_data;  ///< bins holder for each (displayed) channels
-    AVComplexFloat **fft_scratch;///< scratch buffers
-    float *window_func_lut;     ///< Window function LUT
-    float **magnitudes;
-    float **phases;
     int win_func;
     int win_size;
     int buf_size;
@@ -120,72 +106,22 @@ typedef struct ASpectrogramContext {
     AVFrame **frames;
     unsigned int nb_frames;
     unsigned int frames_size;
+
+    void *state;
+
+    int (*init)(AVFilterContext *ctx);
+    void (*uninit)(AVFilterContext *ctx);
+    void (*clear_magnitudes)(AVFilterContext *ctx);
+    int (*run_channel_fft)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*calc_channel_magnitudes)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*calc_channel_phases)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*calc_channel_uphases)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    void (*acalc_magnitudes)(struct ASpectrogramContext *s);
+    void (*scale_magnitudes)(struct ASpectrogramContext *s, double scale);
 } ASpectrogramContext;
 
 #define OFFSET(x) offsetof(ASpectrogramContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
-
-static const AVOption aspectrogram_options[] = {
-    { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
-    { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
-    { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_SLIDES-1, FLAGS, .unit = "slide" },
-        { "replace", "replace old columns with new", 0, AV_OPT_TYPE_CONST, {.i64=REPLACE}, 0, 0, FLAGS, .unit = "slide" },
-        { "scroll", "scroll from right to left", 0, AV_OPT_TYPE_CONST, {.i64=SCROLL}, 0, 0, FLAGS, .unit = "slide" },
-        { "fullframe", "return full frames", 0, AV_OPT_TYPE_CONST, {.i64=FULLFRAME}, 0, 0, FLAGS, .unit = "slide" },
-        { "rscroll", "scroll from left to right", 0, AV_OPT_TYPE_CONST, {.i64=RSCROLL}, 0, 0, FLAGS, .unit = "slide" },
-        { "lreplace", "replace from right to left", 0, AV_OPT_TYPE_CONST, {.i64=LREPLACE}, 0, 0, FLAGS, .unit = "slide" },
-    { "mode", "set channel display mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=COMBINED}, COMBINED, NB_MODES-1, FLAGS, .unit = "mode" },
-        { "combined", "combined mode", 0, AV_OPT_TYPE_CONST, {.i64=COMBINED}, 0, 0, FLAGS, .unit = "mode" },
-        { "separate", "separate mode", 0, AV_OPT_TYPE_CONST, {.i64=SEPARATE}, 0, 0, FLAGS, .unit = "mode" },
-    { "color", "set channel coloring", OFFSET(color_mode), AV_OPT_TYPE_INT, {.i64=CHANNEL}, CHANNEL, NB_CLMODES-1, FLAGS, .unit = "color" },
-        { "channel",   "separate color for each channel", 0, AV_OPT_TYPE_CONST, {.i64=CHANNEL},   0, 0, FLAGS, .unit = "color" },
-        { "intensity", "intensity based coloring",        0, AV_OPT_TYPE_CONST, {.i64=INTENSITY}, 0, 0, FLAGS, .unit = "color" },
-        { "rainbow",   "rainbow based coloring",          0, AV_OPT_TYPE_CONST, {.i64=RAINBOW},   0, 0, FLAGS, .unit = "color" },
-        { "moreland",  "moreland based coloring",         0, AV_OPT_TYPE_CONST, {.i64=MORELAND},  0, 0, FLAGS, .unit = "color" },
-        { "nebulae",   "nebulae based coloring",          0, AV_OPT_TYPE_CONST, {.i64=NEBULAE},   0, 0, FLAGS, .unit = "color" },
-        { "fire",      "fire based coloring",             0, AV_OPT_TYPE_CONST, {.i64=FIRE},      0, 0, FLAGS, .unit = "color" },
-        { "fiery",     "fiery based coloring",            0, AV_OPT_TYPE_CONST, {.i64=FIERY},     0, 0, FLAGS, .unit = "color" },
-        { "fruit",     "fruit based coloring",            0, AV_OPT_TYPE_CONST, {.i64=FRUIT},     0, 0, FLAGS, .unit = "color" },
-        { "cool",      "cool based coloring",             0, AV_OPT_TYPE_CONST, {.i64=COOL},      0, 0, FLAGS, .unit = "color" },
-        { "magma",     "magma based coloring",            0, AV_OPT_TYPE_CONST, {.i64=MAGMA},     0, 0, FLAGS, .unit = "color" },
-        { "green",     "green based coloring",            0, AV_OPT_TYPE_CONST, {.i64=GREEN},     0, 0, FLAGS, .unit = "color" },
-        { "viridis",   "viridis based coloring",          0, AV_OPT_TYPE_CONST, {.i64=VIRIDIS},   0, 0, FLAGS, .unit = "color" },
-        { "plasma",    "plasma based coloring",           0, AV_OPT_TYPE_CONST, {.i64=PLASMA},    0, 0, FLAGS, .unit = "color" },
-        { "cividis",   "cividis based coloring",          0, AV_OPT_TYPE_CONST, {.i64=CIVIDIS},   0, 0, FLAGS, .unit = "color" },
-        { "terrain",   "terrain based coloring",          0, AV_OPT_TYPE_CONST, {.i64=TERRAIN},   0, 0, FLAGS, .unit = "color" },
-    { "scale", "set display scale", OFFSET(scale), AV_OPT_TYPE_INT, {.i64=SQRT}, LINEAR, NB_SCALES-1, FLAGS, .unit = "scale" },
-        { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=LINEAR}, 0, 0, FLAGS, .unit = "scale" },
-        { "sqrt", "square root", 0, AV_OPT_TYPE_CONST, {.i64=SQRT},   0, 0, FLAGS, .unit = "scale" },
-        { "cbrt", "cubic root",  0, AV_OPT_TYPE_CONST, {.i64=CBRT},   0, 0, FLAGS, .unit = "scale" },
-        { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=LOG},    0, 0, FLAGS, .unit = "scale" },
-        { "4thrt","4th root",    0, AV_OPT_TYPE_CONST, {.i64=FOURTHRT}, 0, 0, FLAGS, .unit = "scale" },
-        { "5thrt","5th root",    0, AV_OPT_TYPE_CONST, {.i64=FIFTHRT},  0, 0, FLAGS, .unit = "scale" },
-    { "fscale", "set frequency scale", OFFSET(fscale), AV_OPT_TYPE_INT, {.i64=F_LINEAR}, 0, NB_FSCALES-1, FLAGS, .unit = "fscale" },
-        { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=F_LINEAR}, 0, 0, FLAGS, .unit = "fscale" },
-        { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=F_LOG},    0, 0, FLAGS, .unit = "fscale" },
-    { "saturation", "color saturation multiplier", OFFSET(saturation), AV_OPT_TYPE_FLOAT, {.dbl = 1}, -10, 10, FLAGS },
-    WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
-    { "orientation", "set orientation", OFFSET(orientation), AV_OPT_TYPE_INT, {.i64=VERTICAL}, 0, NB_ORIENTATIONS-1, FLAGS, .unit = "orientation" },
-        { "vertical",   NULL, 0, AV_OPT_TYPE_CONST, {.i64=VERTICAL},   0, 0, FLAGS, .unit = "orientation" },
-        { "horizontal", NULL, 0, AV_OPT_TYPE_CONST, {.i64=HORIZONTAL}, 0, 0, FLAGS, .unit = "orientation" },
-    { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl = 0}, 0, 1, FLAGS },
-    { "gain", "set scale gain", OFFSET(gain), AV_OPT_TYPE_FLOAT, {.dbl = 1}, 0, 128, FLAGS },
-    { "data", "set data mode", OFFSET(data), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_DMODES-1, FLAGS, .unit = "data" },
-        { "magnitude", NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_MAGNITUDE}, 0, 0, FLAGS, .unit = "data" },
-        { "phase",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_PHASE},     0, 0, FLAGS, .unit = "data" },
-        { "uphase",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_UPHASE},    0, 0, FLAGS, .unit = "data" },
-    { "rotation", "color rotation", OFFSET(rotation), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -1, 1, FLAGS },
-    { "start", "start frequency", OFFSET(start), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
-    { "stop",  "stop frequency",  OFFSET(stop),  AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
-    { "fps",   "set video rate",  OFFSET(rate_str), AV_OPT_TYPE_STRING, {.str = "auto"}, 0, 0, FLAGS },
-    { "legend", "draw legend", OFFSET(legend), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
-    { "drange", "set dynamic range in dBFS", OFFSET(drange), AV_OPT_TYPE_FLOAT, {.dbl = 120}, 10, 200, FLAGS },
-    { "limit", "set upper limit in dBFS", OFFSET(limit), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -100, 100, FLAGS },
-    { "opacity", "set opacity strength", OFFSET(opacity_factor), AV_OPT_TYPE_FLOAT, {.dbl = 1}, 0, 10, FLAGS },
-    { NULL }
-};
-
-AVFILTER_DEFINE_CLASS(aspectrogram);
 
 static const struct ColorTable {
     float a, y, u, v;
@@ -303,252 +239,84 @@ static const struct ColorTable {
     {    1,                  1,                  0,                   0 }},
 };
 
-static av_cold void uninit(AVFilterContext *ctx)
+static float log_scale(const float bin,
+                       const float bmin, const float bmax,
+                       const float min, const float max)
 {
-    ASpectrogramContext *s = ctx->priv;
-    int i;
-
-    av_freep(&s->combine_buffer);
-    if (s->rdft) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_tx_uninit(&s->rdft[i]);
-    }
-    av_freep(&s->rdft);
-    if (s->fft) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_tx_uninit(&s->fft[i]);
-    }
-    av_freep(&s->fft);
-    if (s->ifft) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_tx_uninit(&s->ifft[i]);
-    }
-    av_freep(&s->ifft);
-    if (s->fft_data) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->fft_data[i]);
-    }
-    av_freep(&s->fft_data);
-    if (s->rdft_in) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->rdft_in[i]);
-    }
-    av_freep(&s->rdft_in);
-    if (s->fft_in) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->fft_in[i]);
-    }
-    av_freep(&s->fft_in);
-    if (s->fft_scratch) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->fft_scratch[i]);
-    }
-    av_freep(&s->fft_scratch);
-    if (s->color_buffer) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->color_buffer[i]);
-    }
-    av_freep(&s->color_buffer);
-    av_freep(&s->window_func_lut);
-    if (s->magnitudes) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->magnitudes[i]);
-    }
-    av_freep(&s->magnitudes);
-    av_frame_free(&s->outpicref);
-    av_frame_free(&s->in_frame);
-    if (s->phases) {
-        for (i = 0; i < s->nb_display_channels; i++)
-            av_freep(&s->phases[i]);
-    }
-    av_freep(&s->phases);
-
-    while (s->nb_frames > 0) {
-        av_frame_free(&s->frames[s->nb_frames - 1]);
-        s->nb_frames--;
-    }
-
-    av_freep(&s->frames);
+    return exp2f(((bin - bmin) / (bmax - bmin)) * (log2f(max) - log2f(min)) + log2f(min));
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static float get_hz(const float bin, const float bmax,
+                    const float min, const float max,
+                    int fscale)
 {
-    static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
-    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
-    AVFilterFormats *formats;
-    int ret;
-
-    formats = ff_make_sample_format_list(sample_fmts);
-    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
-        return ret;
-
-    formats = ff_make_pixel_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
-        return ret;
-
-    return 0;
+    switch (fscale) {
+    case F_LINEAR:
+        return min + (bin / bmax) * (max - min);
+    case F_LOG:
+        return min + log_scale(bin, 0, bmax, 20.f, max - min);
+    default:
+        return 0.f;
+    }
 }
 
-static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static float inv_log_scale(float bin,
+                           float bmin, float bmax,
+                           float min, float max)
 {
-    ASpectrogramContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const float *window_func_lut = s->window_func_lut;
-    AVFrame *fin = arg;
-    const int ch = jobnr;
+    return (min * exp2f((bin * (log2f(max) - log2f(20.f))) / bmax) + min) * bmax / max;
+}
 
-    /* fill FFT input with the number of samples available */
-    const float *p = (float *)fin->extended_data[ch];
-    float *in_frame = (float *)s->in_frame->extended_data[ch];
+static float bin_pos(const int bin, const int num_bins, const float min, const float max)
+{
+    return inv_log_scale(bin, 0.f, num_bins, 20.f, max - min);
+}
 
-    memmove(in_frame, in_frame + s->hop_size, (s->fft_size - s->hop_size) * sizeof(float));
-    memcpy(in_frame + s->fft_size - s->hop_size, p, fin->nb_samples * sizeof(float));
+static void pick_color(ASpectrogramContext *s,
+                       float yf, float uf, float vf,
+                       float a, float *out)
+{
+    const float af = s->opacity_factor * 255.f;
 
-    for (int i = fin->nb_samples; i < s->hop_size; i++)
-        in_frame[i + s->fft_size - s->hop_size] = 0.f;
+    if (s->color_mode > CHANNEL) {
+        const int cm = s->color_mode;
+        float y, u, v;
+        int i;
 
-    if (s->stop) {
-        float theta, phi, psi, a, b, S, c;
-        AVComplexFloat *f = s->fft_in[ch];
-        AVComplexFloat *g = s->fft_data[ch];
-        AVComplexFloat *h = s->fft_scratch[ch];
-        int L = s->buf_size;
-        int N = s->win_size;
-        int M = s->win_size / 2;
-
-        for (int n = 0; n < s->win_size; n++) {
-            s->fft_data[ch][n].re = in_frame[n] * window_func_lut[n];
-            s->fft_data[ch][n].im = 0;
+        for (i = 1; i < FF_ARRAY_ELEMS(color_table[cm]) - 1; i++)
+            if (color_table[cm][i].a >= a)
+                break;
+        // i now is the first item >= the color
+        // now we know to interpolate between item i - 1 and i
+        if (a <= color_table[cm][i - 1].a) {
+            y = color_table[cm][i - 1].y;
+            u = color_table[cm][i - 1].u;
+            v = color_table[cm][i - 1].v;
+        } else if (a >= color_table[cm][i].a) {
+            y = color_table[cm][i].y;
+            u = color_table[cm][i].u;
+            v = color_table[cm][i].v;
+        } else {
+            float start = color_table[cm][i - 1].a;
+            float end = color_table[cm][i].a;
+            float lerpfrac = (a - start) / (end - start);
+            y = color_table[cm][i - 1].y * (1.0f - lerpfrac)
+              + color_table[cm][i].y * lerpfrac;
+            u = color_table[cm][i - 1].u * (1.0f - lerpfrac)
+              + color_table[cm][i].u * lerpfrac;
+            v = color_table[cm][i - 1].v * (1.0f - lerpfrac)
+              + color_table[cm][i].v * lerpfrac;
         }
 
-        phi = 2.f * M_PI * (s->stop - s->start) / (float)inlink->sample_rate / (M - 1);
-        theta = 2.f * M_PI * s->start / (float)inlink->sample_rate;
-
-        for (int n = 0; n < M; n++) {
-            h[n].re = cosf(n * n / 2.f * phi);
-            h[n].im = sinf(n * n / 2.f * phi);
-        }
-
-        for (int n = M; n < L; n++) {
-            h[n].re = 0.f;
-            h[n].im = 0.f;
-        }
-
-        for (int n = L - N; n < L; n++) {
-            h[n].re = cosf((L - n) * (L - n) / 2.f * phi);
-            h[n].im = sinf((L - n) * (L - n) / 2.f * phi);
-        }
-
-        for (int n = N; n < L; n++) {
-            g[n].re = 0.f;
-            g[n].im = 0.f;
-        }
-
-        for (int n = 0; n < N; n++) {
-            psi = n * theta + n * n / 2.f * phi;
-            c =  cosf(psi);
-            S = -sinf(psi);
-            a = c * g[n].re - S * g[n].im;
-            b = S * g[n].re + c * g[n].im;
-            g[n].re = a;
-            g[n].im = b;
-        }
-
-        memcpy(f, h, s->buf_size * sizeof(*f));
-        s->tx_fn(s->fft[ch], h, f, sizeof(AVComplexFloat));
-
-        memcpy(f, g, s->buf_size * sizeof(*f));
-        s->tx_fn(s->fft[ch], g, f, sizeof(AVComplexFloat));
-
-        for (int n = 0; n < L; n++) {
-            c = g[n].re;
-            S = g[n].im;
-            a = c * h[n].re - S * h[n].im;
-            b = S * h[n].re + c * h[n].im;
-
-            g[n].re = a / L;
-            g[n].im = b / L;
-        }
-
-        memcpy(f, g, s->buf_size * sizeof(*f));
-        s->itx_fn(s->ifft[ch], g, f, sizeof(AVComplexFloat));
-
-        for (int k = 0; k < M; k++) {
-            psi = k * k / 2.f * phi;
-            c =  cosf(psi);
-            S = -sinf(psi);
-            a = c * g[k].re - S * g[k].im;
-            b = S * g[k].re + c * g[k].im;
-            s->fft_data[ch][k].re = a;
-            s->fft_data[ch][k].im = b;
-        }
+        out[0] = y * yf;
+        out[1] = u * uf;
+        out[2] = v * vf;
+        out[3] = a * af;
     } else {
-        const int win_size = s->win_size;
-        float *dst = s->rdft_in[ch];
-
-        for (int n = 0; n < win_size; n++)
-            dst[n] = in_frame[n] * window_func_lut[n];
-
-        s->rtx_fn(s->rdft[ch], s->fft_data[ch], s->rdft_in[ch], sizeof(*dst));
-    }
-
-    return 0;
-}
-
-static void drawtext(AVFrame *pic, int x, int y, const char *txt, int o)
-{
-    const uint8_t *font;
-    int font_height;
-
-    font = avpriv_cga_font_get(),   font_height =  8;
-
-    for (int i = 0; txt[i]; i++) {
-        int char_y, mask;
-
-        if (o) {
-            for (char_y = font_height - 1; char_y >= 0; char_y--) {
-                uint8_t *p = pic->data[0] + (y + i * 10) * pic->linesize[0] + x;
-                for (mask = 0x80; mask; mask >>= 1) {
-                    if (font[txt[i] * font_height + font_height - 1 - char_y] & mask)
-                        p[char_y] = ~p[char_y];
-                    p += pic->linesize[0];
-                }
-            }
-        } else {
-            uint8_t *p = pic->data[0] + y*pic->linesize[0] + (x + i*8);
-            for (char_y = 0; char_y < font_height; char_y++) {
-                for (mask = 0x80; mask; mask >>= 1) {
-                    if (font[txt[i] * font_height + char_y] & mask)
-                        *p = ~(*p);
-                    p++;
-                }
-                p += pic->linesize[0] - 8;
-            }
-        }
-    }
-
-    for (int i = 0; txt[i] && pic->data[3]; i++) {
-        int char_y, mask;
-
-        if (o) {
-            for (char_y = font_height - 1; char_y >= 0; char_y--) {
-                uint8_t *p = pic->data[3] + (y + i * 10) * pic->linesize[3] + x;
-                for (mask = 0x80; mask; mask >>= 1) {
-                    for (int k = 0; k < 8; k++)
-                        p[k] = 255;
-                    p += pic->linesize[3];
-                }
-            }
-        } else {
-            uint8_t *p = pic->data[3] + y*pic->linesize[3] + (x + i*8);
-            for (char_y = 0; char_y < font_height; char_y++) {
-                for (mask = 0x80; mask; mask >>= 1)
-                    *p++ = 255;
-                p += pic->linesize[3] - 8;
-            }
-        }
+        out[0] = a * yf;
+        out[1] = a * uf;
+        out[2] = a * vf;
+        out[3] = a * af;
     }
 }
 
@@ -614,51 +382,171 @@ static void color_range(ASpectrogramContext *s, int ch,
     *vf *= s->saturation;
 }
 
-static void pick_color(ASpectrogramContext *s,
-                       float yf, float uf, float vf,
-                       float a, float *out)
+#define DEPTH 32
+#include "aspectrogram_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "aspectrogram_template.c"
+
+static const AVOption aspectrogram_options[] = {
+    { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
+    { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
+    { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_SLIDES-1, FLAGS, .unit = "slide" },
+        { "replace", "replace old columns with new", 0, AV_OPT_TYPE_CONST, {.i64=REPLACE}, 0, 0, FLAGS, .unit = "slide" },
+        { "scroll", "scroll from right to left", 0, AV_OPT_TYPE_CONST, {.i64=SCROLL}, 0, 0, FLAGS, .unit = "slide" },
+        { "fullframe", "return full frames", 0, AV_OPT_TYPE_CONST, {.i64=FULLFRAME}, 0, 0, FLAGS, .unit = "slide" },
+        { "rscroll", "scroll from left to right", 0, AV_OPT_TYPE_CONST, {.i64=RSCROLL}, 0, 0, FLAGS, .unit = "slide" },
+        { "lreplace", "replace from right to left", 0, AV_OPT_TYPE_CONST, {.i64=LREPLACE}, 0, 0, FLAGS, .unit = "slide" },
+    { "mode", "set channel display mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=COMBINED}, COMBINED, NB_MODES-1, FLAGS, .unit = "mode" },
+        { "combined", "combined mode", 0, AV_OPT_TYPE_CONST, {.i64=COMBINED}, 0, 0, FLAGS, .unit = "mode" },
+        { "separate", "separate mode", 0, AV_OPT_TYPE_CONST, {.i64=SEPARATE}, 0, 0, FLAGS, .unit = "mode" },
+    { "color", "set channel coloring", OFFSET(color_mode), AV_OPT_TYPE_INT, {.i64=CHANNEL}, CHANNEL, NB_CLMODES-1, FLAGS, .unit = "color" },
+        { "channel",   "separate color for each channel", 0, AV_OPT_TYPE_CONST, {.i64=CHANNEL},   0, 0, FLAGS, .unit = "color" },
+        { "intensity", "intensity based coloring",        0, AV_OPT_TYPE_CONST, {.i64=INTENSITY}, 0, 0, FLAGS, .unit = "color" },
+        { "rainbow",   "rainbow based coloring",          0, AV_OPT_TYPE_CONST, {.i64=RAINBOW},   0, 0, FLAGS, .unit = "color" },
+        { "moreland",  "moreland based coloring",         0, AV_OPT_TYPE_CONST, {.i64=MORELAND},  0, 0, FLAGS, .unit = "color" },
+        { "nebulae",   "nebulae based coloring",          0, AV_OPT_TYPE_CONST, {.i64=NEBULAE},   0, 0, FLAGS, .unit = "color" },
+        { "fire",      "fire based coloring",             0, AV_OPT_TYPE_CONST, {.i64=FIRE},      0, 0, FLAGS, .unit = "color" },
+        { "fiery",     "fiery based coloring",            0, AV_OPT_TYPE_CONST, {.i64=FIERY},     0, 0, FLAGS, .unit = "color" },
+        { "fruit",     "fruit based coloring",            0, AV_OPT_TYPE_CONST, {.i64=FRUIT},     0, 0, FLAGS, .unit = "color" },
+        { "cool",      "cool based coloring",             0, AV_OPT_TYPE_CONST, {.i64=COOL},      0, 0, FLAGS, .unit = "color" },
+        { "magma",     "magma based coloring",            0, AV_OPT_TYPE_CONST, {.i64=MAGMA},     0, 0, FLAGS, .unit = "color" },
+        { "green",     "green based coloring",            0, AV_OPT_TYPE_CONST, {.i64=GREEN},     0, 0, FLAGS, .unit = "color" },
+        { "viridis",   "viridis based coloring",          0, AV_OPT_TYPE_CONST, {.i64=VIRIDIS},   0, 0, FLAGS, .unit = "color" },
+        { "plasma",    "plasma based coloring",           0, AV_OPT_TYPE_CONST, {.i64=PLASMA},    0, 0, FLAGS, .unit = "color" },
+        { "cividis",   "cividis based coloring",          0, AV_OPT_TYPE_CONST, {.i64=CIVIDIS},   0, 0, FLAGS, .unit = "color" },
+        { "terrain",   "terrain based coloring",          0, AV_OPT_TYPE_CONST, {.i64=TERRAIN},   0, 0, FLAGS, .unit = "color" },
+    { "scale", "set display scale", OFFSET(scale), AV_OPT_TYPE_INT, {.i64=SQRT}, LINEAR, NB_SCALES-1, FLAGS, .unit = "scale" },
+        { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=LINEAR}, 0, 0, FLAGS, .unit = "scale" },
+        { "sqrt", "square root", 0, AV_OPT_TYPE_CONST, {.i64=SQRT},   0, 0, FLAGS, .unit = "scale" },
+        { "cbrt", "cubic root",  0, AV_OPT_TYPE_CONST, {.i64=CBRT},   0, 0, FLAGS, .unit = "scale" },
+        { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=LOG},    0, 0, FLAGS, .unit = "scale" },
+        { "4thrt","4th root",    0, AV_OPT_TYPE_CONST, {.i64=FOURTHRT}, 0, 0, FLAGS, .unit = "scale" },
+        { "5thrt","5th root",    0, AV_OPT_TYPE_CONST, {.i64=FIFTHRT},  0, 0, FLAGS, .unit = "scale" },
+    { "fscale", "set frequency scale", OFFSET(fscale), AV_OPT_TYPE_INT, {.i64=F_LINEAR}, 0, NB_FSCALES-1, FLAGS, .unit = "fscale" },
+        { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=F_LINEAR}, 0, 0, FLAGS, .unit = "fscale" },
+        { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=F_LOG},    0, 0, FLAGS, .unit = "fscale" },
+    { "saturation", "color saturation multiplier", OFFSET(saturation), AV_OPT_TYPE_FLOAT, {.dbl = 1}, -10, 10, FLAGS },
+    WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
+    { "orientation", "set orientation", OFFSET(orientation), AV_OPT_TYPE_INT, {.i64=VERTICAL}, 0, NB_ORIENTATIONS-1, FLAGS, .unit = "orientation" },
+        { "vertical",   NULL, 0, AV_OPT_TYPE_CONST, {.i64=VERTICAL},   0, 0, FLAGS, .unit = "orientation" },
+        { "horizontal", NULL, 0, AV_OPT_TYPE_CONST, {.i64=HORIZONTAL}, 0, 0, FLAGS, .unit = "orientation" },
+    { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl = 0}, 0, 1, FLAGS },
+    { "gain", "set scale gain", OFFSET(gain), AV_OPT_TYPE_FLOAT, {.dbl = 1}, 0, 128, FLAGS },
+    { "data", "set data mode", OFFSET(data), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_DMODES-1, FLAGS, .unit = "data" },
+        { "magnitude", NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_MAGNITUDE}, 0, 0, FLAGS, .unit = "data" },
+        { "phase",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_PHASE},     0, 0, FLAGS, .unit = "data" },
+        { "uphase",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=D_UPHASE},    0, 0, FLAGS, .unit = "data" },
+    { "rotation", "color rotation", OFFSET(rotation), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -1, 1, FLAGS },
+    { "start", "start frequency", OFFSET(start), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
+    { "stop",  "stop frequency",  OFFSET(stop),  AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
+    { "fps",   "set video rate",  OFFSET(rate_str), AV_OPT_TYPE_STRING, {.str = "auto"}, 0, 0, FLAGS },
+    { "legend", "draw legend", OFFSET(legend), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
+    { "drange", "set dynamic range in dBFS", OFFSET(drange), AV_OPT_TYPE_FLOAT, {.dbl = 120}, 10, 500, FLAGS },
+    { "limit", "set upper limit in dBFS", OFFSET(limit), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -100, 100, FLAGS },
+    { "opacity", "set opacity strength", OFFSET(opacity_factor), AV_OPT_TYPE_FLOAT, {.dbl = 1}, 0, 10, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(aspectrogram);
+
+static av_cold void uninit(AVFilterContext *ctx)
 {
-    const float af = s->opacity_factor * 255.f;
+    ASpectrogramContext *s = ctx->priv;
 
-    if (s->color_mode > CHANNEL) {
-        const int cm = s->color_mode;
-        float y, u, v;
-        int i;
+    if (s->color_buffer) {
+        for (int i = 0; i < s->nb_display_channels; i++)
+            av_freep(&s->color_buffer[i]);
+    }
+    av_freep(&s->color_buffer);
+    av_freep(&s->combine_buffer);
+    av_frame_free(&s->outpicref);
+    av_frame_free(&s->in_frame);
 
-        for (i = 1; i < FF_ARRAY_ELEMS(color_table[cm]) - 1; i++)
-            if (color_table[cm][i].a >= a)
-                break;
-        // i now is the first item >= the color
-        // now we know to interpolate between item i - 1 and i
-        if (a <= color_table[cm][i - 1].a) {
-            y = color_table[cm][i - 1].y;
-            u = color_table[cm][i - 1].u;
-            v = color_table[cm][i - 1].v;
-        } else if (a >= color_table[cm][i].a) {
-            y = color_table[cm][i].y;
-            u = color_table[cm][i].u;
-            v = color_table[cm][i].v;
+    while (s->nb_frames > 0) {
+        av_frame_free(&s->frames[s->nb_frames - 1]);
+        s->nb_frames--;
+    }
+
+    av_freep(&s->frames);
+
+    if (s->uninit)
+        s->uninit(ctx);
+}
+
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
+{
+    static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE };
+    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
+    AVFilterFormats *formats;
+    int ret;
+
+    formats = ff_make_sample_format_list(sample_fmts);
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
+        return ret;
+
+    formats = ff_make_pixel_format_list(pix_fmts);
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
+        return ret;
+
+    return 0;
+}
+
+static void drawtext(AVFrame *pic, int x, int y, const char *txt, int o)
+{
+    const uint8_t *font;
+    int font_height;
+
+    font = avpriv_cga_font_get(),   font_height =  8;
+
+    for (int i = 0; txt[i]; i++) {
+        int char_y, mask;
+
+        if (o) {
+            for (char_y = font_height - 1; char_y >= 0; char_y--) {
+                uint8_t *p = pic->data[0] + (y + i * 10) * pic->linesize[0] + x;
+                for (mask = 0x80; mask; mask >>= 1) {
+                    if (font[txt[i] * font_height + font_height - 1 - char_y] & mask)
+                        p[char_y] = ~p[char_y];
+                    p += pic->linesize[0];
+                }
+            }
         } else {
-            float start = color_table[cm][i - 1].a;
-            float end = color_table[cm][i].a;
-            float lerpfrac = (a - start) / (end - start);
-            y = color_table[cm][i - 1].y * (1.0f - lerpfrac)
-              + color_table[cm][i].y * lerpfrac;
-            u = color_table[cm][i - 1].u * (1.0f - lerpfrac)
-              + color_table[cm][i].u * lerpfrac;
-            v = color_table[cm][i - 1].v * (1.0f - lerpfrac)
-              + color_table[cm][i].v * lerpfrac;
+            uint8_t *p = pic->data[0] + y*pic->linesize[0] + (x + i*8);
+            for (char_y = 0; char_y < font_height; char_y++) {
+                for (mask = 0x80; mask; mask >>= 1) {
+                    if (font[txt[i] * font_height + char_y] & mask)
+                        *p = ~(*p);
+                    p++;
+                }
+                p += pic->linesize[0] - 8;
+            }
         }
+    }
 
-        out[0] = y * yf;
-        out[1] = u * uf;
-        out[2] = v * vf;
-        out[3] = a * af;
-    } else {
-        out[0] = a * yf;
-        out[1] = a * uf;
-        out[2] = a * vf;
-        out[3] = a * af;
+    for (int i = 0; txt[i] && pic->data[3]; i++) {
+        int char_y, mask;
+
+        if (o) {
+            for (char_y = font_height - 1; char_y >= 0; char_y--) {
+                uint8_t *p = pic->data[3] + (y + i * 10) * pic->linesize[3] + x;
+                for (mask = 0x80; mask; mask >>= 1) {
+                    for (int k = 0; k < 8; k++)
+                        p[k] = 255;
+                    p += pic->linesize[3];
+                }
+            }
+        } else {
+            uint8_t *p = pic->data[3] + y*pic->linesize[3] + (x + i*8);
+            for (char_y = 0; char_y < font_height; char_y++) {
+                for (mask = 0x80; mask; mask >>= 1)
+                    *p++ = 255;
+                p += pic->linesize[3] - 8;
+            }
+        }
     }
 }
 
@@ -675,74 +563,6 @@ static char *get_time(AVFilterContext *ctx, float seconds, int x)
     else
         units = av_asprintf("%.2fs", seconds);
     return units;
-}
-
-static float log_scale(const float bin,
-                       const float bmin, const float bmax,
-                       const float min, const float max)
-{
-    return exp2f(((bin - bmin) / (bmax - bmin)) * (log2f(max) - log2f(min)) + log2f(min));
-}
-
-static float get_hz(const float bin, const float bmax,
-                    const float min, const float max,
-                    int fscale)
-{
-    switch (fscale) {
-    case F_LINEAR:
-        return min + (bin / bmax) * (max - min);
-    case F_LOG:
-        return min + log_scale(bin, 0, bmax, 20.f, max - min);
-    default:
-        return 0.f;
-    }
-}
-
-static float inv_log_scale(float bin,
-                           float bmin, float bmax,
-                           float min, float max)
-{
-    return (min * exp2f((bin * (log2f(max) - log2f(20.f))) / bmax) + min) * bmax / max;
-}
-
-static float bin_pos(const int bin, const int num_bins, const float min, const float max)
-{
-    return inv_log_scale(bin, 0.f, num_bins, 20.f, max - min);
-}
-
-static float get_scale(AVFilterContext *ctx, int scale, float a)
-{
-    ASpectrogramContext *s = ctx->priv;
-    const float dmin = s->dmin;
-    const float dmax = s->dmax;
-
-    a = av_clipf(a, dmin, dmax);
-    if (scale != LOG)
-        a = (a - dmin) / (dmax - dmin);
-
-    switch (scale) {
-    case LINEAR:
-        break;
-    case SQRT:
-        a = sqrtf(a);
-        break;
-    case CBRT:
-        a = cbrtf(a);
-        break;
-    case FOURTHRT:
-        a = sqrtf(sqrtf(a));
-        break;
-    case FIFTHRT:
-        a = powf(a, 0.2f);
-        break;
-    case LOG:
-        a = (s->drange - s->limit + log10f(a) * 20.f) / s->drange;
-        break;
-    default:
-        av_assert0(0);
-    }
-
-    return a;
 }
 
 static float get_iscale(AVFilterContext *ctx, int scale, float a)
@@ -980,101 +800,36 @@ static int draw_legend(AVFilterContext *ctx, uint64_t samples)
     return 0;
 }
 
-static float get_value(AVFilterContext *ctx, int ch, int y)
-{
-    ASpectrogramContext *s = ctx->priv;
-    float *magnitudes = s->magnitudes[ch];
-    float *phases = s->phases[ch];
-    float a;
-
-    switch (s->data) {
-    case D_MAGNITUDE:
-        /* get magnitude */
-        a = magnitudes[y];
-        break;
-    case D_UPHASE:
-    case D_PHASE:
-        /* get phase */
-        a = phases[y];
-        break;
-    default:
-        av_assert0(0);
-    }
-
-    return av_clipf(get_scale(ctx, s->scale, a), 0.f, 1.f);
-}
-
-static int plot_channel_lin(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASpectrogramContext *s = ctx->priv;
-    const int h = s->orientation == VERTICAL ? s->channel_height : s->channel_width;
-    const int ch = jobnr;
-    float yf, uf, vf;
-    int y;
-
-    /* decide color range */
-    color_range(s, ch, &yf, &uf, &vf);
-
-    /* draw the channel */
-    for (y = 0; y < h; y++) {
-        int row = (s->mode == COMBINED) ? y : ch * h + y;
-        float *out = &s->color_buffer[ch][4 * row];
-        float a = get_value(ctx, ch, y);
-
-        pick_color(s, yf, uf, vf, a, out);
-    }
-
-    return 0;
-}
-
-static int plot_channel_log(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASpectrogramContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const int h = s->orientation == VERTICAL ? s->channel_height : s->channel_width;
-    const int ch = jobnr;
-    float yf, uf, vf;
-
-    /* decide color range */
-    color_range(s, ch, &yf, &uf, &vf);
-
-    /* draw the channel */
-    for (int yy = 0; yy < h; yy++) {
-        float range = s->stop ? s->stop - s->start : inlink->sample_rate / 2;
-        float pos = bin_pos(yy, h, s->start, s->start + range);
-        float delta = pos - floorf(pos);
-        float a0, a1;
-
-        a0 = get_value(ctx, ch, av_clip(pos, 0, h-1));
-        a1 = get_value(ctx, ch, av_clip(pos+1, 0, h-1));
-        {
-            int row = (s->mode == COMBINED) ? yy : ch * h + yy;
-            float *out = &s->color_buffer[ch][4 * row];
-
-            pick_color(s, yf, uf, vf, delta * a1 + (1.f - delta) * a0, out);
-        }
-    }
-
-    return 0;
-}
-
 static int config_output(AVFilterLink *outlink)
 {
     FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ASpectrogramContext *s = ctx->priv;
-    int i, fft_size, h, w, ret;
-    float overlap;
+    int fft_size, h, w, ret;
+    AVFrame *outpicref;
 
     s->old_pts = AV_NOPTS_VALUE;
     s->dmax = expf(s->limit * M_LN10 / 20.f);
     s->dmin = expf((s->limit - s->drange) * M_LN10 / 20.f);
 
-    switch (s->fscale) {
-    case F_LINEAR: s->plot_channel = plot_channel_lin; break;
-    case F_LOG:    s->plot_channel = plot_channel_log; break;
-    default: return AVERROR_BUG;
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        switch (s->fscale) {
+        case F_LINEAR: s->plot_channel = plot_channel_lin_fltp; break;
+        case F_LOG:    s->plot_channel = plot_channel_log_fltp; break;
+        default: return AVERROR_BUG;
+        }
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        switch (s->fscale) {
+        case F_LINEAR: s->plot_channel = plot_channel_lin_dblp; break;
+        case F_LOG:    s->plot_channel = plot_channel_log_dblp; break;
+        default: return AVERROR_BUG;
+        }
+        break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->stop = FFMIN(s->stop, inlink->sample_rate / 2);
@@ -1112,163 +867,43 @@ static int config_output(AVFilterLink *outlink)
 
     s->win_size = fft_size;
     s->buf_size = FFALIGN(s->win_size << (!!s->stop), av_cpu_max_align());
+    s->nb_display_channels = inlink->ch_layout.nb_channels;
+    s->fft_size = fft_size;
 
-    if (!s->rdft) {
-        s->rdft = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->rdft));
-        if (!s->rdft)
+    av_freep(&s->color_buffer);
+    s->color_buffer = av_calloc(s->nb_display_channels, sizeof(*s->color_buffer));
+    if (!s->color_buffer)
+        return AVERROR(ENOMEM);
+    for (int i = 0; i < s->nb_display_channels; i++) {
+        s->color_buffer[i] = av_calloc(s->orientation == VERTICAL ? s->h * 4 : s->w * 4, sizeof(**s->color_buffer));
+        if (!s->color_buffer[i])
             return AVERROR(ENOMEM);
     }
 
-    if (!s->fft) {
-        s->fft = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->fft));
-        if (!s->fft)
-            return AVERROR(ENOMEM);
+    s->hop_size = (1.f - s->overlap) * s->win_size;
+    if (s->hop_size < 1) {
+        av_log(ctx, AV_LOG_ERROR, "overlap %f too big\n", s->overlap);
+        return AVERROR(EINVAL);
     }
 
-    if (s->stop) {
-        if (!s->ifft) {
-            s->ifft = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->ifft));
-            if (!s->ifft)
-                return AVERROR(ENOMEM);
-        }
+    /* prepare the initial picref buffer (black frame) */
+    av_frame_free(&s->outpicref);
+    s->outpicref = outpicref =
+        ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!outpicref)
+        return AVERROR(ENOMEM);
+    outpicref->sample_aspect_ratio = (AVRational){1,1};
+    for (int i = 0; i < outlink->h; i++) {
+        memset(outpicref->data[0] + i * outpicref->linesize[0],   0, outlink->w);
+        memset(outpicref->data[1] + i * outpicref->linesize[1], 128, outlink->w);
+        memset(outpicref->data[2] + i * outpicref->linesize[2], 128, outlink->w);
+        if (outpicref->data[3])
+            memset(outpicref->data[3] + i * outpicref->linesize[3], 0, outlink->w);
     }
+    outpicref->color_range = AVCOL_RANGE_JPEG;
 
-    /* (re-)configuration if the video output changed (or first init) */
-    if (fft_size != s->fft_size) {
-        AVFrame *outpicref;
-
-        s->fft_size = fft_size;
-
-        /* FFT buffers: x2 for each (display) channel buffer.
-         * Note: we use free and malloc instead of a realloc-like function to
-         * make sure the buffer is aligned in memory for the FFT functions. */
-        for (i = 0; i < s->nb_display_channels; i++) {
-            if (s->stop) {
-                av_tx_uninit(&s->ifft[i]);
-                av_freep(&s->fft_scratch[i]);
-            }
-            av_tx_uninit(&s->rdft[i]);
-            av_tx_uninit(&s->fft[i]);
-            av_freep(&s->rdft_in[i]);
-            av_freep(&s->fft_in[i]);
-            av_freep(&s->fft_data[i]);
-        }
-        av_freep(&s->rdft_in);
-        av_freep(&s->fft_data);
-
-        s->nb_display_channels = inlink->ch_layout.nb_channels;
-        for (i = 0; i < s->nb_display_channels; i++) {
-            float scale = 1.f;
-
-            if (s->stop) {
-                ret = av_tx_init(&s->fft[i], &s->tx_fn, AV_TX_FLOAT_FFT, 0, fft_size << (!!s->stop), &scale, 0);
-                if (ret < 0)
-                    return ret;
-                ret = av_tx_init(&s->ifft[i], &s->itx_fn, AV_TX_FLOAT_FFT, 1, fft_size << (!!s->stop), &scale, 0);
-            } else {
-                ret = av_tx_init(&s->rdft[i], &s->rtx_fn, AV_TX_FLOAT_RDFT, 0, fft_size, &scale, 0);
-            }
-            if (ret < 0)
-                return ret;
-        }
-
-        s->magnitudes = av_calloc(s->nb_display_channels, sizeof(*s->magnitudes));
-        if (!s->magnitudes)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < s->nb_display_channels; i++) {
-            s->magnitudes[i] = av_calloc(s->orientation == VERTICAL ? s->h : s->w, sizeof(**s->magnitudes));
-            if (!s->magnitudes[i])
-                return AVERROR(ENOMEM);
-        }
-
-        s->phases = av_calloc(s->nb_display_channels, sizeof(*s->phases));
-        if (!s->phases)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < s->nb_display_channels; i++) {
-            s->phases[i] = av_calloc(s->orientation == VERTICAL ? s->h : s->w, sizeof(**s->phases));
-            if (!s->phases[i])
-                return AVERROR(ENOMEM);
-        }
-
-        av_freep(&s->color_buffer);
-        s->color_buffer = av_calloc(s->nb_display_channels, sizeof(*s->color_buffer));
-        if (!s->color_buffer)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < s->nb_display_channels; i++) {
-            s->color_buffer[i] = av_calloc(s->orientation == VERTICAL ? s->h * 4 : s->w * 4, sizeof(**s->color_buffer));
-            if (!s->color_buffer[i])
-                return AVERROR(ENOMEM);
-        }
-
-        s->rdft_in = av_calloc(s->nb_display_channels, sizeof(*s->rdft_in));
-        if (!s->rdft_in)
-            return AVERROR(ENOMEM);
-        s->fft_in = av_calloc(s->nb_display_channels, sizeof(*s->fft_in));
-        if (!s->fft_in)
-            return AVERROR(ENOMEM);
-        s->fft_data = av_calloc(s->nb_display_channels, sizeof(*s->fft_data));
-        if (!s->fft_data)
-            return AVERROR(ENOMEM);
-        s->fft_scratch = av_calloc(s->nb_display_channels, sizeof(*s->fft_scratch));
-        if (!s->fft_scratch)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < s->nb_display_channels; i++) {
-            s->rdft_in[i] = av_calloc(s->buf_size, sizeof(**s->rdft_in));
-            if (!s->rdft_in[i])
-                return AVERROR(ENOMEM);
-
-            s->fft_in[i] = av_calloc(s->buf_size, sizeof(**s->fft_in));
-            if (!s->fft_in[i])
-                return AVERROR(ENOMEM);
-
-            s->fft_data[i] = av_calloc(s->buf_size, sizeof(**s->fft_data));
-            if (!s->fft_data[i])
-                return AVERROR(ENOMEM);
-
-            s->fft_scratch[i] = av_calloc(s->buf_size, sizeof(**s->fft_scratch));
-            if (!s->fft_scratch[i])
-                return AVERROR(ENOMEM);
-        }
-
-        /* pre-calc windowing function */
-        s->window_func_lut =
-            av_realloc_f(s->window_func_lut, s->win_size,
-                         sizeof(*s->window_func_lut));
-        if (!s->window_func_lut)
-            return AVERROR(ENOMEM);
-        generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
-        if (s->overlap == 1)
-            s->overlap = overlap;
-        s->hop_size = (1.f - s->overlap) * s->win_size;
-        if (s->hop_size < 1) {
-            av_log(ctx, AV_LOG_ERROR, "overlap %f too big\n", s->overlap);
-            return AVERROR(EINVAL);
-        }
-
-        for (s->win_scale = 0, i = 0; i < s->win_size; i++) {
-            s->win_scale += s->window_func_lut[i] * s->window_func_lut[i];
-        }
-        s->win_scale = 1.f / sqrtf(s->win_scale);
-
-        /* prepare the initial picref buffer (black frame) */
-        av_frame_free(&s->outpicref);
-        s->outpicref = outpicref =
-            ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!outpicref)
-            return AVERROR(ENOMEM);
-        outpicref->sample_aspect_ratio = (AVRational){1,1};
-        for (i = 0; i < outlink->h; i++) {
-            memset(outpicref->data[0] + i * outpicref->linesize[0],   0, outlink->w);
-            memset(outpicref->data[1] + i * outpicref->linesize[1], 128, outlink->w);
-            memset(outpicref->data[2] + i * outpicref->linesize[2], 128, outlink->w);
-            if (outpicref->data[3])
-                memset(outpicref->data[3] + i * outpicref->linesize[3], 0, outlink->w);
-        }
-        outpicref->color_range = AVCOL_RANGE_JPEG;
-
-        if (!s->single_pic && s->legend)
-            draw_legend(ctx, 0);
-    }
+    if (!s->single_pic && s->legend)
+        draw_legend(ctx, 0);
 
     if ((s->orientation == VERTICAL   && s->xpos >= s->w) ||
         (s->orientation == HORIZONTAL && s->xpos >= s->h))
@@ -1322,133 +957,34 @@ static int config_output(AVFilterLink *outlink)
     if (!s->frames)
         return AVERROR(ENOMEM);
 
-    return 0;
-}
-
-#define RE(y) fft_data[y].re
-#define IM(y) fft_data[y].im
-#define MAGNITUDE(y) hypotf(RE(y), IM(y))
-#define PHASE(y) atan2f(IM(y), RE(y))
-
-static int calc_channel_magnitudes(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASpectrogramContext *s = ctx->priv;
-    const double w = s->win_scale * (s->scale == LOG ? s->win_scale : 1);
-    const int apodization = s->win_func == WFUNC_RECT;
-    int h = s->orientation == VERTICAL ? s->h : s->w;
-    const float f = s->gain * w;
-    const int ch = jobnr;
-    const AVComplexFloat *fft_data = s->fft_data[ch];
-    float *magnitudes = s->magnitudes[ch];
-
-    if (apodization) {
-        AVComplexFloat num, den, ret;
-        float beta;
-
-        for (int y = 1; y < h-1; y++) {
-
-            num.re = 2.f * RE(y);
-            num.im = 2.f * IM(y);
-
-            den.re = RE(y-1) + RE(y+1);
-            den.im = IM(y-1) + IM(y+1);
-
-            beta = 0.5f * av_clipf((num.re * den.re + num.im * den.im) / (den.re * den.re + den.im * den.im + FLT_EPSILON), 0.f, 1.f);
-
-            ret.re = RE(y) - beta * den.re;
-            ret.im = IM(y) - beta * den.im;
-
-            magnitudes[y] = hypotf(ret.re, ret.im) * f;
-        }
-    } else {
-        for (int y = 0; y < h; y++)
-            magnitudes[y] = MAGNITUDE(y) * f;
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->init = init_fltp;
+        s->uninit = uninit_fltp;
+        s->clear_magnitudes = clear_magnitudes_fltp;
+        s->scale_magnitudes = scale_magnitudes_fltp;
+        s->acalc_magnitudes = acalc_magnitudes_fltp;
+        s->run_channel_fft = run_channel_fft_fltp;
+        s->calc_channel_magnitudes = calc_channel_magnitudes_fltp;
+        s->calc_channel_phases = calc_channel_phases_fltp;
+        s->calc_channel_uphases = calc_channel_uphases_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->init = init_dblp;
+        s->uninit = uninit_dblp;
+        s->clear_magnitudes = clear_magnitudes_dblp;
+        s->scale_magnitudes = scale_magnitudes_dblp;
+        s->acalc_magnitudes = acalc_magnitudes_dblp;
+        s->run_channel_fft = run_channel_fft_dblp;
+        s->calc_channel_magnitudes = calc_channel_magnitudes_dblp;
+        s->calc_channel_phases = calc_channel_phases_dblp;
+        s->calc_channel_uphases = calc_channel_uphases_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
     }
 
-    return 0;
-}
-
-static int calc_channel_phases(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASpectrogramContext *s = ctx->priv;
-    const int h = s->orientation == VERTICAL ? s->h : s->w;
-    const int ch = jobnr;
-    const AVComplexFloat *fft_data = s->fft_data[ch];
-    float *phases = s->phases[ch];
-    int y;
-
-    for (y = 0; y < h; y++)
-        phases[y] = (PHASE(y) / M_PI + 1) / 2;
-
-    return 0;
-}
-
-static void unwrap(float *x, int N, float tol, float *mi, float *ma)
-{
-    const float rng = 2.f * M_PI;
-    float prev_p = 0.f;
-    float max = -FLT_MAX;
-    float min = FLT_MAX;
-
-    for (int i = 0; i < N; i++) {
-        const float d = x[FFMIN(i + 1, N)] - x[i];
-        const float p = ceilf(fabsf(d) / rng) * rng * (((d < tol) > 0.f) - ((d > -tol) > 0.f));
-
-        x[i] += p + prev_p;
-        prev_p += p;
-        max = fmaxf(x[i], max);
-        min = fminf(x[i], min);
-    }
-
-    *mi = min;
-    *ma = max;
-}
-
-static int calc_channel_uphases(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASpectrogramContext *s = ctx->priv;
-    const int h = s->orientation == VERTICAL ? s->h : s->w;
-    const int ch = jobnr;
-    const AVComplexFloat *fft_data = s->fft_data[ch];
-    float *phases = s->phases[ch];
-    float min, max, scale;
-    int y;
-
-    for (y = 0; y < h; y++)
-        phases[y] = PHASE(y);
-    unwrap(phases, h, M_PI, &min, &max);
-    scale = 1.f / (max - min + FLT_MIN);
-    for (y = 0; y < h; y++)
-        phases[y] = fabsf((phases[y] - min) * scale);
-
-    return 0;
-}
-
-static void acalc_magnitudes(ASpectrogramContext *s)
-{
-    const double w = s->win_scale * (s->scale == LOG ? s->win_scale : 1);
-    int ch, y, h = s->orientation == VERTICAL ? s->h : s->w;
-    const float f = s->gain * w;
-
-    for (ch = 0; ch < s->nb_display_channels; ch++) {
-        const AVComplexFloat *fft_data = s->fft_data[ch];
-        float *magnitudes = s->magnitudes[ch];
-
-        for (y = 0; y < h; y++)
-            magnitudes[y] += MAGNITUDE(y) * f;
-    }
-}
-
-static void scale_magnitudes(ASpectrogramContext *s, float scale)
-{
-    int ch, y, h = s->orientation == VERTICAL ? s->h : s->w;
-
-    for (ch = 0; ch < s->nb_display_channels; ch++) {
-        float *magnitudes = s->magnitudes[ch];
-
-        for (y = 0; y < h; y++)
-            magnitudes[y] *= scale;
-    }
+    return s->init(ctx);
 }
 
 static void clear_combine_buffer(ASpectrogramContext *s, int size)
@@ -1647,16 +1183,16 @@ static int activate(AVFilterContext *ctx)
         if (ret < 0)
             return ret;
         if (ret > 0) {
-            ff_filter_execute(ctx, run_channel_fft, fin, NULL, s->nb_display_channels);
+            ff_filter_execute(ctx, s->run_channel_fft, fin, NULL, s->nb_display_channels);
 
             if (s->data == D_MAGNITUDE)
-                ff_filter_execute(ctx, calc_channel_magnitudes, NULL, NULL, s->nb_display_channels);
+                ff_filter_execute(ctx, s->calc_channel_magnitudes, NULL, NULL, s->nb_display_channels);
 
             if (s->data == D_PHASE)
-                ff_filter_execute(ctx, calc_channel_phases, NULL, NULL, s->nb_display_channels);
+                ff_filter_execute(ctx, s->calc_channel_phases, NULL, NULL, s->nb_display_channels);
 
             if (s->data == D_UPHASE)
-                ff_filter_execute(ctx, calc_channel_uphases, NULL, NULL, s->nb_display_channels);
+                ff_filter_execute(ctx, s->calc_channel_uphases, NULL, NULL, s->nb_display_channels);
 
             if (s->sliding != FULLFRAME || s->xpos == 0)
                 s->in_pts = fin->pts;
@@ -1804,8 +1340,8 @@ static int aspectrogrampic_request_frame(AVFilterLink *outlink)
         int consumed = 0;
         int x = 0, sz = s->orientation == VERTICAL ? s->w : s->h;
         unsigned int nb_frame = 0;
-        int ch, spf, spb;
         int src_offset = 0;
+        int spf, spb;
         AVFrame *fin;
 
         spf = s->win_size * (s->samples / ((s->win_size * sz) * ceil(s->samples / (float)(s->win_size * sz))));
@@ -1850,19 +1386,16 @@ static int aspectrogrampic_request_frame(AVFilterLink *outlink)
                     break;
             }
 
-            ff_filter_execute(ctx, run_channel_fft, fin, NULL, s->nb_display_channels);
-            acalc_magnitudes(s);
+            ff_filter_execute(ctx, s->run_channel_fft, fin, NULL, s->nb_display_channels);
+            s->acalc_magnitudes(s);
 
             consumed += spf;
             if (consumed >= spb) {
-                int h = s->orientation == VERTICAL ? s->h : s->w;
-
-                scale_magnitudes(s, 1.f / (consumed / spf));
+                s->scale_magnitudes(s, 1.f / (consumed / spf));
                 plot_spectrogram_column(inlink, fin);
                 consumed = 0;
                 x++;
-                for (ch = 0; ch < s->nb_display_channels; ch++)
-                    memset(s->magnitudes[ch], 0, h * sizeof(float));
+                s->clear_magnitudes(ctx);
             }
         }
 
