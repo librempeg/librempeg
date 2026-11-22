@@ -44,86 +44,63 @@
 #include "bink2f.h"
 #include "bink2g.h"
 
-static void bink2_get_block_flags(GetBitContext *gb, int offset, int size, uint8_t *dst)
+static void bink2_set_flags(uint8_t *dst, int pos, int n, int flag)
 {
-    int j, v = 0, flags_left, mode = 0, nv;
-    unsigned cache, flag = 0;
+    for (int i = pos; i < pos + n; i++) {
+        if (flag)
+            dst[i >> 3] |=   1 << (i & 7);
+        else
+            dst[i >> 3] &= ~(1 << (i & 7));
+    }
+}
+
+/* Read a list of size flags, one bit each from bit 0 of dst on. */
+static void bink2_get_block_flags(GetBitContext *gb, int size, uint8_t *dst)
+{
+    int pos = 0, left = size, toggle = 0, flag = 0;
 
     if (get_bits1(gb) == 0) {
-        for (j = 0; j < size >> 3; j++)
-            dst[j] = get_bits(gb, 8);
-        dst[j] = get_bitsz(gb, size & 7);
-
+        for (int j = 0; j < size; j++)
+            bink2_set_flags(dst, j, 1, get_bits1(gb));
         return;
     }
 
-    flags_left = size;
-    while (flags_left > 0) {
-        cache = offset;
+    while (left > 0) {
         if (get_bits1(gb) == 0) {
-            if (mode == 3) {
-                flag ^= 1;
-            } else {
-                flag = get_bits1(gb);
-            }
-            mode = 2;
-            if (flags_left < 5) {
-                nv = get_bitsz(gb, flags_left - 1);
-                nv <<= (offset + 1) & 0x1f;
-                offset += flags_left;
-                flags_left = 0;
-            } else {
-                nv = get_bits(gb, 4) << ((offset + 1) & 0x1f);
-                offset += 5;
-                flags_left -= 5;
-            }
-            v |= flag << (cache & 0x1f) | nv;
-            if (offset >= 8) {
-                *dst++ = v & 0xff;
-                v >>= 8;
-                offset -= 8;
-            }
+            const int n = FFMIN(left, 5);
+
+            flag = toggle ? !flag : get_bits1(gb);
+            toggle = 0;
+            bink2_set_flags(dst, pos, 1, flag);
+            for (int j = 1; j < n; j++)
+                bink2_set_flags(dst, pos + j, 1, get_bits1(gb));
+            pos  += n;
+            left -= n;
         } else {
-            int temp, bits, nb_coded;
+            const int bits = left < 4 ? 2 : left < 16 ? 4 : 5;
+            int run;
 
-            bits = flags_left < 4 ? 2 : flags_left < 16 ? 4 : 5;
-            nb_coded = bits + 1;
-            if (mode == 3) {
-                flag ^= 1;
+            if (toggle) {
+                flag = !flag;
+                run  = bits + 1;
             } else {
-                nb_coded++;
                 flag = get_bits1(gb);
+                run  = bits + 2;
             }
-            nb_coded = FFMIN(nb_coded, flags_left);
-            flags_left -= nb_coded;
-            if (flags_left > 0) {
-                temp = get_bits(gb, bits);
-                flags_left -= temp;
-                nb_coded += temp;
-                mode = temp == (1 << bits) - 1U ? 1 : 3;
-            }
+            run    = FFMIN(run, left);
+            left  -= run;
+            toggle = 0;
+            if (left > 0) {
+                const int extra = get_bits(gb, bits);
 
-            temp = (flag << 0x1f) >> 0x1f & 0xff;
-            while (nb_coded > 8) {
-                v |= temp << (cache & 0x1f);
-                *dst++ = v & 0xff;
-                v >>= 8;
-                nb_coded -= 8;
+                toggle = extra != (1 << bits) - 1;
+                run   += FFMIN(extra, left);
+                left  -= FFMIN(extra, left);
             }
-            if (nb_coded > 0) {
-                offset += nb_coded;
-                v |= ((1 << (nb_coded & 0x1f)) - 1U & temp) << (cache & 0x1f);
-                if (offset >= 8) {
-                    *dst++ = v & 0xff;
-                    v >>= 8;
-                    offset -= 8;
-                }
-            }
+            bink2_set_flags(dst, pos, run, flag);
+            pos += run;
         }
     }
-
-    if (offset != 0)
-        *dst = v;
 }
 
 static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
@@ -188,12 +165,12 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (c->frame_flags & 0x10000) {
         if (!(c->frame_flags & 0x8000))
-            bink2_get_block_flags(gb, 1, (((avctx->height + 15) & ~15) >> 3) - 1, c->row_cbp);
+            bink2_get_block_flags(gb, (((avctx->height + 15) & ~15) >> 3) - 1, c->row_cbp);
         else
             memset(c->row_cbp, 0, c->row_cbp_size);
 
         if (!(c->frame_flags & 0x4000))
-            bink2_get_block_flags(gb, 1, (avctx->coded_width >> 3) - 1, c->col_cbp);
+            bink2_get_block_flags(gb, (avctx->coded_width >> 3) - 1, c->col_cbp);
         else
             memset(c->col_cbp, 0, c->col_cbp_size);
     } else {
