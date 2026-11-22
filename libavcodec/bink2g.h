@@ -1590,8 +1590,9 @@ static int bink2g_decode_slice(Bink2Context *c,
     GetBitContext *gb = &c->gb;
     const int w = c->avctx->width;
     const int h = c->avctx->height;
-    /* RAD's reference frames are the picture size rounded up to 16 */
-    const int ref_w = FFALIGN(w, 16);
+    /* RAD's reference frames are the width rounded up to 32 (whole
+     * macroblocks) and the height rounded up to 16 */
+    const int ref_w = FFALIGN(w, 32);
     const int ref_h = FFALIGN(h, 16);
     int ret = 0, dq, flags;
 
