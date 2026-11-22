@@ -1006,6 +1006,17 @@ static int update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
 #define CV2FILTER(src, i, shift) ((2*(src)[0] + 2*(src)[i] + (1<<shift)/2) >> shift)
 #define CV3FILTER(src, i, shift) ((  (src)[0] + 3*(src)[i] + (1<<shift)/2) >> shift)
 
+/* Rows below the reference frame read the last rows of the frame again,
+ * a strip of height period (16 luma rows, 8 chroma rows) at a time. */
+static int bink2g_ref_row(int y, int height, int period)
+{
+    if (y < 0)
+        return 0;
+    while (y >= height)
+        y -= period;
+    return FFMAX(y, 0);
+}
+
 static void bink2g_c_mc(Bink2Context *c, int x, int y,
                         uint8_t *dst, int stride,
                         uint8_t *src, int sstride,
@@ -1019,7 +1030,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
 
     for (int y = 0; y < 9; y++) {
         for (int x = 0; x < 9; x++)
-            mtemp[y*9 + x] = src[av_clip(mv_x+x, 0, width-1) + av_clip(mv_y+y, 0, height-1) * sstride];
+            mtemp[y*9 + x] = src[av_clip(mv_x+x, 0, width-1) + bink2g_ref_row(mv_y+y, height, 8) * sstride];
     }
 
     msrc = mtemp;
@@ -1233,7 +1244,7 @@ static void bink2g_y_mc(Bink2Context *c, int x, int y,
 
     for (int y = 0; y < 21; y++) {
         for (int x = 0; x < 21; x++)
-            mtemp[y*21 + x] = src[av_clip(mv_x+x-2, 0, width-1) + av_clip(mv_y+y-2, 0, height-1) * sstride];
+            mtemp[y*21 + x] = src[av_clip(mv_x+x-2, 0, width-1) + bink2g_ref_row(mv_y+y-2, height, 16) * sstride];
     }
 
     msrc = mtemp + 21 * 2 + 2;
@@ -1646,6 +1657,19 @@ static int bink2g_decode_slice(Bink2Context *c,
                 ret = update_inter_q(c, inter_q, 0, flags);
                 if (ret < 0)
                     return ret;
+                if (y + 32 > ref_h) {
+                    /* zero motion, but read past the reference like MC does */
+                    bink2g_mcompensate_luma(c, x, y, dst[0], stride[0],
+                                            src[0], sstride[0], ref_w, ref_h);
+                    bink2g_mcompensate_chroma(c, x/2, y/2, dst[2], stride[2],
+                                              src[2], sstride[2], ref_w/2, ref_h/2);
+                    bink2g_mcompensate_chroma(c, x/2, y/2, dst[1], stride[1],
+                                              src[1], sstride[1], ref_w/2, ref_h/2);
+                    if (has_alpha)
+                        bink2g_mcompensate_luma(c, x, y, dst[3], stride[3],
+                                                src[3], sstride[3], ref_w, ref_h);
+                    break;
+                }
                 copy_block16(dst[0] + x, src[0] + x + sstride[0] * y,
                              stride[0], sstride[0], 32);
                 copy_block16(dst[0] + x + 16, src[0] + x + 16 + sstride[0] * y,
