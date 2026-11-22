@@ -692,9 +692,6 @@ static void transpose_block(int16_t block[64])
 
 static void bink2g_set_block_info(Bink2Context *c, int bx, int by, int info)
 {
-    if (c->comp > 2)
-        return;
-
     c->block_info[c->comp][by * c->block_info_stride[c->comp] + bx] = info;
 }
 
@@ -1387,9 +1384,11 @@ static void bink2g_store_mb_info(Bink2Context *c, int type)
     if (type == INTRA_BLOCK)
         return;
 
-    for (int by = 0; by < 4; by++)
-        memset(c->block_info[0] + (c->mb_y * 4 + by) * c->block_info_stride[0] + c->mb_pos * 4,
-               0, 4 * sizeof(**c->block_info));
+    for (int p = 0; p < 4; p += 3) {
+        for (int by = 0; by < 4; by++)
+            memset(c->block_info[p] + (c->mb_y * 4 + by) * c->block_info_stride[p] + c->mb_pos * 4,
+                   0, 4 * sizeof(**c->block_info));
+    }
     for (int p = 1; p < 3; p++) {
         for (int by = 0; by < 2; by++)
             memset(c->block_info[p] + (c->mb_y * 2 + by) * c->block_info_stride[p] + c->mb_pos * 2,
@@ -1548,13 +1547,13 @@ static void bink2g_filter_edges(Bink2Context *c, uint8_t *data, int stride,
 /* In-loop filter, run on the whole frame after all slices: smoothing of flat
  * intra blocks, then vertical and horizontal 8x8 block edges. The result is
  * both the output and the reference for the next frame. */
-static void bink2g_loop_filter(Bink2Context *c, AVFrame *frame)
+static void bink2g_loop_filter(Bink2Context *c, AVFrame *frame, int has_alpha)
 {
     const int thr = (c->frame_flags & 0xFF) * 8;
 
-    for (int comp = 0; comp < 3; comp++) {
-        const int plane = comp ? 3 - comp : 0;
-        const int shift = comp ? 1 : 0;
+    for (int comp = 0; comp < 3 + has_alpha; comp++) {
+        const int plane = (comp == 1 || comp == 2) ? 3 - comp : comp;
+        const int shift = (comp == 1 || comp == 2);
         const int bw = (c->avctx->coded_width  >> shift) >> 3;
         const int bh = (c->avctx->coded_height >> shift) >> 3;
         const uint16_t *info = c->block_info[comp];
@@ -1572,6 +1571,9 @@ static void bink2g_loop_filter(Bink2Context *c, AVFrame *frame)
             }
         }
 
+        /* RAD smooths flat alpha blocks but never filters alpha block edges. */
+        if (comp == 3)
+            continue;
         if (!(c->frame_flags & 0x4000))
             bink2g_filter_edges(c, data, stride, comp, 1);
         if (!(c->frame_flags & 0x8000))
