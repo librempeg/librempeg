@@ -765,6 +765,86 @@ static int bink2g_decode_intra_chroma(Bink2Context *c,
     return 0;
 }
 
+/* Streams without frame_flags bit 18 (0x40000) also filter the residual of
+ * inter macroblocks across the 8x8 block edges inside the macroblock, in
+ * frames that use the loop filter, before it is added to the prediction.
+ * Edge strengths come from the number of AC coefficients of each block as
+ * for intra blocks. Two blocks without AC coefficients are filtered only if
+ * their DCs differ by more than 32. The edge flag lists do not apply. */
+static int bink2g_residual_filtered(const Bink2Context *c)
+{
+    return !(c->frame_flags & 0x40000) && (c->frame_flags & 0xC000) != 0xC000;
+}
+
+/* Filter one 8-sample block edge. pix is the first sample of block b, step
+ * goes across the edge and next along it. sa and sb are the strengths of the
+ * two blocks. The loop filter runs it on pixels, the residual filter on the
+ * unclipped residual. */
+#define BINK2G_FILTER_EDGE(name, type, clip)                                  \
+static void name(type *pix, ptrdiff_t step, ptrdiff_t next, int sa, int sb)   \
+{                                                                             \
+    for (int k = 0; k < 8; k++, pix += next) {                                \
+        const int p1 = pix[-2 * step], p0 = pix[-step];                       \
+        const int q0 = pix[0], q1 = pix[step];                                \
+        const int d = q0 - p0;                                                \
+        const int a = (d + 2) >> 2, b = (d + 4) >> 3;                         \
+                                                                              \
+        if (sa >= 1)                                                          \
+            pix[-step] = clip(p0 + a);                                        \
+        if (sa >= 2)                                                          \
+            pix[-2 * step] = clip(p1 + b);                                    \
+        if (sb >= 1)                                                          \
+            pix[0] = clip(q0 - a);                                            \
+        if (sb >= 2)                                                          \
+            pix[step] = clip(q1 - b);                                         \
+    }                                                                         \
+}
+
+BINK2G_FILTER_EDGE(bink2g_filter_edge,          uint8_t, av_clip_uint8)
+BINK2G_FILTER_EDGE(bink2g_filter_residual_edge, int16_t, )
+
+/* res: nb x nb blocks of 8x8, row stride nb * 8; s and dc: per block, raster order */
+static void bink2g_filter_residual(const Bink2Context *c, int16_t *res, int nb,
+                                   const uint8_t *s, const int *dc)
+{
+    const int size = nb * 8;
+
+    for (int vertical = 1; vertical >= 0; vertical--) {
+        if (c->frame_flags & (vertical ? 0x4000 : 0x8000))
+            continue;
+        for (int by = !vertical; by < nb; by++) {
+            for (int bx = vertical; bx < nb; bx++) {
+                const int a = (by - !vertical) * nb + bx - vertical;
+                const int b = by * nb + bx;
+                int sa = s[a], sb = s[b];
+
+                if (sa == 3 && sb == 3) {
+                    if (FFABS(dc[a] - dc[b]) <= 32)
+                        continue;
+                    sa = sb = 2;
+                } else if (!sa && !sb) {
+                    continue;
+                }
+
+                if (vertical)
+                    bink2g_filter_residual_edge(res + by * 8 * size + bx * 8, 1, size, sa, sb);
+                else
+                    bink2g_filter_residual_edge(res + by * 8 * size + bx * 8, size, 1, sa, sb);
+            }
+        }
+    }
+}
+
+static void bink2g_add_filtered_residual(uint8_t *dst, int stride, const int16_t *res, int size)
+{
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++)
+            dst[x] = av_clip_uint8(dst[x] + res[x]);
+        dst += stride;
+        res += size;
+    }
+}
+
 static int bink2g_decode_inter_luma(Bink2Context *c,
                                     GetBitContext *gb, int16_t block[4][64],
                                     unsigned *prev_cbp, int q,
@@ -772,7 +852,11 @@ static int bink2g_decode_inter_luma(Bink2Context *c,
                                     int flags)
 {
     const int clipdc = (c->frame_flags & 0x40000) ? 2047 : 1023;
+    const int filtered = bink2g_residual_filtered(c);
     int *dc = c->current_idc[c->mb_pos].dc[c->comp];
+    int16_t res[32 * 32];
+    uint8_t s[16];
+    int bdc[16];
     unsigned cbp;
     int ret;
 
@@ -781,8 +865,10 @@ static int bink2g_decode_inter_luma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 1, q, -clipdc, clipdc, 0xA8);
 
     for (int i = 0; i < 4; i++) {
+        uint16_t ac_class[4] = { 0 };
+
         ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp >> (4 * i),
-                               q, bink2g_inter_qmat, NULL);
+                               q, bink2g_inter_qmat, filtered ? ac_class : NULL);
         if (ret < 0)
             return ret;
 
@@ -790,6 +876,20 @@ static int bink2g_decode_inter_luma(Bink2Context *c,
             block[j][0] = dc[i * 4 + j] * 8 + 32;
             bink2g_idct(block[j]);
             transpose_block(block[j]);
+        }
+
+        if (filtered) {
+            for (int j = 0; j < 4; j++) {
+                const int pos = luma_repos[i * 4 + j];
+                const int k = (pos >> 2) * 4 + (pos & 3);
+
+                s[k]   = (ac_class[j] >> 13) & 3;
+                bdc[k] = dc[i * 4 + j];
+                for (int y = 0; y < 8; y++)
+                    memcpy(res + ((pos >> 2) * 8 + y) * 32 + (pos & 3) * 8,
+                           block[j] + y * 8, 8 * sizeof(*res));
+            }
+            continue;
         }
 
         for (int j = 0; j < 4; j++)
@@ -803,6 +903,11 @@ static int bink2g_decode_inter_luma(Bink2Context *c,
                                stride, block[j]);
     }
 
+    if (filtered) {
+        bink2g_filter_residual(c, res, 4, s, bdc);
+        bink2g_add_filtered_residual(dst, stride, res, 32);
+    }
+
     return 0;
 }
 
@@ -813,7 +918,11 @@ static int bink2g_decode_inter_chroma(Bink2Context *c,
                                       int flags)
 {
     const int clipdc = (c->frame_flags & 0x40000) ? 2047 : 1023;
+    const int filtered = bink2g_residual_filtered(c);
     int *dc = c->current_idc[c->mb_pos].dc[c->comp];
+    uint16_t ac_class[4] = { 0 };
+    int16_t res[16 * 16];
+    uint8_t s[4];
     unsigned cbp;
     int ret;
 
@@ -822,7 +931,7 @@ static int bink2g_decode_inter_chroma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 0, q, -clipdc, clipdc, 0xA8);
 
     ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp,
-                           q, bink2g_inter_qmat, NULL);
+                           q, bink2g_inter_qmat, filtered ? ac_class : NULL);
     if (ret < 0)
         return ret;
 
@@ -830,6 +939,18 @@ static int bink2g_decode_inter_chroma(Bink2Context *c,
         block[j][0] = dc[j] * 8 + 32;
         bink2g_idct(block[j]);
         transpose_block(block[j]);
+    }
+
+    if (filtered) {
+        for (int j = 0; j < 4; j++) {
+            s[j] = (ac_class[j] >> 13) & 3;
+            for (int y = 0; y < 8; y++)
+                memcpy(res + ((j >> 1) * 8 + y) * 16 + (j & 1) * 8,
+                       block[j] + y * 8, 8 * sizeof(*res));
+        }
+        bink2g_filter_residual(c, res, 2, s, dc);
+        bink2g_add_filtered_residual(dst, stride, res, 16);
+        return 0;
     }
 
     for (int j = 0; j < 4; j++)
@@ -1461,26 +1582,6 @@ static void bink2g_dc_smooth_block(uint8_t *dst, int stride, const uint16_t *inf
             dst[i] = av_clip_uint8(v >> 3);
         }
         dst += stride;
-    }
-}
-
-static void bink2g_filter_edge(uint8_t *pix, ptrdiff_t step, ptrdiff_t next,
-                               int sa, int sb)
-{
-    for (int k = 0; k < 8; k++, pix += next) {
-        const int p1 = pix[-2 * step], p0 = pix[-step];
-        const int q0 = pix[0], q1 = pix[step];
-        const int d = q0 - p0;
-        const int a = (d + 2) >> 2, b = (d + 4) >> 3;
-
-        if (sa >= 1)
-            pix[-step] = av_clip_uint8(p0 + a);
-        if (sa >= 2)
-            pix[-2 * step] = av_clip_uint8(p1 + b);
-        if (sb >= 1)
-            pix[0] = av_clip_uint8(q0 - a);
-        if (sb >= 2)
-            pix[step] = av_clip_uint8(q1 - b);
     }
 }
 
