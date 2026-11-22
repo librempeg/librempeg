@@ -1490,9 +1490,16 @@ static void bink2g_filter_edges(Bink2Context *c, uint8_t *data, int stride,
             int sa = (ia & 0x8000) ? (ia >> 13) & 3 : 0;
             int sb = (ib & 0x8000) ? (ib >> 13) & 3 : 0;
 
-            if (vertical ? bink2g_edge_disabled(c->col_cbp, ncols, (bx << shift) - 1)
-                         : bink2g_edge_disabled(c->row_cbp, nrows, (by << shift) - 1))
+            if (vertical) {
+                if (bink2g_edge_disabled(c->col_cbp, ncols, (bx << shift) - 1))
+                    continue;
+            } else if (comp == 0 && by == bh - 1) {
+                /* RAD's decoder ignores the row flag of the last luma row edge. */
+                if (by - 1 >= nrows)
+                    continue;
+            } else if (bink2g_edge_disabled(c->row_cbp, nrows, (by << shift) - 1)) {
                 continue;
+            }
 
             if (!(ia & 0x8000) && !(ib & 0x8000)) {
                 const int16_t *mva = c->quad_mv[((ay << shift) >> 1) * c->quad_mv_stride + ((ax << shift) >> 1)];
