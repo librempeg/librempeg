@@ -227,6 +227,9 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         dst[3] = frame->data[3] + c->slice_height[i]   * stride[3];
     }
 
+    if (c->version > 'f')
+        bink2g_loop_filter(c, frame);
+
     if (is_kf)
         frame->flags |= AV_FRAME_FLAG_KEY;
     else
@@ -356,6 +359,21 @@ static av_cold int bink2_decode_init(AVCodecContext *avctx)
     if (!c->row_cbp)
         return AVERROR(ENOMEM);
 
+    for (int i = 0; i < 3; i++) {
+        const int shift = i ? 4 : 3;
+
+        c->block_info_stride[i] = avctx->coded_width >> shift;
+        c->block_info[i] = av_calloc(c->block_info_stride[i] * (avctx->coded_height >> shift),
+                                     sizeof(*c->block_info[i]));
+        if (!c->block_info[i])
+            return AVERROR(ENOMEM);
+    }
+
+    c->quad_mv_stride = avctx->coded_width >> 4;
+    c->quad_mv = av_calloc(c->quad_mv_stride * (avctx->coded_height >> 4), sizeof(*c->quad_mv));
+    if (!c->quad_mv)
+        return AVERROR(ENOMEM);
+
     ff_thread_once(&init_static_once, bink2_init_vlcs);
 
     return 0;
@@ -383,6 +401,9 @@ static av_cold int bink2_decode_end(AVCodecContext *avctx)
     av_freep(&c->prev_mv);
     av_freep(&c->col_cbp);
     av_freep(&c->row_cbp);
+    for (int i = 0; i < 3; i++)
+        av_freep(&c->block_info[i]);
+    av_freep(&c->quad_mv);
 
     return 0;
 }

@@ -310,10 +310,6 @@ static const uint16_t bink2g_inter_qmat[4][64] = {
     },
 };
 
-static const uint16_t bink2g_mask[] = {
-    0x0000, 0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff
-};
-
 static inline void bink2g_idct_1d(int16_t *blk, int step, int shift)
 {
 #define idct_mul_a(val) ((val) + ((val) >> 2))
@@ -617,7 +613,7 @@ static void bink2g_decode_dc(Bink2Context *c, GetBitContext *gb, int *dc,
 static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
                             int16_t block[4][64], unsigned cbp,
                             int q, const uint16_t qmat[4][64],
-                            uint16_t dering[4])
+                            uint16_t ac_class[4])
 {
     const uint16_t *qqmat = qmat[q&3];
     const int factor = 1 << (q >> 2);
@@ -627,9 +623,9 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
     memset(block, 0, 2 * 4 * 64);
 
     if ((cbp & 0xf) == 0) {
-        if (dering) {
+        if (ac_class) {
             for (int i = 0; i < 4; i++)
-                dering[i] |= 0x6000;
+                ac_class[i] |= 0x6000;
         }
 
         return 0;
@@ -641,8 +637,8 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
 
     for (int i = 0; i < 4; i++, cbp >>= 1) {
         if (!(cbp & 1)) {
-            if (dering)
-                dering[i] |= 0x6000;
+            if (ac_class)
+                ac_class[i] |= 0x6000;
 
             continue;
         }
@@ -675,67 +671,11 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
             idx++;
         }
 
-        if (dering)
-            dering[i] |= ((nb_ac<8) + (nb_ac<4) + (nb_ac<1)) << 13;
+        if (ac_class)
+            ac_class[i] |= ((nb_ac<8) + (nb_ac<4) + (nb_ac<1)) << 13;
     }
 
     return 0;
-}
-
-static int dc_pair_needs_smoothing(uint16_t dc_a, uint16_t dc_b)
-{
-    if ((dc_a | dc_b) < 0x2000)
-        return 0;
-
-    if ((dc_a & dc_b) < 0x6000)
-        return 1;
-
-    if ((int)(dc_a ^ 0x1000) - (int)(dc_b ^ 0x1000) > 0x20)
-        return 1;
-
-    return 0;
-}
-
-static void dering_w(int16_t A[64], int16_t B[64],
-                     uint16_t dc_a, uint16_t dc_b)
-{
-    if (!dc_pair_needs_smoothing(dc_a, dc_b))
-        return;
-
-    const int16_t *mask_a = &bink2g_mask[dc_a >> 13];
-    const int16_t *mask_b = &bink2g_mask[dc_b >> 13];
-
-    for (int i = 0; i < 8; i++) {
-        int16_t diff = B[i] - A[56+i];
-        int16_t diff_4 = (diff + 4) >> 3;
-        int16_t diff_2 = (diff + 2) >> 2;
-
-        A[48+i] += diff_4 & mask_a[0];
-        A[56+i] += diff_2 & mask_a[1];
-        B[ 0+i] -= diff_2 & mask_b[1];
-        B[ 8+i] -= diff_4 & mask_b[0];
-    }
-}
-
-static void dering_h(int16_t A[64], int16_t B[64],
-                     uint16_t dc_a, uint16_t dc_b)
-{
-    if (!dc_pair_needs_smoothing(dc_a, dc_b))
-        return;
-
-    const int16_t *mask_a = &bink2g_mask[dc_a >> 13];
-    const int16_t *mask_b = &bink2g_mask[dc_b >> 13];
-
-    for (int i = 0; i < 8; i++) {
-        int16_t diff = B[0+i*8] - A[7+i*8];
-        int16_t diff_4 = (diff + 4) >> 3;
-        int16_t diff_2 = (diff + 2) >> 2;
-
-        A[6+i*8] += diff_4 & mask_a[0];
-        A[7+i*8] += diff_2 & mask_a[1];
-        B[0+i*8] -= diff_2 & mask_b[1];
-        B[1+i*8] -= diff_4 & mask_b[0];
-    }
 }
 
 static void transpose_block(int16_t block[64])
@@ -750,20 +690,12 @@ static void transpose_block(int16_t block[64])
     }
 }
 
-static void smooth_edges(Bink2Context *c, const uint16_t dering[4], int16_t block[4][64])
+static void bink2g_set_block_info(Bink2Context *c, int bx, int by, int info)
 {
-    for (int i = 0; i < 4; i++)
-        transpose_block(block[i]);
+    if (c->comp > 2)
+        return;
 
-    if (!(c->frame_flags & 0x44000)) {
-        dering_h(block[0], block[1], dering[0], dering[1]);
-        dering_h(block[2], block[3], dering[2], dering[3]);
-    }
-
-    if (!(c->frame_flags & 0x48000)) {
-        dering_w(block[0], block[2], dering[0], dering[2]);
-        dering_w(block[1], block[3], dering[1], dering[3]);
-    }
+    c->block_info[c->comp][by * c->block_info_stride[c->comp] + bx] = info;
 }
 
 static int bink2g_decode_intra_luma(Bink2Context *c,
@@ -781,23 +713,23 @@ static int bink2g_decode_intra_luma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 1, q, 0, 2047, flags);
 
     for (int i = 0; i < 4; i++) {
-        uint16_t dering[4] = { 0 };
+        uint16_t ac_class[4] = { 0 };
 
         ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp >> (4*i),
-                               q, bink2g_luma_intra_qmat, NULL);
+                               q, bink2g_luma_intra_qmat, ac_class);
         if (ret < 0)
             return ret;
 
         for (int j = 0; j < 4; j++) {
+            const int pos = luma_repos[i * 4 + j];
+
             block[j][0] = dc[i * 4 + j] * 8 + 32;
             bink2g_idct(block[j]);
+            transpose_block(block[j]);
+            bink2g_idct_put(dst + (pos & 3) * 8 + (pos >> 2) * 8 * stride, stride, block[j]);
+            bink2g_set_block_info(c, c->mb_pos * 4 + (pos & 3), c->mb_y * 4 + (pos >> 2),
+                                  0x8000 | ac_class[j] | (dc[i * 4 + j] & 0x1FFF));
         }
-
-        smooth_edges(c, dering, block);
-
-        for (int j = 0; j < 4; j++)
-            bink2g_idct_put(dst + (luma_repos[i * 4 + j] & 3) * 8 +
-                            (luma_repos[i * 4 + j] >> 2) * 8 * stride, stride, block[j]);
     }
 
     return 0;
@@ -810,7 +742,7 @@ static int bink2g_decode_intra_chroma(Bink2Context *c,
                                       int flags)
 {
     int *dc = c->current_idc[c->mb_pos].dc[c->comp];
-    uint16_t dering[4] = { 0 };
+    uint16_t ac_class[4] = { 0 };
     unsigned cbp;
     int ret;
 
@@ -819,20 +751,19 @@ static int bink2g_decode_intra_chroma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 0, q, 0, 2047, flags);
 
     ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp,
-                           q, bink2g_chroma_intra_qmat, NULL);
+                           q, bink2g_chroma_intra_qmat, ac_class);
     if (ret < 0)
         return ret;
 
     for (int j = 0; j < 4; j++) {
         block[j][0] = dc[j] * 8 + 32;
         bink2g_idct(block[j]);
-    }
-
-    smooth_edges(c, dering, block);
-
-    for (int j = 0; j < 4; j++)
+        transpose_block(block[j]);
         bink2g_idct_put(dst + (j & 1) * 8 +
                         (j >> 1) * 8 * stride, stride, block[j]);
+        bink2g_set_block_info(c, c->mb_pos * 2 + (j & 1), c->mb_y * 2 + (j >> 1),
+                              0x8000 | ac_class[j] | (dc[j] & 0x1FFF));
+    }
 
     return 0;
 }
@@ -853,22 +784,16 @@ static int bink2g_decode_inter_luma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 1, q, -clipdc, clipdc, 0xA8);
 
     for (int i = 0; i < 4; i++) {
-        uint16_t dering[4] = { 0 };
-
         ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp >> (4 * i),
-                               q, bink2g_inter_qmat, dering);
+                               q, bink2g_inter_qmat, NULL);
         if (ret < 0)
             return ret;
-
-        for (int j = 0; j < 4; j++)
-            dering[j] |= dc[i * 4 + j] & 0x1FFF;
 
         for (int j = 0; j < 4; j++) {
             block[j][0] = dc[i * 4 + j] * 8 + 32;
             bink2g_idct(block[j]);
+            transpose_block(block[j]);
         }
-
-        smooth_edges(c, dering, block);
 
         for (int j = 0; j < 4; j++)
             bink2g_add_residual(dst + (luma_repos[i * 4 + j] & 3) * 8 +
@@ -892,7 +817,6 @@ static int bink2g_decode_inter_chroma(Bink2Context *c,
 {
     const int clipdc = (c->frame_flags & 0x40000) ? 2047 : 1023;
     int *dc = c->current_idc[c->mb_pos].dc[c->comp];
-    uint16_t dering[4] = { 0 };
     unsigned cbp;
     int ret;
 
@@ -901,19 +825,15 @@ static int bink2g_decode_inter_chroma(Bink2Context *c,
     bink2g_decode_dc(c, gb, dc, 0, q, -clipdc, clipdc, 0xA8);
 
     ret = bink2g_decode_ac(gb, bink2g_scan, block, cbp,
-                           q, bink2g_inter_qmat, dering);
+                           q, bink2g_inter_qmat, NULL);
     if (ret < 0)
         return ret;
-
-    for (int j = 0; j < 4; j++)
-        dering[j] |= dc[j] & 0x1FFF;
 
     for (int j = 0; j < 4; j++) {
         block[j][0] = dc[j] * 8 + 32;
         bink2g_idct(block[j]);
+        transpose_block(block[j]);
     }
-
-    smooth_edges(c, dering, block);
 
     for (int j = 0; j < 4; j++)
         bink2g_add_residual(dst + (j & 1) * 8 +
@@ -1427,6 +1347,208 @@ static void bink2g_average_luma(Bink2Context *c, int x, int y,
     }
 }
 
+/* Record what the in-loop filter needs from a macroblock that is not intra. */
+static void bink2g_store_mb_info(Bink2Context *c, int type)
+{
+    const MVectors *mv = &c->current_mv[c->mb_pos].mv;
+    const int has_mv = type == MOTION_BLOCK || type == RESIDUE_BLOCK;
+    const int qx = c->mb_pos * 2, qy = c->mb_y * 2;
+
+    for (int j = 0; j < 4; j++) {
+        int16_t *dst = c->quad_mv[(qy + (j >> 1)) * c->quad_mv_stride + qx + (j & 1)];
+
+        dst[0] = has_mv ? mv->v[j][0] : 0;
+        dst[1] = has_mv ? mv->v[j][1] : 0;
+    }
+
+    if (type == INTRA_BLOCK)
+        return;
+
+    for (int by = 0; by < 4; by++)
+        memset(c->block_info[0] + (c->mb_y * 4 + by) * c->block_info_stride[0] + c->mb_pos * 4,
+               0, 4 * sizeof(**c->block_info));
+    for (int p = 1; p < 3; p++) {
+        for (int by = 0; by < 2; by++)
+            memset(c->block_info[p] + (c->mb_y * 2 + by) * c->block_info_stride[p] + c->mb_pos * 2,
+                   0, 2 * sizeof(**c->block_info));
+    }
+}
+
+static int bink2g_dc_smooth_weight(int d, int i)
+{
+    switch (i) {
+    case 0: return (d * 26624) >> 16;
+    case 1: return (d * 18432) >> 16;
+    case 2: return (d * 12288) >> 16;
+    case 3: return (d *  7168) >> 16;
+    case 4: return d >> 4;
+    case 5: return d >> 5;
+    case 6: return d >> 7;
+    }
+    return 0;
+}
+
+/* Replace an intra block without AC coefficients by a smooth surface
+ * through the DCs of its neighbours that are similar flat intra blocks. */
+static void bink2g_dc_smooth_block(uint8_t *dst, int stride, const uint16_t *info,
+                                   int info_stride, int bx, int by, int bw, int bh,
+                                   int thr)
+{
+    const int16_t c = info[0];
+    int g[3][3], h[3][8];
+
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            g[dy + 1][dx + 1] = -1;
+            if (bx + dx >= 0 && bx + dx < bw && by + dy >= 0 && by + dy < bh) {
+                const int16_t n = info[dy * info_stride + dx];
+
+                if (FFABS((int16_t)(n - c)) < thr)
+                    g[dy + 1][dx + 1] = n & 0x1FFF;
+            }
+        }
+    }
+
+    g[1][1] = c & 0x1FFF;
+    if (g[0][1] < 0)
+        g[0][1] = g[1][1];
+    if (g[2][1] < 0)
+        g[2][1] = g[1][1];
+    if (g[1][0] < 0)
+        g[1][0] = g[1][1];
+    if (g[1][2] < 0)
+        g[1][2] = g[1][1];
+    for (int r = 0; r < 3; r += 2) {
+        if (g[r][0] < 0)
+            g[r][0] = g[1][0];
+        if (g[r][2] < 0)
+            g[r][2] = g[1][2];
+    }
+
+    for (int r = 0; r < 3; r++) {
+        for (int i = 0; i < 8; i++)
+            h[r][i] = g[r][1] + 4 + bink2g_dc_smooth_weight(g[r][0] - g[r][1], i) +
+                                    bink2g_dc_smooth_weight(g[r][2] - g[r][1], 7 - i);
+    }
+
+    for (int j = 0; j < 8; j++) {
+        for (int i = 0; i < 8; i++) {
+            const int v = h[1][i] + bink2g_dc_smooth_weight(h[0][i] - h[1][i], j) +
+                                    bink2g_dc_smooth_weight(h[2][i] - h[1][i], 7 - j);
+
+            dst[i] = av_clip_uint8(v >> 3);
+        }
+        dst += stride;
+    }
+}
+
+static void bink2g_filter_edge(uint8_t *pix, ptrdiff_t step, ptrdiff_t next,
+                               int sa, int sb)
+{
+    for (int k = 0; k < 8; k++, pix += next) {
+        const int p1 = pix[-2 * step], p0 = pix[-step];
+        const int q0 = pix[0], q1 = pix[step];
+        const int d = q0 - p0;
+        const int a = (d + 2) >> 2, b = (d + 4) >> 3;
+
+        if (sa >= 1)
+            pix[-step] = av_clip_uint8(p0 + a);
+        if (sa >= 2)
+            pix[-2 * step] = av_clip_uint8(p1 + b);
+        if (sb >= 1)
+            pix[0] = av_clip_uint8(q0 - a);
+        if (sb >= 2)
+            pix[step] = av_clip_uint8(q1 - b);
+    }
+}
+
+/* Edges past the end of a flag list are not filtered. */
+static int bink2g_edge_disabled(const uint8_t *flags, int count, int idx)
+{
+    if (idx >= count)
+        return 1;
+    return (flags[idx >> 3] >> (idx & 7)) & 1;
+}
+
+static void bink2g_filter_edges(Bink2Context *c, uint8_t *data, int stride,
+                                int comp, int vertical)
+{
+    const uint16_t *info = c->block_info[comp];
+    const int info_stride = c->block_info_stride[comp];
+    const int shift = comp ? 1 : 0;
+    const int bw = (c->avctx->coded_width  >> shift) >> 3;
+    const int bh = (c->avctx->coded_height >> shift) >> 3;
+    const int ncols = (c->avctx->coded_width >> 3) - 1;
+    const int nrows = (FFALIGN(c->avctx->height, 16) >> 3) - 1;
+
+    for (int by = !vertical; by < bh; by++) {
+        for (int bx = vertical; bx < bw; bx++) {
+            const int ax = bx - vertical;
+            const int ay = by - !vertical;
+            const uint16_t ia = info[ay * info_stride + ax];
+            const uint16_t ib = info[by * info_stride + bx];
+            int sa = (ia & 0x8000) ? (ia >> 13) & 3 : 0;
+            int sb = (ib & 0x8000) ? (ib >> 13) & 3 : 0;
+
+            if (vertical ? bink2g_edge_disabled(c->col_cbp, ncols, (bx << shift) - 1)
+                         : bink2g_edge_disabled(c->row_cbp, nrows, (by << shift) - 1))
+                continue;
+
+            if (!(ia & 0x8000) && !(ib & 0x8000)) {
+                const int16_t *mva = c->quad_mv[((ay << shift) >> 1) * c->quad_mv_stride + ((ax << shift) >> 1)];
+                const int16_t *mvb = c->quad_mv[((by << shift) >> 1) * c->quad_mv_stride + ((bx << shift) >> 1)];
+
+                if (FFABS(mva[0] - mvb[0]) >= 2 || FFABS(mva[1] - mvb[1]) >= 2) {
+                    sa |= 2;
+                    sb |= 2;
+                }
+            }
+
+            if (sa == sb && (sa == 0 || sa == 3))
+                continue;
+
+            if (vertical)
+                bink2g_filter_edge(data + by * 8 * stride + bx * 8, 1, stride, sa, sb);
+            else
+                bink2g_filter_edge(data + by * 8 * stride + bx * 8, stride, 1, sa, sb);
+        }
+    }
+}
+
+/* In-loop filter, run on the whole frame after all slices: smoothing of flat
+ * intra blocks, then vertical and horizontal 8x8 block edges. The result is
+ * both the output and the reference for the next frame. */
+static void bink2g_loop_filter(Bink2Context *c, AVFrame *frame)
+{
+    const int thr = (c->frame_flags & 0xFF) * 8;
+
+    for (int comp = 0; comp < 3; comp++) {
+        const int plane = comp ? 3 - comp : 0;
+        const int shift = comp ? 1 : 0;
+        const int bw = (c->avctx->coded_width  >> shift) >> 3;
+        const int bh = (c->avctx->coded_height >> shift) >> 3;
+        const uint16_t *info = c->block_info[comp];
+        const int info_stride = c->block_info_stride[comp];
+        uint8_t *data = frame->data[plane];
+        const int stride = frame->linesize[plane];
+
+        for (int by = 0; by < bh; by++) {
+            for (int bx = 0; bx < bw; bx++) {
+                const uint16_t *bi = info + by * info_stride + bx;
+
+                if ((*bi & 0xE000) == 0xE000)
+                    bink2g_dc_smooth_block(data + by * 8 * stride + bx * 8, stride,
+                                           bi, info_stride, bx, by, bw, bh, thr);
+            }
+        }
+
+        if (!(c->frame_flags & 0x4000))
+            bink2g_filter_edges(c, data, stride, comp, 1);
+        if (!(c->frame_flags & 0x8000))
+            bink2g_filter_edges(c, data, stride, comp, 0);
+    }
+}
+
 static int bink2g_decode_slice(Bink2Context *c,
                                uint8_t *dst[4], int stride[4],
                                uint8_t *src[4], int sstride[4],
@@ -1463,6 +1585,7 @@ static int bink2g_decode_slice(Bink2Context *c,
             MVectors mv = { 0 };
 
             c->mb_pos = x / 32;
+            c->mb_y = y / 32;
             c->current_idc[c->mb_pos].block_type = type;
             flags = 0;
             if (y == start)
@@ -1643,6 +1766,8 @@ static int bink2g_decode_slice(Bink2Context *c,
             default:
                 return AVERROR_INVALIDDATA;
             }
+
+            bink2g_store_mb_info(c, type);
 
             if (c->current_idc[c->mb_pos].block_type != INTRA_BLOCK) {
                 bink2g_average_luma  (c, x, 0, dst[0], stride[0], c->current_idc[c->mb_pos].dc[0]);
