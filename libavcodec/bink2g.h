@@ -1124,6 +1124,20 @@ static int update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
 #define CV2FILTER(src, i, shift) ((2*(src)[0] + 2*(src)[i] + (1<<shift)/2) >> shift)
 #define CV3FILTER(src, i, shift) ((  (src)[0] + 3*(src)[i] + (1<<shift)/2) >> shift)
 
+/* A half-pel motion vector component (luma half-pel units) that places a
+ * visible 16x16 luma block exactly 19 pixels before the end of the
+ * reference frame, the last position where the 6-tap filter still fits,
+ * is replaced by the full-pel position 2 pixels before it. Chroma blocks
+ * use the replaced luma vector. KB2g streams have such vectors; streams
+ * from later encoders only have them on blocks below the picture, which
+ * are clamped instead. */
+static int bink2g_edge_mv(int mv, int pos, int size)
+{
+    if ((mv & 1) && pos + 16 <= size && (mv >> 1) + pos == size - 19)
+        mv -= 5;
+    return mv;
+}
+
 /* Clamp the vertical component of a motion vector (luma half-pel units)
  * so that a 16x16 luma block at row y, plus the rows its 6-tap filter reads
  * below it for half-pel positions, comes from inside the reference frame.
@@ -1135,8 +1149,8 @@ static int bink2g_clamp_mv_y(int mv, int y, int height)
     const int lim = height - 16 - ((mv & 1) ? 3 : 0);
 
     if ((mv >> 1) + y > lim)
-        mv = 2 * (lim - y) + (mv & 1);
-    return mv;
+        return 2 * (lim - y) + (mv & 1);
+    return bink2g_edge_mv(mv, y, height);
 }
 
 static void bink2g_c_mc(Bink2Context *c, int x, int y,
@@ -1326,33 +1340,37 @@ static int bink2g_mcompensate_chroma(Bink2Context *c, int x, int y,
                                      int width, int height)
 {
     MVectors *mv = &c->current_mv[c->mb_pos].mv;
-    int mv_x, mv_y, mode, vy;
+    int mv_x, mv_y, mode, vx, vy;
 
-    mv_x  = (mv->v[0][0] >> 2) + x;
+    vx    = bink2g_edge_mv(mv->v[0][0], 2 * x, 2 * width);
+    mv_x  = (vx >> 2) + x;
     vy    = bink2g_clamp_mv_y(mv->v[0][1], 2 * y, 2 * height);
     mv_y  = (vy >> 2) + y;
-    mode  =  mv->v[0][0] & 3;
+    mode  =  vx & 3;
     mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x = (mv->v[1][0] >> 2) + x + 8;
+    vx    = bink2g_edge_mv(mv->v[1][0], 2 * x + 16, 2 * width);
+    mv_x  = (vx >> 2) + x + 8;
     vy    = bink2g_clamp_mv_y(mv->v[1][1], 2 * y, 2 * height);
     mv_y  = (vy >> 2) + y;
-    mode  =  mv->v[1][0] & 3;
+    mode  =  vx & 3;
     mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x = (mv->v[2][0] >> 2) + x;
+    vx    = bink2g_edge_mv(mv->v[2][0], 2 * x, 2 * width);
+    mv_x  = (vx >> 2) + x;
     vy    = bink2g_clamp_mv_y(mv->v[2][1], 2 * y + 16, 2 * height);
     mv_y  = (vy >> 2) + y + 8;
-    mode  =  mv->v[2][0] & 3;
+    mode  =  vx & 3;
     mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x = (mv->v[3][0] >> 2) + x + 8;
+    vx    = bink2g_edge_mv(mv->v[3][0], 2 * x + 16, 2 * width);
+    mv_x  = (vx >> 2) + x + 8;
     vy    = bink2g_clamp_mv_y(mv->v[3][1], 2 * y + 16, 2 * height);
     mv_y  = (vy >> 2) + y + 8;
-    mode  =  mv->v[3][0] & 3;
+    mode  =  vx & 3;
     mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8 + 8 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
@@ -1414,33 +1432,37 @@ static int bink2g_mcompensate_luma(Bink2Context *c, int x, int y,
                                    int width, int height)
 {
     MVectors *mv = &c->current_mv[c->mb_pos].mv;
-    int mv_x, mv_y, mode, vy;
+    int mv_x, mv_y, mode, vx, vy;
 
-    mv_x  = (mv->v[0][0] >> 1) + x;
+    vx    = bink2g_edge_mv(mv->v[0][0], x, width);
+    mv_x  = (vx >> 1) + x;
     vy    = bink2g_clamp_mv_y(mv->v[0][1], y, height);
     mv_y  = (vy >> 1) + y;
-    mode  =  mv->v[0][0] & 1;
+    mode  =  vx & 1;
     mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x  = (mv->v[1][0] >> 1) + x + 16;
+    vx    = bink2g_edge_mv(mv->v[1][0], x + 16, width);
+    mv_x  = (vx >> 1) + x + 16;
     vy    = bink2g_clamp_mv_y(mv->v[1][1], y, height);
     mv_y  = (vy >> 1) + y;
-    mode  =  mv->v[1][0] & 1;
+    mode  =  vx & 1;
     mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x  = (mv->v[2][0] >> 1) + x;
+    vx    = bink2g_edge_mv(mv->v[2][0], x, width);
+    mv_x  = (vx >> 1) + x;
     vy    = bink2g_clamp_mv_y(mv->v[2][1], y + 16, height);
     mv_y  = (vy >> 1) + y + 16;
-    mode  =  mv->v[2][0] & 1;
+    mode  =  vx & 1;
     mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
-    mv_x  = (mv->v[3][0] >> 1) + x + 16;
+    vx    = bink2g_edge_mv(mv->v[3][0], x + 16, width);
+    mv_x  = (vx >> 1) + x + 16;
     vy    = bink2g_clamp_mv_y(mv->v[3][1], y + 16, height);
     mv_y  = (vy >> 1) + y + 16;
-    mode  =  mv->v[3][0] & 1;
+    mode  =  vx & 1;
     mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16 + 16 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
