@@ -117,8 +117,14 @@ typedef struct Bink2Context {
     int             num_slices;
     int             slice_height[8];
 
+    uint16_t        *block_info[3];       ///< per 8x8 block: intra << 15 | AC class << 13 | DC
+    int             block_info_stride[3];
+    int16_t         (*quad_mv)[2];        ///< motion vector of each 16x16 luma quadrant
+    int             quad_mv_stride;
+
     int             comp;
     int             mb_pos;
+    int             mb_y;
     unsigned        flags;
     unsigned        frame_flags;
 } Bink2Context;
