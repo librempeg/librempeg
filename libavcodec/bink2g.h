@@ -1565,6 +1565,9 @@ static int bink2g_decode_slice(Bink2Context *c,
     GetBitContext *gb = &c->gb;
     const int w = c->avctx->width;
     const int h = c->avctx->height;
+    /* RAD's reference frames are the picture size rounded up to 16 */
+    const int ref_w = FFALIGN(w, 16);
+    const int ref_h = FFALIGN(h, 16);
     int ret = 0, dq, flags;
 
     if (c->has_alpha && !has_alpha) {
@@ -1673,21 +1676,21 @@ static int bink2g_decode_slice(Bink2Context *c,
                 ret = bink2g_mcompensate_luma(c, x, y,
                                               dst[0], stride[0],
                                               src[0], sstride[0],
-                                              w, h);
+                                              ref_w, ref_h);
                 if (ret < 0)
                     goto fail;
                 c->comp = 1;
                 ret = bink2g_mcompensate_chroma(c, x/2, y/2,
                                                 dst[2], stride[2],
                                                 src[2], sstride[2],
-                                                w/2, h/2);
+                                                ref_w/2, ref_h/2);
                 if (ret < 0)
                     goto fail;
                 c->comp = 2;
                 ret = bink2g_mcompensate_chroma(c, x/2, y/2,
                                                 dst[1], stride[1],
                                                 src[1], sstride[1],
-                                                w/2, h/2);
+                                                ref_w/2, ref_h/2);
                 if (ret < 0)
                     goto fail;
                 if (has_alpha) {
@@ -1695,7 +1698,7 @@ static int bink2g_decode_slice(Bink2Context *c,
                     ret = bink2g_mcompensate_luma(c, x, y,
                                                   dst[3], stride[3],
                                                   src[3], sstride[3],
-                                                  w, h);
+                                                  ref_w, ref_h);
                     if (ret < 0)
                         goto fail;
                 }
@@ -1716,21 +1719,21 @@ static int bink2g_decode_slice(Bink2Context *c,
                 ret = bink2g_mcompensate_luma(c, x, y,
                                               dst[0], stride[0],
                                               src[0], sstride[0],
-                                              w, h);
+                                              ref_w, ref_h);
                 if (ret < 0)
                     goto fail;
                 c->comp = 1;
                 ret = bink2g_mcompensate_chroma(c, x/2, y/2,
                                                 dst[2], stride[2],
                                                 src[2], sstride[2],
-                                                w/2, h/2);
+                                                ref_w/2, ref_h/2);
                 if (ret < 0)
                     goto fail;
                 c->comp = 2;
                 ret = bink2g_mcompensate_chroma(c, x/2, y/2,
                                                 dst[1], stride[1],
                                                 src[1], sstride[1],
-                                                w/2, h/2);
+                                                ref_w/2, ref_h/2);
                 if (ret < 0)
                     goto fail;
                 if (has_alpha) {
@@ -1738,7 +1741,7 @@ static int bink2g_decode_slice(Bink2Context *c,
                     ret = bink2g_mcompensate_luma(c, x, y,
                                                   dst[3], stride[3],
                                                   src[3], sstride[3],
-                                                  w, h);
+                                                  ref_w, ref_h);
                     if (ret < 0)
                         goto fail;
                 }
