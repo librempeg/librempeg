@@ -463,6 +463,7 @@ extern const FFOutputFormat ff_mxf_muxer;
 extern const FFOutputFormat ff_mxf_d10_muxer;
 extern const FFOutputFormat ff_mxf_opatom_muxer;
 extern const FFInputFormat  ff_mxg_demuxer;
+extern const FFInputFormat  ff_myspd_demuxer;
 extern const FFInputFormat  ff_naac_demuxer;
 extern const FFInputFormat  ff_namcoidsp_demuxer;
 extern const FFInputFormat  ff_naxat_asd_demuxer;

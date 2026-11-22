@@ -568,6 +568,7 @@ OBJS-$(CONFIG_MVR_DEMUXER)               += mvrdec.o
 OBJS-$(CONFIG_MXF_DEMUXER)               += mxfdec.o mxf.o
 OBJS-$(CONFIG_MXF_MUXER)                 += mxfenc.o mxf.o
 OBJS-$(CONFIG_MXG_DEMUXER)               += mxg.o
+OBJS-$(CONFIG_MYSPD_DEMUXER)             += myspd.o pcm.o
 OBJS-$(CONFIG_NAAC_DEMUXER)              += naac.o pcm.o
 OBJS-$(CONFIG_NAMCOIDSP_DEMUXER)         += namcoidsp.o pcm.o
 OBJS-$(CONFIG_NAXAT_ASD_DEMUXER)         += naxat_asd.o pcm.o
