@@ -1006,15 +1006,19 @@ static int update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
 #define CV2FILTER(src, i, shift) ((2*(src)[0] + 2*(src)[i] + (1<<shift)/2) >> shift)
 #define CV3FILTER(src, i, shift) ((  (src)[0] + 3*(src)[i] + (1<<shift)/2) >> shift)
 
-/* Rows below the reference frame read the last rows of the frame again,
- * a strip of height period (16 luma rows, 8 chroma rows) at a time. */
-static int bink2g_ref_row(int y, int height, int period)
+/* Clamp the vertical component of a motion vector (luma half-pel units)
+ * so that a 16x16 luma block at row y, plus the rows its 6-tap filter reads
+ * below it for half-pel positions, comes from inside the reference frame.
+ * The fractional part is kept. This only triggers for blocks below the
+ * picture, in the last macroblock row when the height is not a multiple
+ * of 32. Chroma blocks use the clamped luma vector. */
+static int bink2g_clamp_mv_y(int mv, int y, int height)
 {
-    if (y < 0)
-        return 0;
-    while (y >= height)
-        y -= period;
-    return FFMAX(y, 0);
+    const int lim = height - 16 - ((mv & 1) ? 3 : 0);
+
+    if ((mv >> 1) + y > lim)
+        mv = 2 * (lim - y) + (mv & 1);
+    return mv;
 }
 
 static void bink2g_c_mc(Bink2Context *c, int x, int y,
@@ -1030,7 +1034,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
 
     for (int y = 0; y < 9; y++) {
         for (int x = 0; x < 9; x++)
-            mtemp[y*9 + x] = src[av_clip(mv_x+x, 0, width-1) + bink2g_ref_row(mv_y+y, height, 8) * sstride];
+            mtemp[y*9 + x] = src[av_clip(mv_x+x, 0, width-1) + av_clip(mv_y+y, 0, height-1) * sstride];
     }
 
     msrc = mtemp;
@@ -1204,30 +1208,34 @@ static int bink2g_mcompensate_chroma(Bink2Context *c, int x, int y,
                                      int width, int height)
 {
     MVectors *mv = &c->current_mv[c->mb_pos].mv;
-    int mv_x, mv_y, mode;
+    int mv_x, mv_y, mode, vy;
 
     mv_x  = (mv->v[0][0] >> 2) + x;
-    mv_y  = (mv->v[0][1] >> 2) + y;
+    vy    = bink2g_clamp_mv_y(mv->v[0][1], 2 * y, 2 * height);
+    mv_y  = (vy >> 2) + y;
     mode  =  mv->v[0][0] & 3;
-    mode |= (mv->v[0][1] & 3) << 2;
+    mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x = (mv->v[1][0] >> 2) + x + 8;
-    mv_y = (mv->v[1][1] >> 2) + y;
+    vy    = bink2g_clamp_mv_y(mv->v[1][1], 2 * y, 2 * height);
+    mv_y  = (vy >> 2) + y;
     mode  =  mv->v[1][0] & 3;
-    mode |= (mv->v[1][1] & 3) << 2;
+    mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x = (mv->v[2][0] >> 2) + x;
-    mv_y = (mv->v[2][1] >> 2) + y + 8;
+    vy    = bink2g_clamp_mv_y(mv->v[2][1], 2 * y + 16, 2 * height);
+    mv_y  = (vy >> 2) + y + 8;
     mode  =  mv->v[2][0] & 3;
-    mode |= (mv->v[2][1] & 3) << 2;
+    mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x = (mv->v[3][0] >> 2) + x + 8;
-    mv_y = (mv->v[3][1] >> 2) + y + 8;
+    vy    = bink2g_clamp_mv_y(mv->v[3][1], 2 * y + 16, 2 * height);
+    mv_y  = (vy >> 2) + y + 8;
     mode  =  mv->v[3][0] & 3;
-    mode |= (mv->v[3][1] & 3) << 2;
+    mode |= (vy & 3) << 2;
     bink2g_c_mc(c, x, y, dst + x + 8 + 8 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     return 0;
@@ -1244,7 +1252,7 @@ static void bink2g_y_mc(Bink2Context *c, int x, int y,
 
     for (int y = 0; y < 21; y++) {
         for (int x = 0; x < 21; x++)
-            mtemp[y*21 + x] = src[av_clip(mv_x+x-2, 0, width-1) + bink2g_ref_row(mv_y+y-2, height, 16) * sstride];
+            mtemp[y*21 + x] = src[av_clip(mv_x+x-2, 0, width-1) + av_clip(mv_y+y-2, 0, height-1) * sstride];
     }
 
     msrc = mtemp + 21 * 2 + 2;
@@ -1288,30 +1296,34 @@ static int bink2g_mcompensate_luma(Bink2Context *c, int x, int y,
                                    int width, int height)
 {
     MVectors *mv = &c->current_mv[c->mb_pos].mv;
-    int mv_x, mv_y, mode;
+    int mv_x, mv_y, mode, vy;
 
     mv_x  = (mv->v[0][0] >> 1) + x;
-    mv_y  = (mv->v[0][1] >> 1) + y;
+    vy    = bink2g_clamp_mv_y(mv->v[0][1], y, height);
+    mv_y  = (vy >> 1) + y;
     mode  =  mv->v[0][0] & 1;
-    mode |= (mv->v[0][1] & 1) << 1;
+    mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x  = (mv->v[1][0] >> 1) + x + 16;
-    mv_y  = (mv->v[1][1] >> 1) + y;
+    vy    = bink2g_clamp_mv_y(mv->v[1][1], y, height);
+    mv_y  = (vy >> 1) + y;
     mode  =  mv->v[1][0] & 1;
-    mode |= (mv->v[1][1] & 1) << 1;
+    mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x  = (mv->v[2][0] >> 1) + x;
-    mv_y  = (mv->v[2][1] >> 1) + y + 16;
+    vy    = bink2g_clamp_mv_y(mv->v[2][1], y + 16, height);
+    mv_y  = (vy >> 1) + y + 16;
     mode  =  mv->v[2][0] & 1;
-    mode |= (mv->v[2][1] & 1) << 1;
+    mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     mv_x  = (mv->v[3][0] >> 1) + x + 16;
-    mv_y  = (mv->v[3][1] >> 1) + y + 16;
+    vy    = bink2g_clamp_mv_y(mv->v[3][1], y + 16, height);
+    mv_y  = (vy >> 1) + y + 16;
     mode  =  mv->v[3][0] & 1;
-    mode |= (mv->v[3][1] & 1) << 1;
+    mode |= (vy & 1) << 1;
     bink2g_y_mc(c, x, y, dst + x + 16 + 16 * stride, stride, src, sstride, width, height, mv_x, mv_y, mode);
 
     return 0;
@@ -1658,7 +1670,7 @@ static int bink2g_decode_slice(Bink2Context *c,
                 if (ret < 0)
                     return ret;
                 if (y + 32 > ref_h) {
-                    /* zero motion, but read past the reference like MC does */
+                    /* zero motion, clamped into the reference like MC does */
                     bink2g_mcompensate_luma(c, x, y, dst[0], stride[0],
                                             src[0], sstride[0], ref_w, ref_h);
                     bink2g_mcompensate_chroma(c, x/2, y/2, dst[2], stride[2],
