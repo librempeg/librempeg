@@ -275,6 +275,7 @@ extern const FFInputFormat  ff_gcsw_demuxer;
 extern const FFInputFormat  ff_gcub_demuxer;
 extern const FFInputFormat  ff_gdv_demuxer;
 extern const FFInputFormat  ff_genh_demuxer;
+extern const FFInputFormat  ff_ghs_demuxer;
 extern const FFInputFormat  ff_gif_demuxer;
 extern const FFOutputFormat ff_gif_muxer;
 extern const FFInputFormat  ff_gsm_demuxer;

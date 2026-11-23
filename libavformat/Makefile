@@ -340,6 +340,7 @@ OBJS-$(CONFIG_GCSW_DEMUXER)              += gcsw.o pcm.o
 OBJS-$(CONFIG_GCUB_DEMUXER)              += gcub.o pcm.o
 OBJS-$(CONFIG_GDV_DEMUXER)               += gdv.o
 OBJS-$(CONFIG_GENH_DEMUXER)              += genh.o
+OBJS-$(CONFIG_GHS_DEMUXER)               += ghs.o pcm.o
 OBJS-$(CONFIG_H261_DEMUXER)              += h261dec.o rawdec.o
 OBJS-$(CONFIG_H261_MUXER)                += rawenc.o
 OBJS-$(CONFIG_H263_DEMUXER)              += h263dec.o rawdec.o
