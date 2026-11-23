@@ -348,9 +348,9 @@ static uint8_t *ogg_write_vorbiscomment(int64_t offset, int bitexact,
     return p;
 }
 
-static int ogg_build_flac_headers(AVCodecParameters *par,
-                                  OGGStreamContext *oggstream, int bitexact,
-                                  AVDictionary **m)
+static int flac_build_headers(AVCodecParameters *par,
+                              OGGStreamContext *oggstream, int bitexact,
+                              AVDictionary **m)
 {
     uint8_t *p;
 
@@ -386,9 +386,9 @@ static int ogg_build_flac_headers(AVCodecParameters *par,
 
 static int flac_init(AVFormatContext *s, AVStream *st)
 {
-    int err = ogg_build_flac_headers(st->codecpar, st->priv_data,
-                                     s->flags & AVFMT_FLAG_BITEXACT,
-                                     &st->metadata);
+    int err = flac_build_headers(st->codecpar, st->priv_data,
+                                 s->flags & AVFMT_FLAG_BITEXACT,
+                                 &st->metadata);
     if (err)
         av_log(s, AV_LOG_ERROR, "Error writing FLAC headers\n");
     return err;
@@ -402,9 +402,9 @@ static const OGGMuxerMapping flac_mapping = {
 
 #define SPEEX_HEADER_SIZE 80
 
-static int ogg_build_speex_headers(AVCodecParameters *par,
-                                   OGGStreamContext *oggstream, int bitexact,
-                                   AVDictionary **m)
+static int speex_build_headers(AVCodecParameters *par,
+                               OGGStreamContext *oggstream, int bitexact,
+                               AVDictionary **m)
 {
     uint8_t *p;
 
@@ -431,9 +431,9 @@ static int ogg_build_speex_headers(AVCodecParameters *par,
 
 static int speex_init(AVFormatContext *s, AVStream *st)
 {
-    int err = ogg_build_speex_headers(st->codecpar, st->priv_data,
-                                      s->flags & AVFMT_FLAG_BITEXACT,
-                                      &st->metadata);
+    int err = speex_build_headers(st->codecpar, st->priv_data,
+                                  s->flags & AVFMT_FLAG_BITEXACT,
+                                  &st->metadata);
     if (err)
         av_log(s, AV_LOG_ERROR, "Error writing Speex headers\n");
     return err;
@@ -446,10 +446,10 @@ static const OGGMuxerMapping speex_mapping = {
 
 #define OPUS_HEADER_SIZE 19
 
-static int ogg_build_opus_headers(AVCodecParameters *par,
-                                  OGGStreamContext *oggstream, int bitexact,
-                                  AVDictionary **m, AVChapter **chapters,
-                                  unsigned int nb_chapters)
+static int opus_build_headers(AVCodecParameters *par,
+                              OGGStreamContext *oggstream, int bitexact,
+                              AVDictionary **m, AVChapter **chapters,
+                              unsigned int nb_chapters)
 {
     uint8_t *p;
 
@@ -480,9 +480,9 @@ static int opus_init(AVFormatContext *s, AVStream *st)
     int err;
 
     avpriv_set_pts_info(st, 64, 1, OPUS_TIMESTAMP_RATE);
-    err = ogg_build_opus_headers(st->codecpar, oggstream,
-                                 s->flags & AVFMT_FLAG_BITEXACT,
-                                 &st->metadata, s->chapters, s->nb_chapters);
+    err = opus_build_headers(st->codecpar, oggstream,
+                             s->flags & AVFMT_FLAG_BITEXACT,
+                             &st->metadata, s->chapters, s->nb_chapters);
     if (err) {
         av_log(s, AV_LOG_ERROR, "Error writing Opus headers\n");
         return err;
@@ -501,8 +501,8 @@ static const OGGMuxerMapping opus_mapping = {
 
 #define VP8_HEADER_SIZE 26
 
-static int ogg_build_vp8_headers(AVFormatContext *s, AVStream *st,
-                                 OGGStreamContext *oggstream, int bitexact)
+static int vp8_build_headers(AVFormatContext *s, AVStream *st,
+                             OGGStreamContext *oggstream, int bitexact)
 {
     AVCodecParameters *par = st->codecpar;
     uint8_t *p;
@@ -551,8 +551,8 @@ static int ogg_build_vp8_headers(AVFormatContext *s, AVStream *st,
 static int vp8_init(AVFormatContext *s, AVStream *st)
 {
     OGGStreamContext *oggstream = st->priv_data;
-    int err = ogg_build_vp8_headers(s, st, oggstream,
-                                    s->flags & AVFMT_FLAG_BITEXACT);
+    int err = vp8_build_headers(s, st, oggstream,
+                                s->flags & AVFMT_FLAG_BITEXACT);
     if (err) {
         av_log(s, AV_LOG_ERROR, "Error writing VP8 headers\n");
         return err;
@@ -680,7 +680,7 @@ static int theora_init(AVFormatContext *s, AVStream *st)
  * Whether Theora headers set a frame rate other than the stream time base,
  * which packets keep across links.
  */
-static int ogg_theora_rate_changed(const AVStream *st, const uint8_t *extradata, size_t size)
+static int theora_rate_changed(const AVStream *st, const uint8_t *extradata, size_t size)
 {
     const uint8_t *header[3];
     int header_len[3];
@@ -698,7 +698,7 @@ static const char *theora_new_link_refused(const AVStream *st, const AVPacket *p
 {
     if (!new_extradata && !(pkt->flags & AV_PKT_FLAG_KEY))
         return "New Theora links must start on a keyframe";
-    if (new_extradata && ogg_theora_rate_changed(st, new_extradata, size))
+    if (new_extradata && theora_rate_changed(st, new_extradata, size))
         return "New Theora links cannot change the frame rate";
     return NULL;
 }
