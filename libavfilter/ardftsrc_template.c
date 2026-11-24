@@ -192,15 +192,17 @@ static void fn(taper_init)(ctype *taper, const int N)
 
     scale = 1.0L/(scale+1.0L);
 
-    for (int i = N-1; i >= 0; i--) {
+    for (int i = N-1; i >= N/2; i--) {
         long double x = i+0.0L;
         long double t = x * (N-x);
         long double s = sqrtl(t) * factor;
         long double v = expl(s) * factor;
-        ftype tt = sum * scale;
+        long double tt = sum * scale;
 
         sum += v;
         taper[i].re = taper[i].im = (tt >= EPS) ? tt : F(0.0L);
+
+        taper[N-i-1].re = taper[N-i-1].im = 1.0L - tt;
     }
 }
 
