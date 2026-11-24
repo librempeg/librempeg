@@ -1961,7 +1961,7 @@ static void flush_ealayer3(AVCodecContext *avctx)
 
 static int ealayer3_dec_frame(MPADecodeContext *s, OUT_INT **samples, const uint8_t *buf, int buf_size, int version2)
 {
-    int pcm_flag, ret, nb_frames, consumed;
+    int pcm_flag, ret, nb_frames, consumed = 0;
     GetBitContext *gb = &s->gb;
 
     if (buf_size < 2)
