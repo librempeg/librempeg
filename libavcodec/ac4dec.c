@@ -798,7 +798,12 @@ static int variable_bits(GetBitContext *gb, int bits)
     int read_more;
 
     do {
-        value += get_bits(gb, bits);
+        int ret = get_bits(gb, bits);
+
+        if ((value + (int64_t)ret) > INT_MAX)
+            return AVERROR_INVALIDDATA;
+
+        value += ret;
         read_more = get_bits1(gb);
         if (read_more) {
             value <<= bits;
@@ -870,8 +875,16 @@ static int emdf_payloads_substream_info(AC4DecodeContext *s, EMDFInfo *e)
     GetBitContext *gb = &s->gbc;
 
     e->substream_index = get_bits(gb, 2);
-    if (e->substream_index == 3)
-        e->substream_index += variable_bits(gb, 2);
+    if (e->substream_index == 3) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (e->substream_index >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+
+        e->substream_index += ret;
+    }
 
     return 0;
 }
@@ -899,14 +912,28 @@ static int emdf_info(AC4DecodeContext *s, EMDFInfo *e)
     GetBitContext *gb = &s->gbc;
 
     e->version = get_bits(gb, 2);
-    if (e->version == 3)
-        e->version += variable_bits(gb, 2);
-    e->key_id = get_bits(gb, 3);
-    if (e->key_id == 7)
-        e->key_id += variable_bits(gb, 3);
+    if (e->version == 3) {
+        int ret = variable_bits(gb, 2);
 
-    if (get_bits1(gb))
-        emdf_payloads_substream_info(s, e);
+        if (ret < 0)
+            return ret;
+        e->version += ret;
+    }
+    e->key_id = get_bits(gb, 3);
+    if (e->key_id == 7) {
+        int ret = variable_bits(gb, 3);
+
+        if (ret < 0)
+            return ret;
+        e->key_id += ret;
+    }
+
+    if (get_bits1(gb)) {
+        int ret = emdf_payloads_substream_info(s, e);
+
+        if (ret < 0)
+            return ret;
+    }
 
     emdf_protection(s, e);
 
@@ -940,8 +967,16 @@ static int ac4_hsf_ext_substream_info(AC4DecodeContext *s, SubstreamInfo *ssi,
 
     if (substream_present) {
         ssi->hsf_ext_substream_index = get_bits(gb, 2);
-        if (ssi->hsf_ext_substream_index == 3)
-            ssi->hsf_ext_substream_index += variable_bits(gb, 2);
+        if (ssi->hsf_ext_substream_index == 3) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (ssi->hsf_ext_substream_index >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+
+            ssi->hsf_ext_substream_index += ret;
+        }
     }
 
     return 0;
@@ -960,8 +995,16 @@ static int ac4_substream_info(AC4DecodeContext *s, PresentationInfo *p,
         return AVERROR_INVALIDDATA;
     }
 
-    if (ssi->channel_mode == 16)
-        ssi->channel_mode += variable_bits(gb, 2);
+    if (ssi->channel_mode == 16) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (ssi->channel_mode >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+
+        ssi->channel_mode += ret;
+    }
 
     if (s->fs_index == 1 && get_bits1(gb))
         ssi->sf_multiplier = 1 + get_bits1(gb);
@@ -987,8 +1030,16 @@ static int ac4_substream_info(AC4DecodeContext *s, PresentationInfo *p,
     }
 
     ssi->substream_index = get_bits(gb, 2);
-    if (ssi->substream_index == 3)
-        ssi->substream_index += variable_bits(gb, 2);
+    if (ssi->substream_index == 3) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (ssi->substream_index >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+
+        ssi->substream_index += ret;
+    }
     if (ssi->substream_index >= FF_ARRAY_ELEMS(s->substream_type))
         return AVERROR_INVALIDDATA;
     s->substream_type[ssi->substream_index] = ST_SUBSTREAM;
@@ -1003,8 +1054,19 @@ static int presentation_config_ext_info(AC4DecodeContext *s)
     int n_skip_bytes;
 
     n_skip_bytes = get_bits(gb, 5);
-    if (get_bits1(gb))
-        n_skip_bytes += variable_bits(gb, 2) << 5;
+    if (get_bits1(gb)) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (ret > (INT_MAX>>5))
+            return AVERROR_INVALIDDATA;
+        ret <<= 5;
+        if (n_skip_bytes >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+
+        n_skip_bytes += ret;
+    }
 
     skip_bits_long(gb, 8 * n_skip_bytes);
 
@@ -1019,8 +1081,16 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
     p->single_substream = get_bits1(gb);
     if (p->single_substream != 1) {
         p->presentation_config = get_bits(gb, 3);
-        if (p->presentation_config == 7)
-            p->presentation_config += variable_bits(gb, 2);
+        if (p->presentation_config == 7) {
+            ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (p->presentation_config >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+
+            p->presentation_config += ret;
+        }
         av_log(s->avctx, AV_LOG_DEBUG, "presentation config: %d\n", p->presentation_config);
     }
 
@@ -1035,11 +1105,19 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
     } else {
         p->mdcompat = get_bits(gb, 3);
 
-        if (get_bits1(gb))
-            p->presentation_id = variable_bits(gb, 2);
+        if (get_bits1(gb)) {
+            ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+
+            p->presentation_id = ret;
+        }
 
         frame_rate_multiply_info(s, p);
-        emdf_info(s, &p->emdf[0]);
+        ret = emdf_info(s, &p->emdf[0]);
+        if (ret < 0)
+            return ret;
 
         if (p->single_substream == 1) {
             ret = ac4_substream_info(s, p, &p->ssinfo[0]);
@@ -1069,7 +1147,9 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
                 //FIXME
                 break;
             default:
-                presentation_config_ext_info(s);
+                ret = presentation_config_ext_info(s);
+                if (ret < 0)
+                    return ret;
             }
         }
 
@@ -1079,13 +1159,22 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
 
     if (p->add_emdf_substreams) {
         p->n_add_emdf_substreams = get_bits(gb, 2);
-        if (p->n_add_emdf_substreams == 0)
-            p->n_add_emdf_substreams = variable_bits(gb, 2) + 4;
+        if (p->n_add_emdf_substreams == 0) {
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            if (ret > INT_MAX-4)
+                return AVERROR_INVALIDDATA;
+            p->n_add_emdf_substreams = ret + 4;
+        }
         if (p->n_add_emdf_substreams > FF_ARRAY_ELEMS(p->emdf))
             return AVERROR_INVALIDDATA;
 
-        for (int i = 0; i < p->n_add_emdf_substreams; i++)
-            emdf_info(s, &p->emdf[i]);
+        for (int i = 0; i < p->n_add_emdf_substreams; i++) {
+            ret = emdf_info(s, &p->emdf[i]);
+            if (ret < 0)
+                return ret;
+        }
     }
 
     return 0;
@@ -1097,8 +1186,15 @@ static int substream_index_table(AC4DecodeContext *s)
     int size_present;
 
     s->nb_substreams = get_bits(gb, 2);
-    if (s->nb_substreams == 0)
-        s->nb_substreams = variable_bits(gb, 2) + 4;
+    if (s->nb_substreams == 0) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (ret > INT_MAX-4)
+            return AVERROR_INVALIDDATA;
+        s->nb_substreams = ret + 4;
+    }
 
     av_log(s->avctx, AV_LOG_DEBUG, "nb_substreams: %d\n", s->nb_substreams);
 
@@ -1116,8 +1212,18 @@ static int substream_index_table(AC4DecodeContext *s)
             int more_bits = get_bits1(gb);
 
             s->substream_size[i] = get_bits(gb, 10);
-            if (more_bits)
-                s->substream_size[i] += variable_bits(gb, 2) << 10;
+            if (more_bits) {
+                int ret = variable_bits(gb, 2);
+
+                if (ret < 0)
+                    return ret;
+                if (ret > (INT_MAX>>10))
+                    return AVERROR_INVALIDDATA;
+                ret <<= 10;
+                if (s->substream_size[i] > INT_MAX-ret)
+                    return AVERROR_INVALIDDATA;
+                s->substream_size[i] += ret;
+            }
             av_log(s->avctx, AV_LOG_DEBUG, "substream[%d] size: %d\n", i, s->substream_size[i]);
         }
     }
@@ -1132,8 +1238,15 @@ static int presentation_substream_info(AC4DecodeContext *s, PresentationSubstrea
     psi->alternative = get_bits1(gb);
     psi->pres_ndot = get_bits1(gb);
     psi->substream_index = get_bits(gb, 2);
-    if (psi->substream_index == 3)
-        psi->substream_index += variable_bits(gb, 2);
+    if (psi->substream_index == 3) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (psi->substream_index >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+        psi->substream_index += ret;
+    }
 
     if (psi->substream_index >= FF_ARRAY_ELEMS(s->substream_type))
         return AVERROR_INVALIDDATA;
@@ -1176,8 +1289,15 @@ static int oamd_substream_info(AC4DecodeContext *s, SubstreamGroupInfo *ssi,
     skip_bits1(gb);
     if (substreams_present) {
         int substream_index = get_bits(gb, 2);
-        if (substream_index == 3)
-            substream_index += variable_bits(gb, 2);
+        if (substream_index == 3) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (substream_index >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            substream_index += ret;
+        }
     }
 
     return 0;
@@ -1196,8 +1316,15 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
     if (ssi->channel_mode < 0)
         return AVERROR_INVALIDDATA;
 
-    if (ssi->channel_mode == 16)
-        ssi->channel_mode += variable_bits(gb, 2);
+    if (ssi->channel_mode == 16) {
+        int ret = variable_bits(gb, 2);
+
+        if (ret < 0)
+            return ret;
+        if (ssi->channel_mode >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+        ssi->channel_mode += ret;
+    }
 
     if (ssi->channel_mode >= 5 && ssi->channel_mode <= 10) {
         for (int i = 0; i < s->nb_presentations; i++) {
@@ -1237,8 +1364,15 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
 
     if (substreams_present) {
         ssi->substream_index = get_bits(gb, 2);
-        if (ssi->substream_index == 3)
-            ssi->substream_index += variable_bits(gb, 2);
+        if (ssi->substream_index == 3) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (ssi->substream_index >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            ssi->substream_index += ret;
+        }
         av_log(s->avctx, AV_LOG_DEBUG, "substream index: %d\n", ssi->substream_index);
     }
 
@@ -1276,7 +1410,7 @@ static void ac4_bed_dyn_obj_assignment(AC4DecodeContext *s, int n_signals)
     }
 }
 
-static void ac4_oamd_common_data(AC4DecodeContext *s)
+static int ac4_oamd_common_data(AC4DecodeContext *s)
 {
     GetBitContext *gb = &s->gbc;
 
@@ -1288,10 +1422,19 @@ static void ac4_oamd_common_data(AC4DecodeContext *s)
 
     if (get_bits1(gb)) { //b_additional_data
         int add_data_bytes = get_bits(gb, 1) + 1;
-        if (add_data_bytes == 2)
-            add_data_bytes += variable_bits(gb, 2);
+        if (add_data_bytes == 2) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (add_data_bytes > INT_MAX/8-ret)
+                return AVERROR_INVALIDDATA;
+            add_data_bytes += ret;
+        }
         skip_bits_long(gb, add_data_bytes * 8);
     }
+
+    return 0;
 }
 
 static int ac4_substream_info_ajoc(AC4DecodeContext *s, SubstreamInfo *ssi, int substreams_present)
@@ -1312,8 +1455,15 @@ static int ac4_substream_info_ajoc(AC4DecodeContext *s, SubstreamInfo *ssi, int 
         ac4_oamd_common_data(s);
 
     ssi->n_fullband_upmix_signals = get_bits(gb, 4) + 1;
-    if (ssi->n_fullband_upmix_signals == 16)
-        ssi->n_fullband_upmix_signals += variable_bits(gb, 3);
+    if (ssi->n_fullband_upmix_signals == 16) {
+        int ret = variable_bits(gb, 3);
+
+        if (ret < 0)
+            return ret;
+        if (ssi->n_fullband_upmix_signals >= INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+        ssi->n_fullband_upmix_signals += ret;
+    }
     if (ssi->n_fullband_upmix_signals > 4096) /* arbitary value to prevent slowdowns */
         return AVERROR_INVALIDDATA;
 
@@ -1331,9 +1481,16 @@ static int ac4_substream_info_ajoc(AC4DecodeContext *s, SubstreamInfo *ssi, int 
         ssi->audio_ndot[i] = get_bits1(gb);
 
     if (substreams_present) {
-       ssi->substream_index = get_bits(gb, 2);
-       if (ssi->substream_index == 3)
-           ssi->substream_index += variable_bits(gb, 2);
+        ssi->substream_index = get_bits(gb, 2);
+        if (ssi->substream_index == 3) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (ssi->substream_index >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            ssi->substream_index += ret;
+        }
     }
 
     return 0;
@@ -1400,8 +1557,15 @@ static int ac4_substream_info_obj(AC4DecodeContext *s, SubstreamInfo *ssi, int s
 
     if (substreams_present) {
        ssi->substream_index = get_bits(gb, 2);
-       if (ssi->substream_index == 3)
-           ssi->substream_index += variable_bits(gb, 2);
+       if (ssi->substream_index == 3) {
+           int ret = variable_bits(gb, 2);
+
+           if (ret < 0)
+               return ret;
+           if (ssi->substream_index >= INT_MAX-ret)
+               return AVERROR_INVALIDDATA;
+           ssi->substream_index += ret;
+       }
     }
 
     return 0;
@@ -1424,7 +1588,12 @@ static int ac4_substream_group_info(AC4DecodeContext *s,
     } else {
         n_lf_substreams = get_bits(gb, 2) + 2;
         if (n_lf_substreams == 5) {
-            n_lf_substreams += variable_bits(gb, 2);
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            if (n_lf_substreams >= INT_MAX-ret)
+               return AVERROR_INVALIDDATA;
+            n_lf_substreams += ret;
             if (n_lf_substreams > 16) /* arbitary limit to prevent slowdowns */
                  return AVERROR_INVALIDDATA;
         }
@@ -1443,8 +1612,11 @@ static int ac4_substream_group_info(AC4DecodeContext *s,
             ret = ac4_substream_info_chan(s, g, substreams_present, sus_ver);
             if (ret < 0)
                 return ret;
-            if (hsf_ext)
-                ac4_hsf_ext_substream_info(s, &g->ssinfo, substreams_present);
+            if (hsf_ext) {
+                ret = ac4_hsf_ext_substream_info(s, &g->ssinfo, substreams_present);
+                if (ret < 0)
+                    return ret;
+            }
         }
     } else {
         if (get_bits1(gb))
@@ -1457,8 +1629,11 @@ static int ac4_substream_group_info(AC4DecodeContext *s,
             } else {
                 ac4_substream_info_obj(s, &g->ssinfo, substreams_present);
             }
-            if (hsf_ext)
-                ac4_hsf_ext_substream_info(s, &g->ssinfo, substreams_present);
+            if (hsf_ext) {
+                ret = ac4_hsf_ext_substream_info(s, &g->ssinfo, substreams_present);
+                if (ret < 0)
+                    return ret;
+            }
         }
     }
 
@@ -1477,8 +1652,15 @@ static int ac4_sgi_specifier(AC4DecodeContext *s, SubstreamGroupInfo *g)
         //FIXME: g->group_index = ?
     } else {
         g->group_index = get_bits(gb, 3);
-        if (g->group_index == 7)
-            g->group_index += variable_bits(gb, 2);
+        if (g->group_index == 7) {
+            int ret = variable_bits(gb, 2);
+
+            if (ret < 0)
+                return ret;
+            if (g->group_index >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            g->group_index += ret;
+        }
     }
 
     s->total_groups = FFMAX(s->total_groups, g->group_index);
@@ -1494,8 +1676,14 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
     single_substream_group = get_bits1(gb);
     if (single_substream_group != 1) {
         p->presentation_config = get_bits(gb, 3);
-        if (p->presentation_config == 7)
-            p->presentation_config += variable_bits(gb, 2);
+        if (p->presentation_config == 7) {
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            if (p->presentation_config >= INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            p->presentation_config += ret;
+        }
     }
     if (s->version != 1)
         p->presentation_version = get_unary(gb, 0, 31);
@@ -1510,12 +1698,18 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
         if (s->version != 1)
             p->mdcompat = get_bits(gb, 3);
 
-        if (get_bits1(gb))
-            p->presentation_id = variable_bits(gb, 2);
+        if (get_bits1(gb)) {
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            p->presentation_id = ret;
+        }
 
         frame_rate_multiply_info(s, p);
         frame_rate_fractions_info(s, p);
-        emdf_info(s, &p->emdf[0]);
+        ret = emdf_info(s, &p->emdf[0]);
+        if (ret < 0)
+            return ret;
 
         if (get_bits1(gb))
             p->enable_presentation = get_bits1(gb);
@@ -1562,8 +1756,14 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
             case 5:
                 /* Arbitrary number of roles and substream groups */
                 p->n_substream_groups = get_bits(gb, 2) + 2;
-                if (p->n_substream_groups == 5)
-                    p->n_substream_groups += variable_bits(gb, 2);
+                if (p->n_substream_groups == 5) {
+                    ret = variable_bits(gb, 2);
+                    if (ret < 0)
+                        return ret;
+                    if (p->n_substream_groups >= INT_MAX-ret)
+                        return AVERROR_INVALIDDATA;
+                    p->n_substream_groups += ret;
+                }
                 if (p->n_substream_groups > FF_ARRAY_ELEMS(s->ssgroup))
                     return AVERROR_INVALIDDATA;
 
@@ -1572,7 +1772,9 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
                 break;
             default:
                 /* EMDF and other data */
-                presentation_config_ext_info(s);
+                ret = presentation_config_ext_info(s);
+                if (ret < 0)
+                    return ret;
                 break;
             }
         }
@@ -1584,13 +1786,22 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 
     if (p->add_emdf_substreams) {
         p->n_add_emdf_substreams = get_bits(gb, 2);
-        if (p->n_add_emdf_substreams == 0)
-            p->n_add_emdf_substreams = variable_bits(gb, 2) + 4;
+        if (p->n_add_emdf_substreams == 0) {
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            if (ret > INT_MAX-4)
+                return AVERROR_INVALIDDATA;
+            p->n_add_emdf_substreams = ret + 4;
+        }
         if (p->n_add_emdf_substreams > FF_ARRAY_ELEMS(p->emdf))
             return AVERROR_INVALIDDATA;
 
-        for (int i = 0; i < p->n_add_emdf_substreams; i++)
-            emdf_info(s, &p->emdf[i]);
+        for (int i = 0; i < p->n_add_emdf_substreams; i++) {
+            ret = emdf_info(s, &p->emdf[i]);
+            if (ret < 0)
+                return ret;
+        }
     }
 
     return 0;
@@ -1610,8 +1821,14 @@ static int ac4_toc(AC4DecodeContext *s)
     int ret;
 
     s->version = get_bits(gb, 2);
-    if (s->version == 3)
-        s->version += variable_bits(gb, 2);
+    if (s->version == 3) {
+        ret = variable_bits(gb, 2);
+        if (ret < 0)
+            return ret;
+        if (s->version > INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+        s->version += ret;
+    }
     av_log(s->avctx, AV_LOG_DEBUG, "bitstream version: %d\n", s->version);
     s->sequence_counter_prev = s->sequence_counter;
     s->sequence_counter = get_bits(gb, 10);
@@ -1648,7 +1865,12 @@ static int ac4_toc(AC4DecodeContext *s)
         s->nb_presentations = 1;
     } else {
         if (get_bits1(gb)) {
-            s->nb_presentations = 2 + variable_bits(gb, 2);
+            ret = variable_bits(gb, 2);
+            if (ret < 0)
+                return ret;
+            if (ret > INT_MAX-2)
+                return AVERROR_INVALIDDATA;
+            s->nb_presentations = 2 + ret;
             if (s->nb_presentations > FF_ARRAY_ELEMS(s->pinfo))
                 return AVERROR_INVALIDDATA;
         } else {
@@ -1660,7 +1882,12 @@ static int ac4_toc(AC4DecodeContext *s)
     if (get_bits1(gb)) {
         s->payload_base = get_bits(gb, 5) + 1;
         if (s->payload_base == 0x20) {
-            s->payload_base += variable_bits(gb, 3);
+            ret = variable_bits(gb, 3);
+            if (ret < 0)
+                return ret;
+            if (s->payload_base > INT_MAX-ret)
+                return AVERROR_INVALIDDATA;
+            s->payload_base += ret;
         }
     }
 
@@ -4829,8 +5056,17 @@ static int ac4_substream(AC4DecodeContext *s,
     int audio_size, offset, consumed, ret;
 
     audio_size = get_bits(gb, 15);
-    if (get_bits1(gb))
-        audio_size += variable_bits(gb, 7) << 15;
+    if (get_bits1(gb)) {
+        ret = variable_bits(gb, 7);
+        if (ret < 0)
+            return ret;
+        if (ret > (INT_MAX>>15))
+            return AVERROR_INVALIDDATA;
+        ret <<= 15;
+        if (audio_size > INT_MAX-ret)
+            return AVERROR_INVALIDDATA;
+        audio_size += ret;
+    }
     if (audio_size > 131072 ||
         (substream_size > 0 && audio_size > substream_size)) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid audio_size: %d\n", audio_size);
