@@ -19,10 +19,13 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <string.h>
+
 #include "libavutil/opt.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "avformat.h"
 #include "internal.h"
 #include "avio_internal.h"
@@ -74,6 +77,7 @@ static int mp3_read_probe(const AVProbeData *p)
     int framesizes, max_framesizes;
     uint32_t header;
     const uint8_t *buf, *buf0, *buf2, *buf3, *end;
+    MPADecodeHeader2 *h = NULL;
 
     buf0 = p->buf;
     end = p->buf + p->buf_size - sizeof(uint32_t);
@@ -87,28 +91,27 @@ static int mp3_read_probe(const AVProbeData *p)
     for (; buf < end; buf = buf2+1) {
         buf2 = buf;
         for (framesizes = frames = 0; buf2 < end; frames++) {
-            MPADecodeHeader h;
             int header_emu = 0;
             int available;
 
             header = AV_RB32(buf2);
-            ret = avpriv_mpegaudio_decode_header(&h, header);
+            ret = avpriv_mpegaudio_decode_header2(&h, header);
             if (ret != 0)
                 break;
 
-            available = FFMIN(h.frame_size, end - buf2);
+            available = FFMIN(h->frame_size, end - buf2);
             for (buf3 = buf2 + 4; buf3 < buf2 + available; buf3++) {
                 uint32_t next_sync = AV_RB32(buf3);
                 header_emu += (next_sync & MP3_MASK) == (header & MP3_MASK);
             }
             if (header_emu > 2)
                 break;
-            framesizes += h.frame_size;
-            if (available < h.frame_size) {
+            framesizes += h->frame_size;
+            if (available < h->frame_size) {
                 frames++;
                 break;
             }
-            buf2 += h.frame_size;
+            buf2 += h->frame_size;
         }
         max_frames = FFMAX(max_frames, frames);
         max_framesizes = FFMAX(max_framesizes, framesizes);
@@ -118,6 +121,8 @@ static int mp3_read_probe(const AVProbeData *p)
                 whole_used = 1;
         }
     }
+    av_freep(&h);
+
     // keep this in sync with ac3 probe, both need to avoid
     // issues with MPEG-files!
     if   (first_frames>=7) return AVPROBE_SCORE_EXTENSION + 2;
@@ -188,7 +193,7 @@ static int64_t mp3_trailing_tags_size(AVFormatContext *s, int64_t end)
 }
 
 static int mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
-                              MPADecodeHeader *c, uint32_t spf)
+                              MPADecodeHeader2 *c, uint32_t spf)
 {
 #define LAST_BITS(k, n) ((k) & ((1 << (n)) - 1))
 #define MIDDLE_BITS(k, m, n) LAST_BITS((k) >> (m), ((n) - (m) + 1))
@@ -313,10 +318,6 @@ static int mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
             sti->first_discard_sample = -mp3->end_pad + 528 + 1 + mp3->frames * (int64_t)spf;
             sti->last_discard_sample = mp3->frames * (int64_t)spf;
         }
-        if (!st->start_time)
-            st->start_time = av_rescale_q(sti->start_skip_samples,
-                                            (AVRational){1, c->sample_rate},
-                                            st->time_base);
         av_log(s, AV_LOG_DEBUG, "pad %d %d\n", mp3->start_pad, mp3->  end_pad);
     }
 
@@ -366,12 +367,76 @@ static void mp3_parse_vbri_tag(AVFormatContext *s, AVStream *st, int64_t base)
 }
 
 /**
+ * Look the iTunSMPB tag up under every key it can land on. A COMM frame keeps
+ * its language in the key, and while Apple writes eng, anything that retags
+ * the file is free to write its own, valid or not.
+ *
+ * The bare key is for files remuxed by versions that exposed a COMM descriptor
+ * as a metadata key of its own: those wrote the tag back out as a TXXX frame,
+ * which carries no language and is keyed by its description alone.
+ */
+static const AVDictionaryEntry *find_itunes_smpb(const AVDictionary *metadata)
+{
+    static const char comment[] = "comment-iTunSMPB";
+    const AVDictionaryEntry *de = NULL;
+
+    while ((de = av_dict_get(metadata, comment, de, AV_DICT_IGNORE_SUFFIX))) {
+        const char *lang = de->key + sizeof(comment) - 1;
+
+        /* und and xxx come without a suffix, the rest as a three letter one. */
+        if (!*lang || (*lang == '-' && strlen(lang + 1) == 3))
+            return de;
+    }
+
+    return av_dict_get(metadata, "iTunSMPB", NULL, 0);
+}
+
+/**
+ * Parse the gapless playback information Apple encoders store in an iTunSMPB
+ * comment instead of in the LAME extension of the Xing tag.
+ */
+static void mp3_parse_itunes_smpb(AVFormatContext *s, AVStream *st,
+                                  const MPADecodeHeader2 *c, uint32_t spf)
+{
+    FFStream *const sti = ffstream(st);
+    MP3DecContext *mp3 = s->priv_data;
+    const AVDictionaryEntry *de;
+    int64_t priming, remainder, samples;
+
+    /* A LAME tag, if any, already described the padding. */
+    if (sti->start_skip_samples)
+        return;
+
+    if (!(de = find_itunes_smpb(s->metadata)))
+        return;
+
+    if (ff_itunes_parse_smpb(de->value, &priming, &remainder, &samples) < 0)
+        return;
+
+    if (priming > 16384 || !samples)
+        return;
+
+    /* The three counts must add up to what the frames actually decode to. */
+    if (mp3->frames &&
+        priming + samples + remainder != mp3->frames * (int64_t)spf)
+        return;
+
+    /* Contrary to the LAME tag, the priming count covers the decoder delay. */
+    sti->start_skip_samples   = priming;
+    sti->first_discard_sample = priming + samples;
+    sti->last_discard_sample  = priming + samples + remainder;
+
+    st->duration = av_rescale_q(samples, (AVRational){ 1, c->sample_rate },
+                                st->time_base);
+}
+
+/**
  * Try to find Xing/Info/VBRI tags and compute duration from info therein
  */
 static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
 {
     uint32_t v, spf;
-    MPADecodeHeader c;
+    MPADecodeHeader2 *c = NULL;
     int vbrtag_size = 0;
     MP3DecContext *mp3 = s->priv_data;
     int ret;
@@ -380,30 +445,43 @@ static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
 
     v = avio_rb32(s->pb);
 
-    ret = avpriv_mpegaudio_decode_header(&c, v);
+    ret = avpriv_mpegaudio_decode_header2(&c, v);
     if (ret < 0)
-        return ret;
+        goto end;
     else if (ret == 0)
-        vbrtag_size = c.frame_size;
-    if (c.layer != 3)
-        return -1;
+        vbrtag_size = c->frame_size;
+    if (c->layer != 3) {
+        ret = -1;
+        goto end;
+    }
 
-    spf = c.lsf ? 576 : 1152; /* Samples per frame, layer 3 */
+    spf = c->lsf ? 576 : 1152; /* Samples per frame, layer 3 */
 
     mp3->frames = 0;
     mp3->header_filesize   = 0;
-    mp3->frame_duration = av_rescale_q(spf, (AVRational){1, c.sample_rate}, st->time_base);
+    mp3->frame_duration = av_rescale_q(spf, (AVRational){1, c->sample_rate}, st->time_base);
 
-    ret = mp3_parse_info_tag(s, st, &c, spf);
+    ret = mp3_parse_info_tag(s, st, c, spf);
     if (ret < 0) {
         mp3->frames = 0;
         mp3->header_filesize = 0;
         goto end;
     }
     mp3_parse_vbri_tag(s, st, base);
+    mp3_parse_itunes_smpb(s, st, c, spf);
 
-    if (!mp3->frames && !mp3->header_filesize)
-        return -1;
+    /* Packets keep the skipped samples, so shift the timeline instead. */
+    if (ffstream(st)->start_skip_samples) {
+        st->codecpar->initial_padding = ffstream(st)->start_skip_samples;
+        st->start_time = av_rescale_q(ffstream(st)->start_skip_samples,
+                                      (AVRational){1, c->sample_rate},
+                                      st->time_base);
+    }
+
+    if (!mp3->frames && !mp3->header_filesize) {
+        ret = -1;
+        goto end;
+    }
 
     /* Skip the vbr tag frame */
     avio_seek(s->pb, base + vbrtag_size, SEEK_SET);
@@ -412,16 +490,21 @@ static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
         int64_t full_duration_samples;
 
         full_duration_samples = mp3->frames * (int64_t)spf;
-        st->duration = av_rescale_q(full_duration_samples - mp3->start_pad - mp3->end_pad,
-                                    (AVRational){1, c.sample_rate},
-                                    st->time_base);
+        if (st->duration == AV_NOPTS_VALUE)
+            st->duration = av_rescale_q(full_duration_samples - mp3->start_pad - mp3->end_pad,
+                                        (AVRational){1, c->sample_rate},
+                                        st->time_base);
 
         if (mp3->header_filesize && !mp3->is_cbr)
-            st->codecpar->bit_rate = av_rescale(mp3->header_filesize, 8 * c.sample_rate,
+            st->codecpar->bit_rate = av_rescale(mp3->header_filesize, 8 * c->sample_rate,
                                                 full_duration_samples);
     }
 
-    return 0;
+    ret = 0;
+
+end:
+    av_freep(&c);
+    return ret;
 }
 
 static int mp3_read_header(AVFormatContext *s)
@@ -534,7 +617,8 @@ static int check(AVIOContext *pb, int64_t pos, uint32_t *ret_header)
     int64_t ret = avio_seek(pb, pos, SEEK_SET);
     uint8_t header_buf[4];
     unsigned header;
-    MPADecodeHeader sd;
+    MPADecodeHeader2 *sd = NULL;
+    int frame_size;
     if (ret < 0)
         return CHECK_SEEK_FAILED;
 
@@ -546,12 +630,16 @@ static int check(AVIOContext *pb, int64_t pos, uint32_t *ret_header)
     header = AV_RB32(&header_buf[0]);
     if (ff_mpa_check_header(header) < 0)
         return CHECK_WRONG_HEADER;
-    if (avpriv_mpegaudio_decode_header(&sd, header) == 1)
+    if (avpriv_mpegaudio_decode_header2(&sd, header)) {
+        av_freep(&sd);
         return CHECK_WRONG_HEADER;
+    }
+    frame_size = sd->frame_size;
+    av_freep(&sd);
 
     if (ret_header)
         *ret_header = header;
-    return sd.frame_size;
+    return frame_size;
 }
 
 static int64_t mp3_sync(AVFormatContext *s, int64_t target_pos, int flags)
