@@ -3358,6 +3358,7 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
 static int aspx_framing(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch, const int iframe)
 {
     GetBitContext *gb = &s->gbc;
+    int num_env;
 
     ssch->aspx_num_rel_left = 0;
     ssch->aspx_num_rel_right = 0;
@@ -3371,11 +3372,12 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ss
 
     switch (ssch->aspx_int_class) {
     case FIXFIX:
-        ssch->aspx_num_env = 1 << get_bits(gb, 1 + ss->aspx_num_env_bits_fixfix);
-        if (ssch->aspx_num_env > 4) {
-            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env in FIXFIX: %d\n", ssch->aspx_num_env);
+        num_env = 1 << get_bits(gb, 1 + ss->aspx_num_env_bits_fixfix);
+        if (num_env > 4) {
+            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env in FIXFIX: %d\n", num_env);
             return AVERROR_INVALIDDATA;
         }
+        ssch->aspx_num_env = num_env;
 
         if (ss->aspx_freq_res_mode == 0)
             ssch->aspx_freq_res[0] = get_bits1(gb);
@@ -3409,11 +3411,12 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ss
     if (ssch->aspx_int_class != FIXFIX) {
         int ptr_bits;
 
-        ssch->aspx_num_env = ssch->aspx_num_rel_left + ssch->aspx_num_rel_right + 1;
-        if (ssch->aspx_num_env > 5) {
-            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env: %d (class %d)\n", ssch->aspx_num_env, ssch->aspx_int_class);
+        num_env = ssch->aspx_num_rel_left + ssch->aspx_num_rel_right + 1;
+        if (num_env > MAX_ASPX_SIGNAL) {
+            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env: %d (class %d)\n", num_env, ssch->aspx_int_class);
             return AVERROR_INVALIDDATA;
         }
+        ssch->aspx_num_env = num_env;
 
         ptr_bits = ceilf(logf(ssch->aspx_num_env + 2) / logf(2));
         av_assert2(ptr_bits > 0);
