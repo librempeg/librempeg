@@ -3148,9 +3148,13 @@ static int stereo_data(AC4DecodeContext *s, Substream *ss, int iframe)
             return ret;
     } else {
         ss->spec_frontend_l = get_bits1(gb);
-        sf_info(s, ss, 0, ss->spec_frontend_l, 0, 0);
+        ret = sf_info(s, ss, 0, ss->spec_frontend_l, 0, 0);
+        if (ret < 0)
+            return ret;
         ss->spec_frontend_r = get_bits1(gb);
-        sf_info(s, ss, 1, ss->spec_frontend_r, 0, 0);
+        ret = sf_info(s, ss, 1, ss->spec_frontend_r, 0, 0);
+        if (ret < 0)
+            return ret;
     }
 
     ret = sf_data(s, ss, 0, iframe, ss->spec_frontend_l);
