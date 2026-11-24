@@ -42,6 +42,7 @@
 #define MAX_QMF_TSLOTS 32
 #define MAX_QMF_BANDS 64
 #define MAX_SBG_NOISE 5
+#define MAX_SBG_PATCHES 5
 #define MAX_ATSG_NOISE 2
 #define MAX_ASPX_SIGNAL 5
 
@@ -179,13 +180,13 @@ typedef struct SubstreamChannel {
     uint8_t atsg_noise[MAX_ASPX_SIGNAL];
     int     previous_stop_pos;
 
-    int     sbg_noise[MAX_SBG_NOISE];
+    int     sbg_noise[MAX_SBG_NOISE + 1];
     int     sbg_sig_lowres[24];
     int     sbg_sig_highres[24];
     int     sbg_lim[32];
-    int     sbg_patches[MAX_SBG_NOISE];
-    int     sbg_patch_num_sb[MAX_SBG_NOISE];
-    int     sbg_patch_start_sb[MAX_SBG_NOISE];
+    int     sbg_patches[MAX_SBG_PATCHES + 1];
+    int     sbg_patch_num_sb[MAX_SBG_PATCHES + 1];
+    int     sbg_patch_start_sb[MAX_SBG_PATCHES + 1];
     int     sbg_master[24];
 
     int     num_sbg_sig[6];
@@ -3706,7 +3707,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
     ssch->num_sbg_sig[1] = ssch->num_sbg_sig_highres;
 
     ssch->num_sbg_noise = FFMAX(1, floorf(ss->aspx_noise_sbg * log2f(ssch->sbz / (float)ssch->sbx) + 0.5f));
-    if (ssch->num_sbg_noise > 5) {
+    if (ssch->num_sbg_noise > MAX_SBG_NOISE) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid num sbg noise: %d\n", ssch->num_sbg_noise);
         return AVERROR_INVALIDDATA;
     }
@@ -3771,7 +3772,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
     if ((ssch->num_sbg_patches > 1) && (ssch->sbg_patch_num_sb[ssch->num_sbg_patches - 1] < 3))
         ssch->num_sbg_patches--;
 
-    if (ssch->num_sbg_patches > 5)
+    if (ssch->num_sbg_patches > MAX_SBG_PATCHES)
         return AVERROR_INVALIDDATA;
 
     ssch->sbg_patches[0] = ssch->sbx;
