@@ -355,6 +355,7 @@ extern const FFInputFormat  ff_jpeg_mpf_demuxer;
 extern const FFOutputFormat ff_jpeg_mpf_muxer;
 extern const FFInputFormat  ff_jpegxl_anim_demuxer;
 extern const FFInputFormat  ff_jstm_demuxer;
+extern const FFInputFormat  ff_ka_demuxer;
 extern const FFInputFormat  ff_kat_demuxer;
 extern const FFInputFormat  ff_kma9_demuxer;
 extern const FFInputFormat  ff_knon_demuxer;
