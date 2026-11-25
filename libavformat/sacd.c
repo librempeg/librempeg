@@ -96,6 +96,11 @@ static int64_t tc2ts(const uint8_t *t)   /* min, sec, frame */
 
 static int init_area(AVFormatContext *s, SACDArea *a, int idx)
 {
+    static const AVChannelLayout layouts[] = {
+        [2] = AV_CHANNEL_LAYOUT_STEREO,
+        [5] = AV_CHANNEL_LAYOUT_5POINT0,
+        [6] = AV_CHANNEL_LAYOUT_5POINT1,
+    };
     AVIOContext *pb = s->pb;
     int ret, trl2_off = 2;
     uint16_t ttxt_lsn;
@@ -142,7 +147,11 @@ static int init_area(AVFormatContext *s, SACDArea *a, int idx)
     st->codecpar->codec_id   = a->frame_format == FMT_DST ? AV_CODEC_ID_DST
                                                           : AV_CODEC_ID_DSD_MSBF;
     st->codecpar->sample_rate = 2822400 / 8;
-    av_channel_layout_default(&st->codecpar->ch_layout, a->channels);
+    if (a->channels >= FF_ARRAY_ELEMS(layouts) || !layouts[a->channels].nb_channels) {
+        av_channel_layout_default(&st->codecpar->ch_layout, a->channels);
+    } else {
+        st->codecpar->ch_layout = layouts[a->channels];
+    }
 
     if (a->frame_format != FMT_DST)
         st->codecpar->block_align = a->channels;
