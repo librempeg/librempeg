@@ -525,7 +525,7 @@ static int receive_for_stream(SyncQueue *sq, unsigned int stream_idx,
         (st->frame_samples <= st->samples_queued || st->finished)) {
         int nb_samples = st->frame_samples;
         SyncQueueFrame peek;
-        int64_t ts;
+        int64_t ts, end = 0, cut = 0;
         int cmp = 1;
 
         if (st->finished)
@@ -536,10 +536,22 @@ static int receive_for_stream(SyncQueue *sq, unsigned int stream_idx,
 
         /* check if this stream's tail timestamp does not overtake
          * the overall queue head */
-        if (ts != AV_NOPTS_VALUE && st_head)
+        if (ts != AV_NOPTS_VALUE && st_head) {
             cmp = av_compare_ts(ts, st->tb, st_head->head_ts, st_head->tb);
 
-        {
+            /* A frame ending after the final queue head is cut there when
+             * the encoder takes any number of samples, so that the stream
+             * does not end up to a frame before the limiting one. */
+            if (cmp > 0 && st_head->finished && !st->frame_samples &&
+                frame_samples(sq, peek)) {
+                AVRational sample_tb = { 1, peek.f->sample_rate };
+
+                end = av_rescale_q(st_head->head_ts, st_head->tb, st->tb);
+                cut = av_rescale_q(st_head->head_ts, st_head->tb, sample_tb) -
+                      av_rescale_q(peek.f->pts, st->tb, sample_tb);
+                cut = FFMIN(cut, peek.f->nb_samples);
+            }
+
             /* Allow the nearest tick for cut audio if that tick is no longer
              * than a sample. A coarse packet time base can otherwise admit a
              * whole packet that the frame queue released without cutting. */
@@ -552,7 +564,7 @@ static int receive_for_stream(SyncQueue *sq, unsigned int stream_idx,
          * Frames with no timestamps are just passed through with no conditions.
          * Frames are also passed through when there are no limiting streams.
          */
-        if (cmp <= 0 || ts == AV_NOPTS_VALUE || !sq->have_limiting) {
+        if (cmp <= 0 || ts == AV_NOPTS_VALUE || !sq->have_limiting || cut > 0) {
             if (nb_samples &&
                 (nb_samples != peek.f->nb_samples || !frame_is_aligned(sq, peek.f))) {
                 int ret = receive_samples(sq, st, frame.f, nb_samples);
@@ -564,6 +576,11 @@ static int receive_for_stream(SyncQueue *sq, unsigned int stream_idx,
 
                 av_assert0(st->samples_queued >= frame_samples(sq, frame));
                 st->samples_queued -= frame_samples(sq, frame);
+
+                if (cut > 0) {
+                    frame.f->nb_samples = cut;
+                    frame.f->duration   = end - frame.f->pts;
+                }
             }
 
             av_log(sq->logctx, AV_LOG_DEBUG,
