@@ -25,7 +25,7 @@
 #include "libavutil/mem.h"
 #include "libavformat/avformat.h"
 #include "libavformat/internal.h"
-#include "libavformat/ogg/mapping.h"
+#include "libavformat/ogg/demuxer.h"
 #include "libavformat/vorbis/comment.h"
 
 /* CELT-over-Ogg streams use at most a couple of vorbiscomment "extra" headers. */
