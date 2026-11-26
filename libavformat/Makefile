@@ -925,6 +925,7 @@ OBJS-$(CONFIG_WEBVTT_MUXER)              += webvttenc.o
 OBJS-$(CONFIG_WIIADPCM_DEMUXER)          += wiiadpcm.o
 OBJS-$(CONFIG_WIIBGM_DEMUXER)            += wiibgm.o pcm.o
 OBJS-$(CONFIG_WIIBNS_DEMUXER)            += wiibns.o pcm.o
+OBJS-$(CONFIG_WMSF_DEMUXER)              += wmsf.o
 OBJS-$(CONFIG_WMW_DEMUXER)               += wmw.o pcm.o
 OBJS-$(CONFIG_WSAUD_DEMUXER)             += westwood_aud.o
 OBJS-$(CONFIG_WSAUD_MUXER)               += westwood_audenc.o
