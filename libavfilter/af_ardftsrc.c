@@ -556,7 +556,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     av_refstruct_replace(&s_dst->prev_progress, s_src->prev_progress);
     av_refstruct_replace(&s_dst->progress,      s_src->progress);
 
-    av_frame_free(&s_dst->in);
+    ff_graph_frame_free(dst, &s_dst->in);
     if (s_src->in) {
         s_dst->in = ff_graph_frame_clone(dst, s_src->in);
         if (!s_dst->in)
@@ -591,7 +591,7 @@ static int filter_prepare(AVFilterContext *ctx)
     int ret, status;
     int64_t pts;
 
-    av_frame_free(&s->in);
+    ff_graph_frame_free(ctx, &s->in);
 
     ret = ff_outlink_get_status(outlink);
     if (ret) {
