@@ -3796,7 +3796,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
 
     /* Sort patch borders + low res sbg into temporary limiter table */
     ssch->num_sbg_lim = ssch->num_sbg_sig_lowres + ssch->num_sbg_patches - 1;
-    AV_QSORT(ssch->sbg_lim, ssch->num_sbg_lim, int, cmpints);
+    AV_QSORT(ssch->sbg_lim, ssch->num_sbg_lim+1, int, cmpints);
     sbg = 1;
 
     while (sbg <= ssch->num_sbg_lim) {
