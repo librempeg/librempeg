@@ -44,8 +44,8 @@ do {                                            \
     }                                           \
     score++;                                    \
                                                 \
-    if (((int)R32(p->buf+8)) <= 0 ||            \
-        R32(p->buf+8) > 192000) {               \
+    if (((int)R32(p->buf+8) < 8000) ||          \
+        ((int)R32(p->buf+8) > 192000)) {        \
         score = 0;                              \
         break;                                  \
     }                                           \
@@ -105,7 +105,7 @@ static int read_header_e(AVFormatContext *s,
     avio_skip(pb, 2);
     if (r16(pb) != 0)
         return AVERROR_INVALIDDATA;
-    if (rate <= 0)
+    if (rate <= 0 || rate > 192000)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
