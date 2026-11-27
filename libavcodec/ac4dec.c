@@ -3648,6 +3648,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
 {
     int sb, i, j, sbg = 0, goal_sb, msb, usb;
     int source_band_low, prev_idx;
+    int num_sbg_noise;
 
     ssch->master_reset = 0;
     if (iframe) {
@@ -3706,11 +3707,12 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
     ssch->num_sbg_sig[0] = ssch->num_sbg_sig_lowres;
     ssch->num_sbg_sig[1] = ssch->num_sbg_sig_highres;
 
-    ssch->num_sbg_noise = FFMAX(1, floorf(ss->aspx_noise_sbg * log2f(ssch->sbz / (float)ssch->sbx) + 0.5f));
-    if (ssch->num_sbg_noise > MAX_SBG_NOISE) {
-        av_log(s->avctx, AV_LOG_ERROR, "invalid num sbg noise: %d\n", ssch->num_sbg_noise);
+    num_sbg_noise = FFMAX(1, floorf(ss->aspx_noise_sbg * log2f(ssch->sbz / (float)ssch->sbx) + 0.5f));
+    if (num_sbg_noise > MAX_SBG_NOISE) {
+        av_log(s->avctx, AV_LOG_ERROR, "invalid num sbg noise: %d\n", num_sbg_noise);
         return AVERROR_INVALIDDATA;
     }
+    ssch->num_sbg_noise = num_sbg_noise;
 
     prev_idx = 0;
     ssch->sbg_noise[0] = ssch->sbg_sig_lowres[0];
