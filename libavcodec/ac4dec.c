@@ -40,6 +40,7 @@
 #include "unary.h"
 
 #define MAX_QMF_TSLOTS 32
+#define MAX_SBG_MASTER 22
 #define MAX_QMF_BANDS 64
 #define MAX_SBG_NOISE 5
 #define MAX_SBG_PATCHES 5
@@ -187,7 +188,7 @@ typedef struct SubstreamChannel {
     int     sbg_patches[MAX_SBG_PATCHES + 1];
     int     sbg_patch_num_sb[MAX_SBG_PATCHES + 1];
     int     sbg_patch_start_sb[MAX_SBG_PATCHES + 1];
-    int     sbg_master[24];
+    int     sbg_master[MAX_SBG_MASTER + 1];
 
     int     num_sbg_sig[6];
     int     sbg_sig[6][24];
