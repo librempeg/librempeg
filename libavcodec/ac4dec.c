@@ -190,8 +190,8 @@ typedef struct SubstreamChannel {
     int     sbg_patch_start_sb[MAX_SBG_PATCHES + 1];
     int     sbg_master[MAX_SBG_MASTER + 1];
 
-    int     num_sbg_sig[6];
-    int     sbg_sig[6][24];
+    int     num_sbg_sig[2];
+    int     sbg_sig[2][24];
     int     num_sbg_patches;
     int     num_sbg_lim;
 
@@ -3343,12 +3343,16 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
     for (int atsg = 0; atsg < num_atsg_sig; atsg++) {
         av_log(s->avctx, AV_LOG_DEBUG, "atsg_sig[%d]: %d\n", atsg, ssch->atsg_sig[atsg]);
 
-        if (ssch->atsg_freqres[atsg]) {
-            ssch->num_sbg_sig[atsg] = ssch->num_sbg_sig_highres;
-            memcpy(ssch->sbg_sig[atsg], ssch->sbg_sig_highres, sizeof(ssch->sbg_sig_highres));
-        } else {
-            ssch->num_sbg_sig[atsg] = ssch->num_sbg_sig_lowres;
-            memcpy(ssch->sbg_sig[atsg], ssch->sbg_sig_lowres, sizeof(ssch->sbg_sig_lowres));
+        if (ssch->atsg_freqres[atsg])
+            ssch->num_sbg_sig[1] = ssch->num_sbg_sig_highres;
+        else
+            ssch->num_sbg_sig[0] = ssch->num_sbg_sig_lowres;
+
+        for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
+            if (ssch->atsg_freqres[atsg])
+                ssch->sbg_sig[1][sbg] = ssch->sbg_sig_highres[sbg];
+            else
+                ssch->sbg_sig[0][sbg] = ssch->sbg_sig_lowres[sbg];
         }
     }
     ssch->atsg_sig[num_atsg_sig] = FFMIN(s->num_aspx_timeslots, ssch->atsg_sig[num_atsg_sig]);
@@ -5789,7 +5793,7 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
         }
 
         /* Loop over scale factor subband groups */
-        for (int sbg = 0; sbg < ssch->num_sbg_sig[atsg]; sbg++) {
+        for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
             int sbg_prev, v;
 
             if (ssch->atsg_freqres[atsg] == freqres_prev) {
