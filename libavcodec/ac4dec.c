@@ -267,7 +267,7 @@ typedef struct SubstreamChannel {
     DECLARE_ALIGNED(32, float, Q_low)[2][MAX_QMF_TSLOTS+6][MAX_QMF_BANDS];
     DECLARE_ALIGNED(32, float, Q_low_prev)[2][MAX_QMF_TSLOTS+6][MAX_QMF_BANDS];
     DECLARE_ALIGNED(32, float, Q_low_ext)[2][MAX_QMF_TSLOTS+10][MAX_QMF_BANDS];
-    DECLARE_ALIGNED(32, float, Q_high)[2][MAX_QMF_TSLOTS+4][MAX_QMF_BANDS];
+    DECLARE_ALIGNED(32, float, Q_high)[2][MAX_QMF_TSLOTS][MAX_QMF_BANDS];
     DECLARE_ALIGNED(32, float, cov)[MAX_QMF_BANDS][3][3][2];
     DECLARE_ALIGNED(32, float, alpha0)[MAX_QMF_BANDS][2];
     DECLARE_ALIGNED(32, float, alpha1)[MAX_QMF_BANDS][2];
@@ -6224,7 +6224,6 @@ static void create_high_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 static void estimate_spectral_envelopes(AC4DecodeContext *s, Substream *ss, int ch_id)
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
-    const int ts_offset_hfadj = 4;
 
     for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands in A-SPX range */
@@ -6237,8 +6236,8 @@ static void estimate_spectral_envelopes(AC4DecodeContext *s, Substream *ss, int 
             if (sb == ssch->sbg_sig[ssch->atsg_freqres[atsg]][sbg+1])
                 sbg++;
 
-            tsa = ssch->atsg_sig[atsg]*s->num_ts_in_ats + ts_offset_hfadj;
-            tsz = ssch->atsg_sig[atsg+1]*s->num_ts_in_ats + ts_offset_hfadj;
+            tsa = ssch->atsg_sig[atsg]*s->num_ts_in_ats;
+            tsz = ssch->atsg_sig[atsg+1]*s->num_ts_in_ats;
             for (int ts = tsa; ts < tsz; ts++) {
                 if (ss->aspx_interpolation == 0) {
                     for (int j = ssch->sbg_sig[ssch->atsg_freqres[atsg]][sbg]; j < ssch->sbg_sig[ssch->atsg_freqres[atsg]][sbg+1]; j++) {
@@ -6582,7 +6581,6 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     const int sbx = ssch->sbx;
-    const int ts_offset_hfadj = 4;
 
     memcpy(ssch->Y_prev, ssch->Y, sizeof(ssch->Y));
     memset(ssch->Y, 0, sizeof(ssch->Y));
@@ -6606,14 +6604,13 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
         if (ts == ssch->atsg_sig[atsg+1] * s->num_ts_in_ats)
             atsg++;
         av_assert2(ts < FF_ARRAY_ELEMS(ssch->Y[0]));
-        av_assert2(ts + ts_offset_hfadj < FF_ARRAY_ELEMS(ssch->Q_high[0]));
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             ssch->Y[1][ts][sb] = ssch->Y[0][ts][sb] = ssch->sig_gain_sb_adj[atsg][sb];
             fcomplex_mul(&ssch->Y[0][ts][sb], &ssch->Y[1][ts][sb],
                          ssch->Y[0][ts][sb], ssch->Y[1][ts][sb],
-                         ssch->Q_high[0][ts + ts_offset_hfadj][sb + sbx],
-                         ssch->Q_high[1][ts + ts_offset_hfadj][sb + sbx]);
+                         ssch->Q_high[0][ts][sb + sbx],
+                         ssch->Q_high[1][ts][sb + sbx]);
         }
     }
 
