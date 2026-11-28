@@ -2424,6 +2424,8 @@ static int asf_psy_elements(AC4DecodeContext *s, Substream *ss,
     group_offset = 0;
     win_offset = 0;
     win = 0;
+    memset(ssch->sect_sfb_offset, 0, sizeof(ssch->sect_sfb_offset));
+    memset(ssch->win_offset, 0, sizeof(ssch->win_offset));
     memset(ssch->offset2sfb, 0, sizeof(ssch->offset2sfb));
     memset(ssch->offset2g, 0, sizeof(ssch->offset2g));
 
