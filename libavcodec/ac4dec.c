@@ -174,7 +174,7 @@ typedef struct SubstreamChannel {
     uint8_t aspx_fic_used_in_sfb[MAX_QMF_TSLOTS];
     uint8_t aspx_tic_used_in_slot[MAX_QMF_TSLOTS];
     int     aspx_xover_subband_offset;
-    int     aspx_balance;
+    uint8_t aspx_balance;
 
     uint8_t atsg_freqres[MAX_ASPX_SIGNAL];
     uint8_t atsg_sig[MAX_ASPX_SIGNAL+1];
@@ -276,12 +276,12 @@ typedef struct SubstreamChannel {
 } SubstreamChannel;
 
 typedef struct Substream {
-    int     codec_mode;
-    int     im_codec_mode;
-    int     core_5ch_grouping;
-    int     use_sap_add_ch;
+    uint8_t codec_mode;
+    uint8_t im_codec_mode;
+    uint8_t core_5ch_grouping;
+    uint8_t use_sap_add_ch;
 
-    int     aspx_quant_mode_env;
+    uint8_t aspx_quant_mode_env;
     int     aspx_start_freq;
     int     prev_aspx_start_freq;
     int     aspx_stop_freq;
@@ -314,10 +314,10 @@ typedef struct Substream {
     float   matrix_stereo[16][128][2][2];
     int8_t  alpha_q[16][128];
 
-    int     spec_frontend_l;
-    int     spec_frontend_r;
-    int     spec_frontend_m;
-    int     spec_frontend_s;
+    uint8_t spec_frontend_l;
+    uint8_t spec_frontend_r;
+    uint8_t spec_frontend_m;
+    uint8_t spec_frontend_s;
 
     DECLARE_ALIGNED(32, float, g_sum)[MAX_QMF_TSLOTS];
 
